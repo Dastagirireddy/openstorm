@@ -40,6 +40,7 @@ export class OpenStormApp extends TailwindElement() {
     this.setupKeyboardShortcuts();
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
+    this.setupAutoSaveHandler();
     // Terminal will be auto-created when project is opened
   }
 
@@ -57,6 +58,14 @@ export class OpenStormApp extends TailwindElement() {
         }),
       );
     }).catch(console.error);
+  }
+
+  private async setupAutoSaveHandler(): Promise<void> {
+    // Listen for auto-save events from editor
+    document.addEventListener("auto-saved", ((e: CustomEvent) => {
+      console.log("Auto-saved:", e.detail.path);
+      this.saveStatus = "saved";
+    }) as EventListener);
   }
 
   private setupOpenFolderHandler(): void {
@@ -120,8 +129,9 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   private async saveActiveFile(): Promise<void> {
+    // Delegate to editor-pane which has the content
     const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
-    if (!activeTab || !activeTab.modified) return;
+    if (!activeTab) return;
 
     this.saveStatus = "saving";
     try {
