@@ -2,7 +2,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { LitElement, svg, css, html } from 'lit';
 
 // Import icons individually (tree-shakeable)
-import { Play, Bug, Square, GitBranch, ChevronDown, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, Check, Gauge, CircleDot } from 'lucide';
+import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FolderOpen } from 'lucide';
 
 const iconMap: Record<string, any> = {
   'play': Play,
@@ -10,6 +10,7 @@ const iconMap: Record<string, any> = {
   'square': Square,
   'git-branch': GitBranch,
   'chevron-down': ChevronDown,
+  'chevron-right': ChevronRight,
   'rotate-ccw': RotateCcw,
   'clock': Clock,
   'list-filter': ListFilter,
@@ -17,9 +18,14 @@ const iconMap: Record<string, any> = {
   'arrow-up-from-line': ArrowUpFromLine,
   'cloud': Cloud,
   'folder': Folder,
+  'folder-open': FolderOpen,
   'check': Check,
   'gauge': Gauge,
   'circle-dot': CircleDot,
+  'file': File,
+  'file-json': FileJson,
+  'file-code': FileCode,
+  'file-text': FileText,
 };
 
 // OpenStorm brand logo - modern minimalist monkey face

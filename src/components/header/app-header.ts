@@ -2,6 +2,7 @@ import { html, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../icon.js';
+import { parsePathToSegments, getFileIconColor } from '../../lib/breadcrumb.js';
 
 export interface HeaderAction {
   id: string;
@@ -14,6 +15,13 @@ export interface HeaderAction {
 export interface HeaderSection {
   id: string;
   actions: HeaderAction[];
+}
+
+export interface BreadcrumbSegment {
+  label: string;
+  path?: string;
+  icon?: string;
+  clickable?: boolean;
 }
 
 @customElement('app-header')
@@ -44,25 +52,54 @@ export class AppHeader extends TailwindElement() {
     `;
   }
 
+  private renderBreadcrumbSegment(segment: BreadcrumbSegment, index: number, totalSegments: number): TemplateResult {
+    const isLast = index === totalSegments - 1;
+    const iconColor = isLast ? getFileIconColor(segment.path || segment.label) : '#5f6368';
+
+    return html`
+      <div class="flex items-center gap-1">
+        ${segment.icon && segment.icon !== 'folder' ? html`
+          <os-icon name="${segment.icon}" color="${iconColor}" size=${14}></os-icon>
+        ` : segment.icon === 'folder' ? html`
+          <os-icon name="folder" color="${iconColor}" size=${14}></os-icon>
+        ` : ''}
+        <span
+          class="${isLast ? 'text-[#1a1a1a] font-semibold' : 'hover:text-[#1a1a1a] cursor-pointer transition-colors'} text-[13px]"
+          ${!isLast && segment.path ? 'data-path="' + segment.path + '"' : ''}>
+          ${segment.label}
+        </span>
+        ${!isLast ? html`
+          <os-icon name="chevron-right" color="#a0a0a0" size=${18}></os-icon>
+        ` : ''}
+      </div>
+    `;
+  }
+
   render() {
     const projectName = this.projectPath.split('/').pop() || 'OpenStorm';
-    const showBreadcrumb = this.activeFile !== '';
-    const fileName = this.activeFile.split('/').pop() || '';
+    const breadcrumbSegments = parsePathToSegments(this.projectPath, this.activeFile);
+    const showBreadcrumb = breadcrumbSegments.length > 0;
 
     return html`
       <div class="flex flex-col shrink-0">
-        <!-- Titlebar -->
+        <!-- Titlebar with integrated breadcrumb -->
         <div
           class="flex items-center justify-between h-[36px] px-2 bg-gradient-to-b from-[#f5f5f5] to-[#e8e8e8] border-b border-[#d0d0d0] select-none">
 
-          <!-- Left: Project name -->
-          <div class="flex items-center gap-2">
+          <!-- Left: Project name + Breadcrumb -->
+          <div class="flex items-center gap-2 min-w-0 flex-1">
             <os-brand-logo size="20"></os-brand-logo>
-            <span class="text-[12px] font-medium text-[#1a1a1a]">${projectName}</span>
+            <span class="text-[12px] font-medium text-[#1a1a1a] shrink-0">${projectName}</span>
+
+            ${showBreadcrumb && breadcrumbSegments.length > 0 ? html`
+              <div class="flex items-center gap-1 min-w-0">
+                ${breadcrumbSegments.map((segment, index) => this.renderBreadcrumbSegment(segment, index, breadcrumbSegments.length))}
+              </div>
+            ` : ''}
           </div>
 
           <!-- Right: Toolbar sections -->
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <!-- Run section -->
             ${this.renderSection({
               id: 'run',
@@ -103,17 +140,9 @@ export class AppHeader extends TailwindElement() {
           </div>
         </div>
 
-        <!-- Breadcrumb -->
-        ${showBreadcrumb ? html`
-          <div
-            class="flex items-center gap-1 h-[22px] px-4 bg-[#ffffff] border-b border-[#e0e0e0] text-[11px] text-[#5a5a5a]">
-            <span class="hover:text-[#1a1a1a] cursor-pointer transition-colors">src</span>
-            <span class="text-[#a0a0a0]">/</span>
-            <span class="text-[#1a1a1a] font-medium">${fileName}</span>
-            ${this.saveStatus === 'unsaved' ? html`
-              <span class="text-[#f57c00] ml-1">●</span>
-            ` : ''}
-          </div>
+        <!-- Unsaved indicator bar -->
+        ${this.saveStatus === 'unsaved' ? html`
+          <div class="h-[2px] bg-[#f57c00] w-full"></div>
         ` : ''}
       </div>
     `;
