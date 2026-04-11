@@ -119,10 +119,10 @@ export class EditorPane extends TailwindElement() {
           bracketMatching(),
           indentOnInput(),
 
-          // Folding
+          // Folding - using cleaner icons
           foldGutter({
-            openText: '▼',
-            closedText: '▶',
+            openText: '−',
+            closedText: '+',
           }),
 
           // Selection & cursor
@@ -214,7 +214,7 @@ export class EditorPane extends TailwindElement() {
             '.cm-null': { color: '#0000ff' },
           }),
 
-          // Update listener for content changes + auto-save
+          // Update listener for content changes + auto-save + cursor position
           EditorView.updateListener.of((update) => {
             if (update.docChanged && this.activeTab) {
               // Dispatch content changed event
@@ -228,6 +228,20 @@ export class EditorPane extends TailwindElement() {
               if (this.autoSaveEnabled) {
                 this.triggerAutoSave();
               }
+            }
+
+            // Track cursor position changes
+            if (update.selectionSet) {
+              const pos = update.state.selection.main.head;
+              const line = update.state.doc.lineAt(pos);
+              const col = pos - line.from + 1;
+              const lineNum = line.number;
+
+              this.dispatchEvent(new CustomEvent('cursor-position', {
+                detail: { line: lineNum, column: col },
+                bubbles: true,
+                composed: true,
+              }));
             }
           }),
         ],
