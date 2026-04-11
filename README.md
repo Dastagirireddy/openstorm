@@ -1,6 +1,6 @@
 # OpenStorm
 
-A high-performance, lightweight IDE built with Tauri, Rust, and Lit.js, focused on replicating the professional UX of JetBrains tools without the JVM overhead.
+A high-performance, lightweight IDE built with Tauri, Rust, and Lit.js, focused on professional developer UX without the JVM overhead.
 
 ## Features
 
