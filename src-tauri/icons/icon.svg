@@ -1,0 +1,18 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="120" fill="#5b47c9"/>
+
+  <!-- Monkey face (heart-shaped head) -->
+  <path d="M256 420c70 0 120-58 120-120V232c0-46-46-82-120-82s-120 36-120 82v68c0 62 50 120 120 120z" stroke="white" stroke-width="28" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Ears (circles on sides) -->
+  <circle cx="140" cy="260" r="36" stroke="white" stroke-width="28" fill="none"/>
+  <circle cx="372" cy="260" r="36" stroke="white" stroke-width="28" fill="none"/>
+
+  <!-- Eyes (two dots) -->
+  <circle cx="226" cy="290" r="18" fill="white"/>
+  <circle cx="286" cy="290" r="18" fill="white"/>
+
+  <!-- Mouth (simple smile) -->
+  <path d="M210 340q46 36 92 0" stroke="white" stroke-width="22" stroke-linecap="round" fill="none"/>
+</svg>

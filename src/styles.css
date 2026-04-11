@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@source "**/*.{ts,html}";
+
+/* Global resets */
+html, body {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  background: #ffffff;
+  color: #1a1a1a;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for webkit - IntelliJ Classic Light */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f0f0f0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c7c7c7;
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a0a0;
+}
+
+::-webkit-scrollbar-corner {
+  background: #f0f0f0;
+}
+
+/* xterm.js fixes - hide the textarea but keep it functional */
+.xterm .xterm-helper-textarea {
+  opacity: 0 !important;
+  width: 1px !important;
+  height: 1px !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: 0 !important;
+}
+
+/* Terminal container - ensure full width */
+#terminal-container,
+#terminal-container > * {
+  width: 100%;
+  height: 100%;
+}
+
+#terminal {
+  width: 100%;
+  height: 100%;
+  padding: 4px 8px;
+}
+
+#terminal .xterm {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+#terminal .xterm-viewport {
+  overflow-y: auto;
+  background-color: #ffffff;
+}
