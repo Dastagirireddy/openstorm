@@ -58,7 +58,7 @@ export class FileTypePicker extends TailwindElement() {
       groups.get(group)!.push(template);
     });
 
-    const groupOrder = ['basic', 'detected', 'config', 'docs', 'styles', 'test', 'languages'];
+    const groupOrder = ['basic', 'languages', 'detected', 'config', 'docs', 'styles', 'test'];
     const result: { group: string; templates: FileTemplate[] }[] = [];
 
     groupOrder.forEach(group => {
