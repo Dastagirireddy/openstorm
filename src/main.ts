@@ -4,6 +4,26 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
 
+// Import iconify-icon web component and register icon collections
+import "iconify-icon";
+import { addCollection } from 'iconify-icon';
+import * as devicon from '@iconify-json/devicon/icons.json';
+import * as vscodeIcons from '@iconify-json/vscode-icons/icons.json';
+import * as tabler from '@iconify-json/tabler/icons.json';
+import * as catppuccin from '@iconify-json/catppuccin/icons.json';
+import * as fileIcons from '@iconify-json/file-icons/icons.json';
+import * as logos from '@iconify-json/logos/icons.json';
+import * as mdi from '@iconify-json/mdi/icons.json';
+import * as streamlineFlexColor from '@iconify-json/streamline-flex-color/icons.json';
+addCollection(devicon);
+addCollection(vscodeIcons);
+addCollection(tabler);
+addCollection(catppuccin);
+addCollection(fileIcons);
+addCollection(logos);
+addCollection(mdi);
+addCollection(streamlineFlexColor);
+
 // Import components
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
@@ -16,6 +36,12 @@ import "./components/status-bar.js";
 import "./components/search-overlay.js";
 import "./components/icon.js";
 import "./components/resizable-container.js";
+import "./components/dialog.js";
+import "./components/file-type-picker.js";
+import "./components/file-create-dialog.js";
+import "./components/context-menu.js";
+import "./components/rename-dialog.js";
+import "./components/delete-dialog.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -34,6 +60,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private isTerminalResizing = false;
   @state() private terminalResizeStartY = 0;
   @state() private terminalResizeStartHeight = 0;
+  @state() private activeFilePath = '';
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -84,7 +111,21 @@ export class OpenStormApp extends TailwindElement() {
 
   private setupOpenFolderHandler(): void {
     document.addEventListener("open-folder", this.handleOpenFolder);
+    // Handle locate file events - dispatch to project explorer with active file path
+    document.addEventListener("locate-file", this.handleLocateFile);
   }
+
+  private handleLocateFile = (): void => {
+    if (this.activeFilePath) {
+      document.dispatchEvent(
+        new CustomEvent("locate-file-external", {
+          detail: { path: this.activeFilePath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
+  };
 
   private handleOpenFolder = async (): Promise<void> => {
     try {
@@ -211,6 +252,7 @@ export class OpenStormApp extends TailwindElement() {
     const existingTab = this.tabs.find((t) => t.path === path);
     if (existingTab) {
       this.activeTabId = existingTab.id;
+      this.activeFilePath = path;
       this.saveStatus = existingTab.modified ? "unsaved" : "saved";
       this.tabs = this.tabs.map((t) =>
         t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
@@ -237,6 +279,7 @@ export class OpenStormApp extends TailwindElement() {
       };
       this.tabs = [...this.tabs, newTab];
       this.activeTabId = path;
+      this.activeFilePath = path;
       this.saveStatus = "saved";
       this.enforceTabLimit();
 
@@ -272,6 +315,7 @@ export class OpenStormApp extends TailwindElement() {
     this.activeTabId = tabId;
     const tab = this.tabs.find((t) => t.id === tabId);
     if (tab) {
+      this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
       document.dispatchEvent(
         new CustomEvent("open-file", {
@@ -526,6 +570,7 @@ export class OpenStormApp extends TailwindElement() {
                           class="flex flex-col overflow-hidden bg-[#f7f7f7] border-r border-[#c7c7c7] h-full"
                           style="width: ${this.sidebarWidth}px;"
                           .projectPath=${this.projectPath}
+                          .selectedPath=${this.activeFilePath}
                           @file-selected=${this.handleFileSelect}
                           @open-folder=${() =>
                             document.dispatchEvent(new CustomEvent("open-folder"))}

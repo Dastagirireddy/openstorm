@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FileInfo {
@@ -10,6 +12,7 @@ pub struct FileInfo {
     pub is_dir: bool,
     pub size: u64,
     pub modified: u64,
+    pub is_executable: bool,
     pub children: Option<Vec<FileInfo>>,
 }
 
@@ -41,6 +44,16 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, String> {
             let file_name = entry.file_name().to_string_lossy().to_string();
             let file_path = entry.path().to_string_lossy().to_string();
 
+            // Check if file is executable (Unix only)
+            #[cfg(unix)]
+            let is_executable = !metadata.is_dir() && {
+                let mode = metadata.permissions().mode();
+                (mode & 0o111) != 0  // Check if any execute bit is set
+            };
+
+            #[cfg(not(unix))]
+            let is_executable = false;
+
             Some(FileInfo {
                 name: file_name,
                 path: file_path,
@@ -52,6 +65,7 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, String> {
                     .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as u64,
+                is_executable,
                 children: None,
             })
         })
@@ -104,6 +118,16 @@ pub fn get_file_info(path: String) -> Result<FileInfo, String> {
         .to_string_lossy()
         .to_string();
 
+    // Check if file is executable (Unix only)
+    #[cfg(unix)]
+    let is_executable = !metadata.is_dir() && {
+        let mode = metadata.permissions().mode();
+        (mode & 0o111) != 0  // Check if any execute bit is set
+    };
+
+    #[cfg(not(unix))]
+    let is_executable = false;
+
     Ok(FileInfo {
         name: file_name,
         path,
@@ -115,6 +139,7 @@ pub fn get_file_info(path: String) -> Result<FileInfo, String> {
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64,
+        is_executable,
         children: None,
     })
 }

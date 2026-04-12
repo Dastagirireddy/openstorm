@@ -3,7 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { EditorTab } from '../../lib/file-types.js';
-import { getFileIconColor } from '../../lib/file-icons.js';
+import '../file-icon.js';
 
 @customElement('tab-bar')
 export class TabBar extends TailwindElement() {
@@ -94,15 +94,9 @@ export class TabBar extends TailwindElement() {
     }
   };
 
-  private renderFileIcon(name: string): TemplateResult {
-    const ext = name.split('.').pop()?.toLowerCase();
-    const color = getFileIconColor(name);
-
+  private renderFileIcon(path: string): TemplateResult {
     return html`
-      <svg class="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" stroke="${color}" stroke-width="1.5"/>
-        <polyline points="14 2 14 8 20 8" stroke="${color}" stroke-width="1.5"/>
-      </svg>
+      <file-icon path="${path}" size=${16}></file-icon>
     `;
   }
 
@@ -122,7 +116,7 @@ export class TabBar extends TailwindElement() {
             this.closeTab(tab.id);
           }
         }}>
-        ${this.renderFileIcon(tab.name)}
+        ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate select-none">${tab.name}</span>
         ${tab.modified
           ? html`<span class="w-2 h-2 rounded-full bg-[#3592c4] flex-shrink-0"></span>`
@@ -153,7 +147,7 @@ export class TabBar extends TailwindElement() {
           this.selectTab(tab.id);
           this.showDropdown = false;
         }}>
-        ${this.renderFileIcon(tab.name)}
+        ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate">${tab.name}</span>
         ${tab.modified ? html`<span class="w-2 h-2 rounded-full bg-[#3592c4] flex-shrink-0"></span>` : ''}
       </div>
