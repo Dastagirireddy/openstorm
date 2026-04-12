@@ -40,6 +40,8 @@ import "./components/dialog.js";
 import "./components/file-type-picker.js";
 import "./components/file-create-dialog.js";
 import "./components/context-menu.js";
+import "./components/rename-dialog.js";
+import "./components/delete-dialog.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 

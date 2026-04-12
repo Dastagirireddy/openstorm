@@ -10,6 +10,8 @@ import '../file-icon.js';
 import '../dialog.js';
 import '../file-create-dialog.js';
 import '../context-menu.js';
+import '../rename-dialog.js';
+import '../delete-dialog.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
@@ -22,12 +24,16 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private showCreateDialog = false;
   @state() private showFolderDialog = false;
   @state() private showContextMenu = false;
+  @state() private showRenameDialog = false;
+  @state() private showDeleteDialog = false;
   @state() private dialogParentPath = '';
   @state() private availableTemplates: FileTemplate[] = [];
   @state() private contextMenuItems: ContextMenuItem[] = [];
   @state() private contextMenuAnchorX = 0;
   @state() private contextMenuAnchorY = 0;
   @state() private contextMenuNode: FileNode | null = null;
+  @state() private renameNode: FileNode | null = null;
+  @state() private deleteNode: FileNode | null = null;
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -51,6 +57,8 @@ export class ProjectExplorer extends TailwindElement() {
     // Listen for create file/folder events
     document.addEventListener('create-file', this.handleCreateFile as EventListener);
     document.addEventListener('create-folder', this.handleCreateFolder as EventListener);
+    // Listen for keyboard shortcuts
+    document.addEventListener('keydown', this.handleKeyDown as EventListener);
   }
 
   disconnectedCallback(): void {
@@ -58,6 +66,7 @@ export class ProjectExplorer extends TailwindElement() {
     document.removeEventListener('refresh-explorer', this.handleRefresh as EventListener);
     document.removeEventListener('create-file', this.handleCreateFile as EventListener);
     document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
+    document.removeEventListener('keydown', this.handleKeyDown as EventListener);
   }
 
   private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
@@ -83,9 +92,6 @@ export class ProjectExplorer extends TailwindElement() {
 
     // Select the node first
     this.selectedPath = node.path;
-    if (node.is_dir) {
-      this.expandedFolders.add(node.path);
-    }
     this.contextMenuNode = node;
 
     // Build context menu items based on file/folder
@@ -145,12 +151,12 @@ export class ProjectExplorer extends TailwindElement() {
         }
         break;
       case 'rename':
-        // TODO: Implement rename dialog
-        console.log('Rename:', node.path);
+        this.renameNode = node;
+        this.showRenameDialog = true;
         break;
       case 'delete':
-        // TODO: Implement delete
-        console.log('Delete:', node.path);
+        this.deleteNode = node;
+        this.showDeleteDialog = true;
         break;
     }
 
@@ -241,6 +247,104 @@ export class ProjectExplorer extends TailwindElement() {
       );
     } catch (error) {
       console.error(`Failed to create folder:`, error);
+    }
+  };
+
+  private handleRenameConfirm = async (e: CustomEvent<{ oldPath: string; newPath: string; newName: string }>): Promise<void> => {
+    const { oldPath, newPath } = e.detail;
+
+    // Refresh the directory to show the renamed file
+    const parentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+    if (parentPath && this.expandedFolders.has(parentPath)) {
+      const parentNode = this.findNodeByPath(parentPath, this.files);
+      if (parentNode) {
+        await this.loadChildren(parentNode);
+      }
+    } else if (parentPath === this.projectPath) {
+      await this.loadDirectory(this.projectPath);
+    }
+
+    // Update selected path to the new path
+    if (this.selectedPath === oldPath) {
+      this.selectedPath = newPath;
+    }
+
+    this.showRenameDialog = false;
+    this.renameNode = null;
+
+    this.dispatchEvent(
+      new CustomEvent("file-renamed", {
+        detail: { oldPath, newPath },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
+  private handleRenameCancel = (): void => {
+    this.showRenameDialog = false;
+    this.renameNode = null;
+  };
+
+  private handleDeleteConfirm = async (e: CustomEvent<{ path: string }>): Promise<void> => {
+    const { path } = e.detail;
+    const parentPath = path.substring(0, path.lastIndexOf('/'));
+
+    // Refresh the parent directory
+    if (parentPath && this.expandedFolders.has(parentPath)) {
+      const parentNode = this.findNodeByPath(parentPath, this.files);
+      if (parentNode) {
+        await this.loadChildren(parentNode);
+      }
+    } else if (parentPath === this.projectPath) {
+      await this.loadDirectory(this.projectPath);
+    }
+
+    // Clear selected path if it was the deleted file
+    if (this.selectedPath === path) {
+      this.selectedPath = '';
+    }
+
+    this.showDeleteDialog = false;
+    this.deleteNode = null;
+
+    this.dispatchEvent(
+      new CustomEvent("file-deleted", {
+        detail: { path },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
+
+  private handleDeleteCancel = (): void => {
+    this.showDeleteDialog = false;
+    this.deleteNode = null;
+  };
+
+  private handleKeyDown = (e: KeyboardEvent): void => {
+    // Ignore if user is typing in an input field
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+    // F2 = Rename
+    if (e.key === 'F2' && this.selectedPath) {
+      e.preventDefault();
+      const node = this.findNodeByPath(this.selectedPath, this.files);
+      if (node) {
+        this.renameNode = node;
+        this.showRenameDialog = true;
+      }
+    }
+
+    // Delete or Backspace = Delete file/folder
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedPath) {
+      e.preventDefault();
+      const node = this.findNodeByPath(this.selectedPath, this.files);
+      if (node) {
+        this.deleteNode = node;
+        this.showDeleteDialog = true;
+      }
     }
   };
 
@@ -593,12 +697,18 @@ export class ProjectExplorer extends TailwindElement() {
     this.requestUpdate();
   }
 
-  private expandAll(): void {
+  private async expandAll(): Promise<void> {
+    this.isProjectExpanded = true;
     const expandFolder = async (node: FileNode): Promise<void> => {
       if (node.is_dir) {
         this.expandedFolders.add(node.path);
         if (!node.children) {
-          await this.loadChildren(node);
+          try {
+            const result = await invoke('list_directory', { path: node.path });
+            node.children = result as FileNode[];
+          } catch (error) {
+            console.error('Failed to load children:', error);
+          }
         }
         if (node.children) {
           for (const child of node.children) {
@@ -610,9 +720,8 @@ export class ProjectExplorer extends TailwindElement() {
       }
     };
 
-    Promise.all(this.files.map(file => expandFolder(file))).then(() => {
-      this.requestUpdate();
-    });
+    await Promise.all(this.files.map(file => expandFolder(file)));
+    this.requestUpdate();
   }
 
   private collapseAll(): void {
@@ -811,7 +920,27 @@ export class ProjectExplorer extends TailwindElement() {
         .anchorX=${this.contextMenuAnchorX}
         .anchorY=${this.contextMenuAnchorY}
         @select=${this.handleContextMenuSelect}
+        @close=${() => { this.showContextMenu = false; this.contextMenuNode = null; }}
       ></context-menu>
+
+      <!-- Rename Dialog -->
+      <rename-dialog
+        ?open=${this.showRenameDialog}
+        .filePath=${this.renameNode?.path || ''}
+        .fileName=${this.renameNode?.name || ''}
+        @confirm=${this.handleRenameConfirm}
+        @cancel=${this.handleRenameCancel}
+      ></rename-dialog>
+
+      <!-- Delete Dialog -->
+      <delete-dialog
+        ?open=${this.showDeleteDialog}
+        .filePath=${this.deleteNode?.path || ''}
+        .fileName=${this.deleteNode?.name || ''}
+        .isDirectory=${this.deleteNode?.is_dir || false}
+        @confirm=${this.handleDeleteConfirm}
+        @cancel=${this.handleDeleteCancel}
+      ></delete-dialog>
     `;
   }
 }

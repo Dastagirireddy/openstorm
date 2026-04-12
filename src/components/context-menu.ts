@@ -30,6 +30,10 @@ export class ContextMenu extends TailwindElement() {
       // Adjust position if menu goes off screen
       setTimeout(() => this.adjustPosition(), 0);
     }
+    // Force update when anchor position changes while open
+    if (this.open && (changedProperties.has('anchorX') || changedProperties.has('anchorY'))) {
+      setTimeout(() => this.adjustPosition(), 0);
+    }
   }
 
   private adjustPosition(): void {
@@ -73,6 +77,41 @@ export class ContextMenu extends TailwindElement() {
     this.open = false;
   };
 
+  private handleOverlayClick = (e: MouseEvent): void => {
+    // Only close if clicking directly on overlay (not the menu)
+    if (e.target === e.currentTarget) {
+      this.open = false;
+      // Notify parent to close
+      this.dispatchEvent(
+        new CustomEvent('close', {
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
+  };
+
+  private handleOverlayContextMenu = (e: MouseEvent): void => {
+    // Close menu and notify parent
+    this.open = false;
+    this.dispatchEvent(
+      new CustomEvent('close', {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+    // The overlay will be removed from DOM after Lit re-renders.
+    // For immediate pass-through, set pointer-events to none
+    const overlay = e.currentTarget as HTMLElement;
+    overlay.style.pointerEvents = 'none';
+
+    // Let Lit re-render and restore pointer events on next open
+    setTimeout(() => {
+      overlay.style.pointerEvents = '';
+    }, 100);
+  };
+
   private handleKeydown = (e: KeyboardEvent): void => {
     const visibleItems = this.items.filter(i => !i.separator);
 
@@ -98,15 +137,16 @@ export class ContextMenu extends TailwindElement() {
     return html`
       <div
         class="fixed inset-0 z-40"
-        @click=${() => this.open = false}
+        @click=${this.handleOverlayClick}
+        @contextmenu=${this.handleOverlayContextMenu}
         @keydown=${this.handleKeydown}
-        tabindex="-1"
       >
         <div
           class="absolute bg-white rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-[#d0d0d0] overflow-hidden z-50 min-w-[180px] py-1"
           style="left: ${this.anchorX}px; top: ${this.anchorY}px;"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
+          @contextmenu=${(e: Event) => { e.preventDefault(); e.stopPropagation(); }}
         >
           ${this.items.map((item, index) => {
             if (item.separator) {
