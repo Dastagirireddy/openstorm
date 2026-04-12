@@ -140,12 +140,13 @@ export class ProjectExplorer extends TailwindElement() {
     const hasPython = this.files.some(f => f.name.endsWith('.py'));
 
     // Add detected templates first (simple format: "Language File")
+    // Use fake file paths so file-icon component renders correct icons
     if (hasTypeScript) {
       templates.push({
         id: 'typescript',
         name: 'TypeScript File',
         extension: 'ts',
-        icon: 'ts',
+        icon: 'module.ts',
       });
     }
 
@@ -154,7 +155,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'javascript',
         name: 'JavaScript File',
         extension: 'js',
-        icon: 'js',
+        icon: 'module.js',
       });
     }
 
@@ -163,7 +164,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'rust',
         name: 'Rust File',
         extension: 'rs',
-        icon: 'rs',
+        icon: 'module.rs',
       });
     }
 
@@ -172,7 +173,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'go',
         name: 'Go File',
         extension: 'go',
-        icon: 'go',
+        icon: 'main.go',
       });
     }
 
@@ -181,7 +182,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'html',
         name: 'HTML File',
         extension: 'html',
-        icon: 'html',
+        icon: 'index.html',
       });
     }
 
@@ -190,7 +191,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'css',
         name: 'CSS File',
         extension: 'css',
-        icon: 'css',
+        icon: 'styles.css',
       });
     }
 
@@ -199,7 +200,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'python',
         name: 'Python File',
         extension: 'py',
-        icon: 'py',
+        icon: 'main.py',
       });
     }
 
@@ -209,7 +210,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'typescript-lang',
         name: 'TypeScript File',
         extension: 'ts',
-        icon: 'ts',
+        icon: 'module.ts',
       });
     }
 
@@ -218,7 +219,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'rust-lang',
         name: 'Rust File',
         extension: 'rs',
-        icon: 'rs',
+        icon: 'module.rs',
       });
     }
 
@@ -227,7 +228,7 @@ export class ProjectExplorer extends TailwindElement() {
         id: 'go-lang',
         name: 'Go File',
         extension: 'go',
-        icon: 'go',
+        icon: 'main.go',
       });
     }
 
