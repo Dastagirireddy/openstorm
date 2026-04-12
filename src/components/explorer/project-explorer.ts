@@ -240,7 +240,7 @@ export class ProjectExplorer extends TailwindElement() {
     }
 
     // ===== CONFIG FILES =====
-    if (hasJson || hasYaml || hasToml) {
+    if (hasJson) {
       templates.push({
         id: 'json',
         name: 'JSON File',
@@ -260,7 +260,7 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    if (hasToml || hasRust) {
+    if (hasToml) {
       templates.push({
         id: 'toml',
         name: 'TOML File',
@@ -312,54 +312,69 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    // Always show these common types
-    templates.push({
-      id: 'javascript-lang',
-      name: 'JavaScript File',
-      extension: 'js',
-      icon: 'module.js',
-      group: 'languages',
-    });
+    // Helper to check if template already exists
+    const exists = (id: string) => templates.some(t => t.id === id);
 
-    templates.push({
-      id: 'html-lang',
-      name: 'HTML File',
-      extension: 'html',
-      icon: 'index.html',
-      group: 'languages',
-    });
+    // Always show these common types (if not already added)
+    if (!exists('javascript-lang')) {
+      templates.push({
+        id: 'javascript-lang',
+        name: 'JavaScript File',
+        extension: 'js',
+        icon: 'module.js',
+        group: 'languages',
+      });
+    }
 
-    templates.push({
-      id: 'css-lang',
-      name: 'CSS File',
-      extension: 'css',
-      icon: 'styles.css',
-      group: 'languages',
-    });
+    if (!exists('html-lang')) {
+      templates.push({
+        id: 'html-lang',
+        name: 'HTML File',
+        extension: 'html',
+        icon: 'index.html',
+        group: 'languages',
+      });
+    }
 
-    templates.push({
-      id: 'python-lang',
-      name: 'Python File',
-      extension: 'py',
-      icon: 'main.py',
-      group: 'languages',
-    });
+    if (!exists('css-lang')) {
+      templates.push({
+        id: 'css-lang',
+        name: 'CSS File',
+        extension: 'css',
+        icon: 'styles.css',
+        group: 'languages',
+      });
+    }
 
-    templates.push({
-      id: 'markdown-lang',
-      name: 'Markdown File',
-      extension: 'md',
-      icon: 'README.md',
-      group: 'docs',
-    });
+    if (!exists('python-lang')) {
+      templates.push({
+        id: 'python-lang',
+        name: 'Python File',
+        extension: 'py',
+        icon: 'main.py',
+        group: 'languages',
+      });
+    }
 
-    templates.push({
-      id: 'json-lang',
-      name: 'JSON File',
-      extension: 'json',
-      icon: 'config.json',
-      group: 'config',
-    });
+    if (!exists('markdown-lang')) {
+      templates.push({
+        id: 'markdown-lang',
+        name: 'Markdown File',
+        extension: 'md',
+        icon: 'README.md',
+        group: 'docs',
+      });
+    }
+
+    if (!exists('json-lang')) {
+      templates.push({
+        id: 'json-lang',
+        name: 'JSON File',
+        extension: 'json',
+        icon: 'config.json',
+        group: 'config',
+      });
+    }
 
     return templates;
   }
