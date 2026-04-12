@@ -4,6 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
 
+// Import iconify-icon web component and register devicon (transparent icons)
+import "iconify-icon";
+import { addCollection } from 'iconify-icon';
+import * as devicon from '@iconify-json/devicon/icons.json';
+addCollection(devicon);
+
 // Import components
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";

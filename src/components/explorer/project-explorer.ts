@@ -3,7 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { FileNode } from '../../lib/file-types.js';
-import { getFileIconColor } from '../../lib/file-icons.js';
+import '../icon.js';
+import '../file-icon.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
@@ -12,6 +13,7 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private selectedPath = '';
   @state() private isLoading = false;
   @state() private expandedFolders = new Set<string>();
+  @state() private isProjectExpanded = true;
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -89,23 +91,43 @@ export class ProjectExplorer extends TailwindElement() {
     this.requestUpdate();
   }
 
+  private expandAll(): void {
+    const expandFolder = async (node: FileNode): Promise<void> => {
+      if (node.is_dir) {
+        this.expandedFolders.add(node.path);
+        if (!node.children) {
+          await this.loadChildren(node);
+        }
+        if (node.children) {
+          for (const child of node.children) {
+            if (child.is_dir) {
+              await expandFolder(child);
+            }
+          }
+        }
+      }
+    };
+
+    Promise.all(this.files.map(file => expandFolder(file))).then(() => {
+      this.requestUpdate();
+    });
+  }
+
+  private collapseAll(): void {
+    this.expandedFolders.clear();
+    this.isProjectExpanded = false;
+    this.requestUpdate();
+  }
+
   private renderIcon(node: FileNode, isExpanded: boolean): TemplateResult {
     if (node.is_dir) {
+      const iconName = isExpanded ? 'folder-open' : 'folder';
       return html`
-        <svg class="w-4 h-4 ${isExpanded ? 'text-[#c9a228]' : 'text-[#5a5a5a]'}" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/>
-        </svg>
+        <os-icon name="${iconName}" color="${isExpanded ? '#c9a228' : '#5a5a5a'}" size="16" />
       `;
     }
 
-    const color = getFileIconColor(node.name);
-
-    return html`
-      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none">
-        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" stroke="${color}" stroke-width="1.5" fill="none"/>
-        <polyline points="14 2 14 8 20 8" stroke="${color}" stroke-width="1.5" fill="none"/>
-      </svg>
-    `;
+    return html`<file-icon path="${node.path}" size="16"></file-icon>`;
   }
 
   private renderNode(node: FileNode, depth: number): TemplateResult {
@@ -117,15 +139,11 @@ export class ProjectExplorer extends TailwindElement() {
       <div>
         <div
           class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors
-            ${isSelected ? 'bg-[#b3d4ff] text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
+            ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
           style="padding-left: ${indent + 8}px"
           @click=${() => this.toggleNode(node)}>
           ${node.is_dir
-            ? html`
-                <svg class="w-4 h-4 text-[#5a5a5a] flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="m9 18 6-6-6-6"/>
-                </svg>
-              `
+            ? html`<os-icon name=${isExpanded ? 'chevron-down' : 'chevron-right'} color="#5a5a5a" size="16" class="flex-shrink-0 transition-transform" />`
             : html`<span class="w-4 flex-shrink-0"></span>`}
 
           <span class="flex-shrink-0">${this.renderIcon(node, isExpanded)}</span>
@@ -146,9 +164,7 @@ export class ProjectExplorer extends TailwindElement() {
     return html`
       <div class="flex flex-col items-center justify-center h-full px-6 text-center">
         <div class="w-16 h-16 mb-4 rounded-xl bg-[#f0f0f0] flex items-center justify-center">
-          <svg class="w-8 h-8 text-[#8a8a8a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-          </svg>
+          <os-icon name="folder" color="#8a8a8a" size="32" />
         </div>
         ${hasProject
           ? html`
@@ -179,40 +195,47 @@ export class ProjectExplorer extends TailwindElement() {
 
   private renderHeader(): TemplateResult {
     return html`
-      <div class="flex items-center justify-between h-[35px] px-3 bg-[#f7f7f7] border-b border-[#c7c7c7] shrink-0">
-        <span class="text-[10px] font-bold text-[#5a5a5a] uppercase tracking-wide">Project</span>
-        <div class="flex items-center gap-0.5">
+      <div class="flex items-center justify-between h-[35px] px-3 bg-gradient-to-b from-[#f5f5f5] to-[#e8e8e8] border-b border-[#d0d0d0] shrink-0">
+        <div class="flex items-center gap-1.5">
+          <os-icon name="presentation" color="#5b47c9" size="14"></os-icon>
+          <span class="text-[10px] font-bold text-[#5a5a5a] uppercase tracking-wide">Project</span>
+        </div>
+        <div class="flex items-center gap-0">
           <button
-            class="p-1.5 rounded hover:bg-[#e0e0e0] text-[#5a5a5a] hover:text-[#1a1a1a] transition-colors"
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            title="Locate in File Tree"
+            @click=${() => this.dispatchEvent(new CustomEvent('locate-file'))}>
+            <os-icon name="locate" color="currentColor" size="14" />
+          </button>
+          <button
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            title="Expand All"
+            @click=${() => this.expandAll()}>
+            <os-icon name="expand-all" color="currentColor" size="14" />
+          </button>
+          <button
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            title="Collapse All"
+            @click=${() => this.collapseAll()}>
+            <os-icon name="collapse-all" color="currentColor" size="14" />
+          </button>
+          <button
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="New File"
             @click=${() => this.dispatchEvent(new CustomEvent('create-file'))}>
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
-              <polyline points="14 2 14 8 20 8"/>
-              <line x1="12" y1="18" x2="12" y2="12"/>
-              <line x1="9" y1="15" x2="15" y2="15"/>
-            </svg>
+            <os-icon name="file-plus" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1.5 rounded hover:bg-[#e0e0e0] text-[#5a5a5a] hover:text-[#1a1a1a] transition-colors"
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="New Folder"
             @click=${() => this.dispatchEvent(new CustomEvent('create-folder'))}>
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-              <line x1="12" y1="11" x2="12" y2="17"/>
-              <line x1="9" y1="14" x2="15" y2="14"/>
-            </svg>
+            <os-icon name="folder-plus" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1.5 rounded hover:bg-[#e0e0e0] text-[#5a5a5a] hover:text-[#1a1a1a] transition-colors"
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="Refresh"
             @click=${() => this.loadDirectory(this.projectPath)}>
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
-              <path d="M3 3v5h5"/>
-              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
-              <path d="M16 21h5v-5"/>
-            </svg>
+            <os-icon name="rotate-ccw" color="currentColor" size="14" />
           </button>
         </div>
       </div>
@@ -231,16 +254,16 @@ export class ProjectExplorer extends TailwindElement() {
             ? this.renderEmptyState()
             : html`
                 <div class="py-1">
-                  <div class="flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-semibold text-[#1a1a1a] bg-[#e8e8e8] cursor-pointer">
-                    <svg class="w-3.5 h-3.5 text-[#5a5a5a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="m9 18 6-6-6-6"/>
-                    </svg>
-                    <svg class="w-3.5 h-3.5 text-[#c9a228]" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8l-2-2z"/>
-                    </svg>
+                  <div
+                    class="flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-bold text-[#1a1a1a] bg-[#e8e8e8] cursor-pointer hover:bg-[#d8d8d8] transition-colors"
+                    @click=${() => { this.isProjectExpanded = !this.isProjectExpanded; this.requestUpdate(); }}>
+                    <os-icon name=${this.isProjectExpanded ? 'chevron-down' : 'chevron-right'} color="#5a5a5a" size="14"></os-icon>
+                    <os-icon name=${this.isProjectExpanded ? 'folder-open' : 'folder'} color=${this.isProjectExpanded ? '#c9a228' : '#5a5a5a'} size="14"></os-icon>
                     <span class="truncate flex-1">${projectName}</span>
                   </div>
-                  <div class="mt-0.5">${this.files.map(file => this.renderNode(file, 1))}</div>
+                  ${this.isProjectExpanded
+                    ? html`<div class="mt-0.5">${this.files.map(file => this.renderNode(file, 1))}</div>`
+                    : ''}
                 </div>
               `}
         </div>
