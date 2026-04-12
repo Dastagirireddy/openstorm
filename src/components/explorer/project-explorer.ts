@@ -24,6 +24,8 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private dialogParentPath = '';
   @state() private selectedTemplate: FileTemplate | null = null;
   @state() private availableTemplates: FileTemplate[] = [];
+  @state() private pickerAnchorX = 0;
+  @state() private pickerAnchorY = 0;
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -56,8 +58,10 @@ export class ProjectExplorer extends TailwindElement() {
     document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
   }
 
-  private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
-    this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
+  private handleCreateFile = (e?: CustomEvent<{ parentPath?: string; anchorX?: number; anchorY?: number }>): void => {
+    this.dialogParentPath = (e?.detail?.parentPath as string) || this.projectPath;
+    this.pickerAnchorX = (e?.detail?.anchorX as number) || 0;
+    this.pickerAnchorY = (e?.detail?.anchorY as number) || 0;
     this.availableTemplates = this.detectTemplates();
     this.showTypePicker = true;
   };
@@ -118,152 +122,112 @@ export class ProjectExplorer extends TailwindElement() {
   private detectTemplates(): FileTemplate[] {
     const templates: FileTemplate[] = [];
 
-    // Always show generic file at top
+    // Always show "File" at top (generic)
     templates.push({
       id: 'generic',
-      name: 'Generic File',
-      description: 'Empty file with no extension',
+      name: 'File',
       extension: '',
-      category: 'generic',
+      icon: undefined,
     });
 
     // Detect project types from existing files
     const hasRust = this.files.some(f => f.name.endsWith('.rs') || f.name === 'Cargo.toml');
     const hasGo = this.files.some(f => f.name.endsWith('.go') || f.name === 'go.mod');
-    const hasNode = this.files.some(f => f.name === 'package.json');
-    const hasPython = this.files.some(f => f.name.endsWith('.py') || f.name === 'requirements.txt');
-    const hasWeb = this.files.some(f => ['.html', '.htm', '.xhtml'].some(ext => f.name.endsWith(ext)));
-    const hasCss = this.files.some(f => ['.css', '.scss', '.sass', '.less', '.tailwind.css'].some(ext => f.name.endsWith(ext)));
-    const hasReact = this.files.some(f => ['.jsx', '.tsx'].some(ext => f.name.endsWith(ext)));
     const hasTypeScript = this.files.some(f => f.name.endsWith('.ts') || f.name.endsWith('.tsx'));
+    const hasJavaScript = this.files.some(f => f.name.endsWith('.js') || f.name.endsWith('.jsx'));
+    const hasHtml = this.files.some(f => ['.html', '.htm'].some(ext => f.name.endsWith(ext)));
+    const hasCss = this.files.some(f => ['.css', '.scss', '.sass', '.less'].some(ext => f.name.endsWith(ext)));
+    const hasPython = this.files.some(f => f.name.endsWith('.py'));
 
-    // Add detected templates
-    const detected: FileTemplate[] = [];
+    // Add detected templates first (simple format: "Language File")
+    if (hasTypeScript) {
+      templates.push({
+        id: 'typescript',
+        name: 'TypeScript File',
+        extension: 'ts',
+        icon: 'ts',
+      });
+    }
+
+    if (hasJavaScript) {
+      templates.push({
+        id: 'javascript',
+        name: 'JavaScript File',
+        extension: 'js',
+        icon: 'js',
+      });
+    }
 
     if (hasRust) {
-      detected.push({
+      templates.push({
         id: 'rust',
-        name: 'Rust Source',
-        description: 'Rust source file',
+        name: 'Rust File',
         extension: 'rs',
-        icon: 'test.rs',
-        category: 'detected',
-      });
-      detected.push({
-        id: 'rust-test',
-        name: 'Rust Test',
-        description: 'Rust test module',
-        extension: 'rs',
-        icon: 'test.rs',
-        category: 'detected',
+        icon: 'rs',
       });
     }
 
     if (hasGo) {
-      detected.push({
+      templates.push({
         id: 'go',
-        name: 'Go Package',
-        description: 'Go source file',
+        name: 'Go File',
         extension: 'go',
-        icon: 'main.go',
-        category: 'detected',
-      });
-      detected.push({
-        id: 'go-test',
-        name: 'Go Test',
-        description: 'Go test file',
-        extension: 'go',
-        icon: 'main_test.go',
-        category: 'detected',
+        icon: 'go',
       });
     }
 
-    if (hasNode) {
-      detected.push({
-        id: 'javascript',
-        name: 'JavaScript Module',
-        description: 'JavaScript ES module',
-        extension: 'js',
-        icon: 'module.js',
-        category: 'detected',
-      });
-      if (hasReact) {
-        detected.push({
-          id: 'react-component',
-          name: 'React Component',
-          description: 'React functional component',
-          extension: 'tsx',
-          icon: 'Component.tsx',
-          category: 'detected',
-        });
-      }
-      if (hasTypeScript) {
-        detected.push({
-          id: 'typescript',
-          name: 'TypeScript Module',
-          description: 'TypeScript module',
-          extension: 'ts',
-          icon: 'module.ts',
-          category: 'detected',
-        });
-      }
-    }
-
-    if (hasWeb) {
-      detected.push({
+    if (hasHtml) {
+      templates.push({
         id: 'html',
-        name: 'HTML Document',
-        description: 'HTML5 document',
+        name: 'HTML File',
         extension: 'html',
-        icon: 'index.html',
-        category: 'detected',
+        icon: 'html',
       });
     }
 
     if (hasCss) {
-      detected.push({
+      templates.push({
         id: 'css',
-        name: 'Stylesheet',
-        description: 'CSS stylesheet',
+        name: 'CSS File',
         extension: 'css',
-        icon: 'styles.css',
-        category: 'detected',
+        icon: 'css',
       });
     }
 
     if (hasPython) {
-      detected.push({
+      templates.push({
         id: 'python',
-        name: 'Python Module',
-        description: 'Python source file',
+        name: 'Python File',
         extension: 'py',
-        icon: 'module.py',
-        category: 'detected',
+        icon: 'py',
       });
     }
 
-    templates.push(...detected);
+    // Always show common language options
+    if (!hasTypeScript) {
+      templates.push({
+        id: 'typescript-lang',
+        name: 'TypeScript File',
+        extension: 'ts',
+        icon: 'ts',
+      });
+    }
 
-    // Add common languages as fallback
     if (!hasRust) {
       templates.push({
         id: 'rust-lang',
-        name: 'Rust Source',
-        description: 'Rust source file',
+        name: 'Rust File',
         extension: 'rs',
-        icon: 'main.rs',
-        category: 'language',
+        icon: 'rs',
       });
     }
 
     if (!hasGo) {
       templates.push({
         id: 'go-lang',
-        name: 'Go Package',
-        description: 'Go source file',
+        name: 'Go File',
         extension: 'go',
-        icon: 'main.go',
-        category: 'language',
+        icon: 'go',
       });
     }
 
@@ -273,13 +237,10 @@ export class ProjectExplorer extends TailwindElement() {
   private getDefaultFileName(template: FileTemplate): string {
     const baseNames: Record<string, string> = {
       'generic': 'untitled',
-      'rust': 'module',
-      'rust-test': 'tests',
-      'go': 'main',
-      'go-test': 'main_test',
-      'javascript': 'index',
       'typescript': 'index',
-      'react-component': 'Component',
+      'javascript': 'index',
+      'rust': 'module',
+      'go': 'main',
       'html': 'index',
       'css': 'styles',
       'python': 'main',
@@ -472,9 +433,14 @@ export class ProjectExplorer extends TailwindElement() {
             <os-icon name="collapse-all" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer relative"
             title="New File"
-            @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
+            @click=${(e: MouseEvent) => {
+              const rect = (e.target as HTMLElement).getBoundingClientRect();
+              document.dispatchEvent(new CustomEvent('create-file', {
+                detail: { anchorX: rect.left, anchorY: rect.bottom + 4 }
+              }));
+            }}>
             <os-icon name="file-plus" color="currentColor" size="14" />
           </button>
           <button
@@ -527,10 +493,12 @@ export class ProjectExplorer extends TailwindElement() {
         </div>
       </div>
 
-      <!-- File Type Picker -->
+      <!-- File Type Picker Dropdown -->
       <file-type-picker
         ?open=${this.showTypePicker}
         .templates=${this.availableTemplates}
+        .anchorX=${this.pickerAnchorX}
+        .anchorY=${this.pickerAnchorY}
         @template-select=${this.handleTemplateSelect}
         @cancel=${this.handleTypePickerCancel}
       ></file-type-picker>

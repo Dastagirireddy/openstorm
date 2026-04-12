@@ -7,16 +7,16 @@ import './file-icon.js';
 export interface FileTemplate {
   id: string;
   name: string;
-  description: string;
   extension: string;
   icon?: string;
-  category: 'generic' | 'detected' | 'language';
 }
 
 @customElement('file-type-picker')
 export class FileTypePicker extends TailwindElement() {
   @property({ type: Boolean }) open = false;
   @property({ type: Array }) templates: FileTemplate[] = [];
+  @property({ type: Number }) anchorX = 0;
+  @property({ type: Number }) anchorY = 0;
 
   @state() private selectedIndex = 0;
 
@@ -69,7 +69,7 @@ export class FileTypePicker extends TailwindElement() {
 
     return html`
       <div
-        class="fixed inset-0 bg-black/40 flex items-start justify-center z-50 pt-[100px]"
+        class="fixed inset-0 z-40"
         @click=${() => {
           this.dispatchEvent(new CustomEvent('cancel', { bubbles: true, composed: true }));
           this.open = false;
@@ -78,43 +78,25 @@ export class FileTypePicker extends TailwindElement() {
         tabindex="-1"
       >
         <div
-          class="bg-white rounded-md shadow-2xl w-[420px] border border-[#d0d0d0] overflow-hidden"
+          class="absolute bg-white rounded-md shadow-lg border border-[#d0d0d0] overflow-hidden z-50 min-w-[200px]"
+          style="left: ${this.anchorX}px; top: ${this.anchorY}px;"
           @click=${(e: Event) => e.stopPropagation()}
         >
-          <!-- Header -->
-          <div class="px-4 py-2.5 bg-[#f0f0f0] border-b border-[#d0d0d0]">
-            <h3 class="text-[13px] font-semibold text-[#1a1a1a] text-center">New File Type</h3>
-          </div>
-
-          <!-- Template List -->
-          <div class="max-h-[400px] overflow-y-auto py-1">
-            ${this.templates.map((template, index) => {
-              const isSelected = index === this.selectedIndex;
-              const isCategoryHeader = index > 0 && this.templates[index - 1].category !== template.category;
-
-              return html`
-                ${isCategoryHeader && template.category !== 'generic' ? html`
-                  <div class="px-3 py-1.5 text-[11px] font-semibold text-[#5a5a5a] uppercase tracking-wide bg-[#f7f7f7] border-t border-b border-[#e0e0e0] mt-2 first:mt-0">
-                    ${template.category === 'detected' ? 'Detected' : 'Other Languages'}
-                  </div>
-                ` : ''}
-                <div
-                  class="flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}"
-                  @click=${() => this.handleSelect(template)}
-                >
-                  ${template.icon
-                    ? html`<file-icon path="${template.icon}" size="18"></file-icon>`
-                    : html`<os-icon name="file" color="#5a5a5a" size="18"></os-icon>`
-                  }
-                  <div class="flex-1 min-w-0">
-                    <div class="text-[13px] font-medium truncate">${template.name}</div>
-                    <div class="text-[11px] text-[#6a6a6a] truncate">${template.description}</div>
-                  </div>
-                  <div class="text-[11px] text-[#8a8a8a] font-mono">.${template.extension}</div>
-                </div>
-              `;
-            })}
-          </div>
+          ${this.templates.map((template, index) => {
+            const isSelected = index === this.selectedIndex;
+            return html`
+              <div
+                class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}"
+                @click=${() => this.handleSelect(template)}
+              >
+                ${template.icon
+                  ? html`<file-icon path="${template.icon}" size="16"></file-icon>`
+                  : html`<os-icon name="file" color="#5a5a5a" size="16"></os-icon>`
+                }
+                <span class="text-[13px] whitespace-nowrap">${template.name}</span>
+              </div>
+            `;
+          })}
         </div>
       </div>
     `;
