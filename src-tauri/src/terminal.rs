@@ -148,7 +148,11 @@ impl PtyManager {
 
     pub fn close(&self, id: u32) -> Result<(), String> {
         let mut terminals = self.terminals.lock().unwrap();
-        terminals.remove(&id);
+        if let Some(terminal) = terminals.remove(&id) {
+            // Kill the child process to clean up resources
+            let mut child = terminal.child.lock().unwrap();
+            child.kill().map_err(|e| format!("Failed to kill process: {}", e))?;
+        }
         Ok(())
     }
 }
