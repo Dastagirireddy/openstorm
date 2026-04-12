@@ -4,11 +4,25 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
 
-// Import iconify-icon web component and register devicon (transparent icons)
+// Import iconify-icon web component and register icon collections
 import "iconify-icon";
 import { addCollection } from 'iconify-icon';
 import * as devicon from '@iconify-json/devicon/icons.json';
+import * as vscodeIcons from '@iconify-json/vscode-icons/icons.json';
+import * as tabler from '@iconify-json/tabler/icons.json';
+import * as catppuccin from '@iconify-json/catppuccin/icons.json';
+import * as fileIcons from '@iconify-json/file-icons/icons.json';
+import * as logos from '@iconify-json/logos/icons.json';
+import * as mdi from '@iconify-json/mdi/icons.json';
+import * as streamlineFlexColor from '@iconify-json/streamline-flex-color/icons.json';
 addCollection(devicon);
+addCollection(vscodeIcons);
+addCollection(tabler);
+addCollection(catppuccin);
+addCollection(fileIcons);
+addCollection(logos);
+addCollection(mdi);
+addCollection(streamlineFlexColor);
 
 // Import components
 import "./components/header/app-header.js";

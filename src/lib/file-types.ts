@@ -8,6 +8,7 @@ export interface FileNode {
   is_dir: boolean;
   size: number;
   modified: number;
+  is_executable: boolean;
   children?: FileNode[];
   expanded?: boolean;
 }

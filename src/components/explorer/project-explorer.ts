@@ -127,7 +127,7 @@ export class ProjectExplorer extends TailwindElement() {
       `;
     }
 
-    return html`<file-icon path="${node.path}" size="16"></file-icon>`;
+    return html`<file-icon path="${node.path}" size="16" .isExecutable="${node.is_executable}"></file-icon>`;
   }
 
   private renderNode(node: FileNode, depth: number): TemplateResult {
