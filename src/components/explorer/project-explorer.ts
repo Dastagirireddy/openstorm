@@ -5,6 +5,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import type { FileNode } from '../../lib/file-types.js';
 import '../icon.js';
 import '../file-icon.js';
+import '../dialog.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
@@ -14,6 +15,10 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private isLoading = false;
   @state() private expandedFolders = new Set<string>();
   @state() private isProjectExpanded = true;
+  @state() private showDialog = false;
+  @state() private dialogMode: 'file' | 'folder' = 'file';
+  @state() private dialogDefaultValue = '';
+  @state() private dialogParentPath = '';
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -46,12 +51,47 @@ export class ProjectExplorer extends TailwindElement() {
     document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
   }
 
-  private handleCreateFile = (): void => {
-    this.createFile();
+  private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
+    this.dialogMode = 'file';
+    this.dialogDefaultValue = '';
+    this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
+    this.showDialog = true;
   };
 
-  private handleCreateFolder = (): void => {
-    this.createFolder();
+  private handleCreateFolder = (e?: CustomEvent<{ parentPath?: string }>): void => {
+    this.dialogMode = 'folder';
+    this.dialogDefaultValue = '';
+    this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
+    this.showDialog = true;
+  };
+
+  private handleDialogConfirm = async (e: CustomEvent<{ value: string }>): Promise<void> => {
+    const name = e.detail.value;
+    if (!name || !this.dialogParentPath) return;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const fullPath = `${this.dialogParentPath}/${name}`;
+      await invoke("create_file", {
+        path: fullPath,
+        is_dir: this.dialogMode === 'folder',
+      });
+      await this.loadDirectory(this.projectPath);
+
+      this.dispatchEvent(
+        new CustomEvent(this.dialogMode === 'file' ? "file-created" : "folder-created", {
+          detail: { path: fullPath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      console.error(`Failed to create ${this.dialogMode}:`, error);
+    }
+  };
+
+  private handleDialogCancel = (): void => {
+    this.showDialog = false;
   };
 
   private handleRefresh = (): void => {
@@ -60,52 +100,6 @@ export class ProjectExplorer extends TailwindElement() {
       this.loadDirectory(this.projectPath);
     }
   };
-
-  private async createFile(): Promise<void> {
-    const fileName = prompt("Enter file name:");
-    if (!fileName || !this.projectPath) return;
-
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const filePath = `${this.projectPath}/${fileName}`;
-      await invoke("create_file", { path: filePath, is_dir: false });
-      await this.loadDirectory(this.projectPath);
-
-      this.dispatchEvent(
-        new CustomEvent("file-created", {
-          detail: { path: filePath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    } catch (error) {
-      console.error("Failed to create file:", error);
-      alert(`Failed to create file: ${error}`);
-    }
-  }
-
-  private async createFolder(): Promise<void> {
-    const folderName = prompt("Enter folder name:");
-    if (!folderName || !this.projectPath) return;
-
-    try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const folderPath = `${this.projectPath}/${folderName}`;
-      await invoke("create_file", { path: folderPath, is_dir: true });
-      await this.loadDirectory(this.projectPath);
-
-      this.dispatchEvent(
-        new CustomEvent("folder-created", {
-          detail: { path: folderPath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    } catch (error) {
-      console.error("Failed to create folder:", error);
-      alert(`Failed to create folder: ${error}`);
-    }
-  }
 
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
@@ -303,6 +297,8 @@ export class ProjectExplorer extends TailwindElement() {
 
   render() {
     const projectName = this.projectPath ? this.projectPath.split('/').pop() : 'OpenStorm';
+    const dialogTitle = this.dialogMode === 'file' ? 'New File' : 'New Folder';
+    const dialogPlaceholder = this.dialogMode === 'file' ? 'filename.txt' : 'folder-name';
 
     return html`
       <div class="flex flex-col h-full overflow-hidden bg-[#f7f7f7]">
@@ -327,6 +323,14 @@ export class ProjectExplorer extends TailwindElement() {
               `}
         </div>
       </div>
+
+      <os-dialog
+        ?open=${this.showDialog}
+        title="${dialogTitle}"
+        placeholder="${dialogPlaceholder}"
+        @confirm=${this.handleDialogConfirm}
+        @cancel=${this.handleDialogCancel}
+      ></os-dialog>
     `;
   }
 }
