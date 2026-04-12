@@ -59,7 +59,18 @@ export class ProjectExplorer extends TailwindElement() {
   }
 
   private handleCreateFile = (e?: CustomEvent<{ parentPath?: string; anchorX?: number; anchorY?: number }>): void => {
-    this.dialogParentPath = (e?.detail?.parentPath as string) || this.projectPath;
+    // Use selected folder path if a folder is selected, otherwise use project root or provided path
+    let parentPath = (e?.detail?.parentPath as string);
+    if (!parentPath) {
+      // If a folder is selected and it's a directory, use it as the parent
+      const selectedNode = this.files.find(f => f.path === this.selectedPath);
+      if (selectedNode && selectedNode.is_dir) {
+        parentPath = selectedNode.path;
+      } else {
+        parentPath = this.projectPath;
+      }
+    }
+    this.dialogParentPath = parentPath;
     this.pickerAnchorX = (e?.detail?.anchorX as number) || 0;
     this.pickerAnchorY = (e?.detail?.anchorY as number) || 0;
     this.availableTemplates = this.detectTemplates();
@@ -518,7 +529,8 @@ export class ProjectExplorer extends TailwindElement() {
           class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors
             ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
           style="padding-left: ${indent + 8}px"
-          @click=${() => this.toggleNode(node)}>
+          @click=${() => this.toggleNode(node)}
+          @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}>
           ${node.is_dir
             ? html`<os-icon name=${isExpanded ? 'chevron-down' : 'chevron-right'} color="#5a5a5a" size="16" class="flex-shrink-0 transition-transform" />`
             : html`<span class="w-4 flex-shrink-0"></span>`}
@@ -533,6 +545,29 @@ export class ProjectExplorer extends TailwindElement() {
       </div>
     `;
   }
+
+  private handleContextMenu = (e: MouseEvent, node: FileNode): void => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Select the node first
+    this.selectedPath = node.path;
+    if (node.is_dir) {
+      this.expandedFolders.add(node.path);
+      this.requestUpdate();
+    }
+
+    // For now, just dispatch create-file event with the folder path
+    // A full context menu could be added later
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    document.dispatchEvent(new CustomEvent('create-file', {
+      detail: {
+        parentPath: node.path,
+        anchorX: rect.left,
+        anchorY: rect.bottom + 4
+      }
+    }));
+  };
 
   private renderEmptyState(): TemplateResult {
     const hasProject = !!this.projectPath;
