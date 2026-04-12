@@ -34,12 +34,25 @@ export class ProjectExplorer extends TailwindElement() {
     }
     // Listen for refresh events from file watcher
     document.addEventListener('refresh-explorer', this.handleRefresh as EventListener);
+    // Listen for create file/folder events
+    document.addEventListener('create-file', this.handleCreateFile as EventListener);
+    document.addEventListener('create-folder', this.handleCreateFolder as EventListener);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('refresh-explorer', this.handleRefresh as EventListener);
+    document.removeEventListener('create-file', this.handleCreateFile as EventListener);
+    document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
   }
+
+  private handleCreateFile = (): void => {
+    this.createFile();
+  };
+
+  private handleCreateFolder = (): void => {
+    this.createFolder();
+  };
 
   private handleRefresh = (): void => {
     // Reload the directory to show new files
@@ -47,6 +60,52 @@ export class ProjectExplorer extends TailwindElement() {
       this.loadDirectory(this.projectPath);
     }
   };
+
+  private async createFile(): Promise<void> {
+    const fileName = prompt("Enter file name:");
+    if (!fileName || !this.projectPath) return;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const filePath = `${this.projectPath}/${fileName}`;
+      await invoke("create_file", { path: filePath, is_dir: false });
+      await this.loadDirectory(this.projectPath);
+
+      this.dispatchEvent(
+        new CustomEvent("file-created", {
+          detail: { path: filePath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to create file:", error);
+      alert(`Failed to create file: ${error}`);
+    }
+  }
+
+  private async createFolder(): Promise<void> {
+    const folderName = prompt("Enter folder name:");
+    if (!folderName || !this.projectPath) return;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const folderPath = `${this.projectPath}/${folderName}`;
+      await invoke("create_file", { path: folderPath, is_dir: true });
+      await this.loadDirectory(this.projectPath);
+
+      this.dispatchEvent(
+        new CustomEvent("folder-created", {
+          detail: { path: folderPath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      console.error("Failed to create folder:", error);
+      alert(`Failed to create folder: ${error}`);
+    }
+  }
 
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
@@ -174,7 +233,7 @@ export class ProjectExplorer extends TailwindElement() {
               </p>
               <button
                 class="px-4 py-2 bg-[#2da44e] hover:bg-[#2c974b] text-white text-[12px] font-medium rounded-md transition-colors shadow-sm"
-                @click=${() => this.dispatchEvent(new CustomEvent('create-file'))}>
+                @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
                 Create File
               </button>
             `
@@ -222,13 +281,13 @@ export class ProjectExplorer extends TailwindElement() {
           <button
             class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="New File"
-            @click=${() => this.dispatchEvent(new CustomEvent('create-file'))}>
+            @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
             <os-icon name="file-plus" color="currentColor" size="14" />
           </button>
           <button
             class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="New Folder"
-            @click=${() => this.dispatchEvent(new CustomEvent('create-folder'))}>
+            @click=${() => document.dispatchEvent(new CustomEvent('create-folder'))}>
             <os-icon name="folder-plus" color="currentColor" size="14" />
           </button>
           <button
