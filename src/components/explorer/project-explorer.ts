@@ -314,6 +314,14 @@ export class ProjectExplorer extends TailwindElement() {
 
     // Always show these common types
     templates.push({
+      id: 'javascript-lang',
+      name: 'JavaScript File',
+      extension: 'js',
+      icon: 'module.js',
+      group: 'languages',
+    });
+
+    templates.push({
       id: 'html-lang',
       name: 'HTML File',
       extension: 'html',
@@ -330,11 +338,27 @@ export class ProjectExplorer extends TailwindElement() {
     });
 
     templates.push({
+      id: 'python-lang',
+      name: 'Python File',
+      extension: 'py',
+      icon: 'main.py',
+      group: 'languages',
+    });
+
+    templates.push({
       id: 'markdown-lang',
       name: 'Markdown File',
       extension: 'md',
       icon: 'README.md',
       group: 'docs',
+    });
+
+    templates.push({
+      id: 'json-lang',
+      name: 'JSON File',
+      extension: 'json',
+      icon: 'config.json',
+      group: 'config',
     });
 
     return templates;
