@@ -66,15 +66,19 @@ export class OSDialog extends TailwindElement() {
         @click=${this.handleCancel}
       >
         <div
-          class="bg-white rounded-md shadow-2xl w-[400px] border border-[#d0d0d0] overflow-hidden"
+          class="bg-white rounded-md shadow-2xl w-[380px] border border-[#d0d0d0] overflow-hidden"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
         >
-          <div class="p-4">
-            <h3 class="text-[13px] font-semibold text-[#1a1a1a] mb-3">${this.title}</h3>
+          <!-- Header -->
+          <div class="px-4 py-2.5 bg-[#f0f0f0] border-b border-[#d0d0d0]">
+            <h3 class="text-[13px] font-semibold text-[#1a1a1a] text-center">${this.title}</h3>
+          </div>
+          <!-- Input -->
+          <div class="px-4 py-3">
             <input
               type="text"
-              class="w-full px-2.5 py-2 border border-[#c0c0c0] rounded text-[13px] focus:outline-none focus:ring-2 focus:ring-[#5b47c9] focus:border-transparent"
+              class="w-full px-2 py-1.5 border border-[#c0c0c0] rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[#5b47c9] focus:border-transparent"
               placeholder="${this.placeholder}"
               value="${this.value}"
               @input=${(e: Event) => { this.value = (e.target as HTMLInputElement).value; }}
