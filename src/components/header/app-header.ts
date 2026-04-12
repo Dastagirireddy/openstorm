@@ -2,6 +2,7 @@ import { html, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../icon.js';
+import '../file-icon.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/breadcrumb.js';
 
 export interface HeaderAction {
@@ -55,14 +56,15 @@ export class AppHeader extends TailwindElement() {
   private renderBreadcrumbSegment(segment: BreadcrumbSegment, index: number, totalSegments: number): TemplateResult {
     const isLast = index === totalSegments - 1;
     const iconColor = isLast ? getFileIconColor(segment.path || segment.label) : '#5f6368';
+    const isFolder = !isLast || segment.icon === 'folder';
 
     return html`
       <div class="flex items-center gap-1">
-        ${segment.icon && segment.icon !== 'folder' ? html`
-          <os-icon name="${segment.icon}" color="${iconColor}" size=${14}></os-icon>
-        ` : segment.icon === 'folder' ? html`
+        ${isFolder ? html`
           <os-icon name="folder" color="${iconColor}" size=${14}></os-icon>
-        ` : ''}
+        ` : html`
+          <file-icon path="${segment.path || segment.label}" size=${14}></file-icon>
+        `}
         <span
           class="${isLast ? 'text-[#1a1a1a] font-semibold' : 'hover:text-[#1a1a1a] cursor-pointer transition-colors'} text-[13px]"
           ${!isLast && segment.path ? 'data-path="' + segment.path + '"' : ''}>
