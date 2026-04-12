@@ -74,20 +74,9 @@ export class ProjectExplorer extends TailwindElement() {
   };
 
   private handleTemplateSelect = (e: CustomEvent<{ template: FileTemplate }>): void => {
-    const template = e.detail.template;
-
-    // Handle folder creation
-    if (template.id === 'folder') {
-      this.dialogMode = 'folder';
-      this.dialogDefaultValue = 'untitled';
-      this.showTypePicker = false;
-      this.showDialog = true;
-      return;
-    }
-
-    this.selectedTemplate = template;
+    this.selectedTemplate = e.detail.template;
     this.dialogMode = 'file';
-    this.dialogDefaultValue = this.getDefaultFileName(template);
+    this.dialogDefaultValue = this.getDefaultFileName(e.detail.template);
     this.showTypePicker = false;
     this.showDialog = true;
   };
@@ -142,14 +131,6 @@ export class ProjectExplorer extends TailwindElement() {
       icon: undefined,
       group: 'basic',
       shortcut: '⌘N',
-    });
-    templates.push({
-      id: 'folder',
-      name: 'Folder',
-      extension: '',
-      icon: 'folder',
-      group: 'basic',
-      shortcut: '⇧⌘N',
     });
 
     // ===== DETECTED GROUP (based on existing files) =====
