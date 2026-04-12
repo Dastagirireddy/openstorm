@@ -74,8 +74,20 @@ export class ProjectExplorer extends TailwindElement() {
   };
 
   private handleTemplateSelect = (e: CustomEvent<{ template: FileTemplate }>): void => {
-    this.selectedTemplate = e.detail.template;
-    this.dialogDefaultValue = this.getDefaultFileName(e.detail.template);
+    const template = e.detail.template;
+
+    // Handle folder creation
+    if (template.id === 'folder') {
+      this.dialogMode = 'folder';
+      this.dialogDefaultValue = 'untitled';
+      this.showTypePicker = false;
+      this.showDialog = true;
+      return;
+    }
+
+    this.selectedTemplate = template;
+    this.dialogMode = 'file';
+    this.dialogDefaultValue = this.getDefaultFileName(template);
     this.showTypePicker = false;
     this.showDialog = true;
   };
@@ -117,20 +129,30 @@ export class ProjectExplorer extends TailwindElement() {
   };
 
   /**
-   * Detect project type and return relevant file templates
+   * Detect project type and return relevant file templates with groups and shortcuts
    */
   private detectTemplates(): FileTemplate[] {
     const templates: FileTemplate[] = [];
 
-    // Always show "File" at top (generic)
+    // ===== BASIC GROUP =====
     templates.push({
       id: 'generic',
       name: 'File',
       extension: '',
       icon: undefined,
+      group: 'basic',
+      shortcut: '⌘N',
+    });
+    templates.push({
+      id: 'folder',
+      name: 'Folder',
+      extension: '',
+      icon: 'folder',
+      group: 'basic',
+      shortcut: '⇧⌘N',
     });
 
-    // Detect project types from existing files
+    // ===== DETECTED GROUP (based on existing files) =====
     const hasRust = this.files.some(f => f.name.endsWith('.rs') || f.name === 'Cargo.toml');
     const hasGo = this.files.some(f => f.name.endsWith('.go') || f.name === 'go.mod');
     const hasTypeScript = this.files.some(f => f.name.endsWith('.ts') || f.name.endsWith('.tsx'));
@@ -138,15 +160,21 @@ export class ProjectExplorer extends TailwindElement() {
     const hasHtml = this.files.some(f => ['.html', '.htm'].some(ext => f.name.endsWith(ext)));
     const hasCss = this.files.some(f => ['.css', '.scss', '.sass', '.less'].some(ext => f.name.endsWith(ext)));
     const hasPython = this.files.some(f => f.name.endsWith('.py'));
+    const hasMarkdown = this.files.some(f => f.name.endsWith('.md'));
+    const hasJson = this.files.some(f => f.name.endsWith('.json'));
+    const hasYaml = this.files.some(f => f.name.endsWith('.yaml') || f.name.endsWith('.yml'));
+    const hasToml = this.files.some(f => f.name.endsWith('.toml'));
+    const hasTests = this.files.some(f => f.name.includes('_test') || f.name.includes('.test.') || f.name.includes('.spec.'));
 
-    // Add detected templates first (simple format: "Language File")
-    // Use fake file paths so file-icon component renders correct icons
+    // Detected languages
     if (hasTypeScript) {
       templates.push({
         id: 'typescript',
         name: 'TypeScript File',
         extension: 'ts',
         icon: 'module.ts',
+        group: 'detected',
+        shortcut: '⌘T',
       });
     }
 
@@ -156,6 +184,7 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'JavaScript File',
         extension: 'js',
         icon: 'module.js',
+        group: 'detected',
       });
     }
 
@@ -165,7 +194,19 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'Rust File',
         extension: 'rs',
         icon: 'module.rs',
+        group: 'detected',
+        shortcut: '⌘R',
       });
+      if (hasTests) {
+        templates.push({
+          id: 'rust-test',
+          name: 'Rust Test',
+          extension: 'rs',
+          icon: 'tests.rs',
+          group: 'test',
+          description: 'Test module',
+        });
+      }
     }
 
     if (hasGo) {
@@ -174,6 +215,16 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'Go File',
         extension: 'go',
         icon: 'main.go',
+        group: 'detected',
+        shortcut: '⌘G',
+      });
+      templates.push({
+        id: 'go-test',
+        name: 'Go Test',
+        extension: 'go',
+        icon: 'main_test.go',
+        group: 'test',
+        description: 'Test file',
       });
     }
 
@@ -183,6 +234,7 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'HTML File',
         extension: 'html',
         icon: 'index.html',
+        group: 'detected',
       });
     }
 
@@ -192,6 +244,7 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'CSS File',
         extension: 'css',
         icon: 'styles.css',
+        group: 'detected',
       });
     }
 
@@ -201,16 +254,60 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'Python File',
         extension: 'py',
         icon: 'main.py',
+        group: 'detected',
       });
     }
 
-    // Always show common language options
+    // ===== CONFIG FILES =====
+    if (hasJson || hasYaml || hasToml) {
+      templates.push({
+        id: 'json',
+        name: 'JSON File',
+        extension: 'json',
+        icon: 'config.json',
+        group: 'config',
+      });
+    }
+
+    if (hasYaml) {
+      templates.push({
+        id: 'yaml',
+        name: 'YAML File',
+        extension: 'yaml',
+        icon: 'config.yaml',
+        group: 'config',
+      });
+    }
+
+    if (hasToml || hasRust) {
+      templates.push({
+        id: 'toml',
+        name: 'TOML File',
+        extension: 'toml',
+        icon: 'config.toml',
+        group: 'config',
+      });
+    }
+
+    // ===== DOCS =====
+    if (hasMarkdown) {
+      templates.push({
+        id: 'markdown',
+        name: 'Markdown File',
+        extension: 'md',
+        icon: 'README.md',
+        group: 'docs',
+      });
+    }
+
+    // ===== LANGUAGES (always available) =====
     if (!hasTypeScript) {
       templates.push({
         id: 'typescript-lang',
         name: 'TypeScript File',
         extension: 'ts',
         icon: 'module.ts',
+        group: 'languages',
       });
     }
 
@@ -220,6 +317,7 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'Rust File',
         extension: 'rs',
         icon: 'module.rs',
+        group: 'languages',
       });
     }
 
@@ -229,8 +327,34 @@ export class ProjectExplorer extends TailwindElement() {
         name: 'Go File',
         extension: 'go',
         icon: 'main.go',
+        group: 'languages',
       });
     }
+
+    // Always show these common types
+    templates.push({
+      id: 'html-lang',
+      name: 'HTML File',
+      extension: 'html',
+      icon: 'index.html',
+      group: 'languages',
+    });
+
+    templates.push({
+      id: 'css-lang',
+      name: 'CSS File',
+      extension: 'css',
+      icon: 'styles.css',
+      group: 'languages',
+    });
+
+    templates.push({
+      id: 'markdown-lang',
+      name: 'Markdown File',
+      extension: 'md',
+      icon: 'README.md',
+      group: 'docs',
+    });
 
     return templates;
   }
