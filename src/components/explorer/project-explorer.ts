@@ -147,10 +147,10 @@ export class ProjectExplorer extends TailwindElement() {
     const hasToml = this.files.some(f => f.name.endsWith('.toml'));
     const hasTests = this.files.some(f => f.name.includes('_test') || f.name.includes('.test.') || f.name.includes('.spec.'));
 
-    // Detected languages
+    // Detected languages - these go to 'detected' group
     if (hasTypeScript) {
       templates.push({
-        id: 'typescript',
+        id: 'typescript-detected',
         name: 'TypeScript File',
         extension: 'ts',
         icon: 'module.ts',
@@ -161,7 +161,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasJavaScript) {
       templates.push({
-        id: 'javascript',
+        id: 'javascript-detected',
         name: 'JavaScript File',
         extension: 'js',
         icon: 'module.js',
@@ -171,7 +171,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasRust) {
       templates.push({
-        id: 'rust',
+        id: 'rust-detected',
         name: 'Rust File',
         extension: 'rs',
         icon: 'module.rs',
@@ -192,7 +192,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasGo) {
       templates.push({
-        id: 'go',
+        id: 'go-detected',
         name: 'Go File',
         extension: 'go',
         icon: 'main.go',
@@ -211,7 +211,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasHtml) {
       templates.push({
-        id: 'html',
+        id: 'html-detected',
         name: 'HTML File',
         extension: 'html',
         icon: 'index.html',
@@ -221,7 +221,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasCss) {
       templates.push({
-        id: 'css',
+        id: 'css-detected',
         name: 'CSS File',
         extension: 'css',
         icon: 'styles.css',
@@ -231,7 +231,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasPython) {
       templates.push({
-        id: 'python',
+        id: 'python-detected',
         name: 'Python File',
         extension: 'py',
         icon: 'main.py',
@@ -239,10 +239,10 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    // ===== CONFIG FILES =====
+    // Config files - detected
     if (hasJson) {
       templates.push({
-        id: 'json',
+        id: 'json-detected',
         name: 'JSON File',
         extension: 'json',
         icon: 'config.json',
@@ -252,7 +252,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasYaml) {
       templates.push({
-        id: 'yaml',
+        id: 'yaml-detected',
         name: 'YAML File',
         extension: 'yaml',
         icon: 'config.yaml',
@@ -262,7 +262,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (hasToml) {
       templates.push({
-        id: 'toml',
+        id: 'toml-detected',
         name: 'TOML File',
         extension: 'toml',
         icon: 'config.toml',
@@ -270,10 +270,10 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    // ===== DOCS =====
+    // Docs - detected
     if (hasMarkdown) {
       templates.push({
-        id: 'markdown',
+        id: 'markdown-detected',
         name: 'Markdown File',
         extension: 'md',
         icon: 'README.md',
@@ -281,10 +281,11 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    // ===== LANGUAGES (always available) =====
+    // ===== LANGUAGES (always available as fallback) =====
+    // Only add if NOT detected
     if (!hasTypeScript) {
       templates.push({
-        id: 'typescript-lang',
+        id: 'typescript',
         name: 'TypeScript File',
         extension: 'ts',
         icon: 'module.ts',
@@ -292,9 +293,19 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
+    if (!hasJavaScript) {
+      templates.push({
+        id: 'javascript',
+        name: 'JavaScript File',
+        extension: 'js',
+        icon: 'module.js',
+        group: 'languages',
+      });
+    }
+
     if (!hasRust) {
       templates.push({
-        id: 'rust-lang',
+        id: 'rust',
         name: 'Rust File',
         extension: 'rs',
         icon: 'module.rs',
@@ -304,7 +315,7 @@ export class ProjectExplorer extends TailwindElement() {
 
     if (!hasGo) {
       templates.push({
-        id: 'go-lang',
+        id: 'go',
         name: 'Go File',
         extension: 'go',
         icon: 'main.go',
@@ -312,23 +323,9 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    // Helper to check if template already exists
-    const exists = (id: string) => templates.some(t => t.id === id);
-
-    // Always show these common types (if not already added)
-    if (!exists('javascript-lang')) {
+    if (!hasHtml) {
       templates.push({
-        id: 'javascript-lang',
-        name: 'JavaScript File',
-        extension: 'js',
-        icon: 'module.js',
-        group: 'languages',
-      });
-    }
-
-    if (!exists('html-lang')) {
-      templates.push({
-        id: 'html-lang',
+        id: 'html',
         name: 'HTML File',
         extension: 'html',
         icon: 'index.html',
@@ -336,9 +333,9 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    if (!exists('css-lang')) {
+    if (!hasCss) {
       templates.push({
-        id: 'css-lang',
+        id: 'css',
         name: 'CSS File',
         extension: 'css',
         icon: 'styles.css',
@@ -346,9 +343,9 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    if (!exists('python-lang')) {
+    if (!hasPython) {
       templates.push({
-        id: 'python-lang',
+        id: 'python',
         name: 'Python File',
         extension: 'py',
         icon: 'main.py',
@@ -356,23 +353,45 @@ export class ProjectExplorer extends TailwindElement() {
       });
     }
 
-    if (!exists('markdown-lang')) {
+    // Config - always available
+    if (!hasJson) {
       templates.push({
-        id: 'markdown-lang',
-        name: 'Markdown File',
-        extension: 'md',
-        icon: 'README.md',
-        group: 'docs',
-      });
-    }
-
-    if (!exists('json-lang')) {
-      templates.push({
-        id: 'json-lang',
+        id: 'json',
         name: 'JSON File',
         extension: 'json',
         icon: 'config.json',
         group: 'config',
+      });
+    }
+
+    if (!hasYaml) {
+      templates.push({
+        id: 'yaml',
+        name: 'YAML File',
+        extension: 'yaml',
+        icon: 'config.yaml',
+        group: 'config',
+      });
+    }
+
+    if (!hasToml) {
+      templates.push({
+        id: 'toml',
+        name: 'TOML File',
+        extension: 'toml',
+        icon: 'config.toml',
+        group: 'config',
+      });
+    }
+
+    // Docs - always available
+    if (!hasMarkdown) {
+      templates.push({
+        id: 'markdown',
+        name: 'Markdown File',
+        extension: 'md',
+        icon: 'README.md',
+        group: 'docs',
       });
     }
 
