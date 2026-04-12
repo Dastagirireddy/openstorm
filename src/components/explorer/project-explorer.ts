@@ -101,7 +101,7 @@ export class ProjectExplorer extends TailwindElement() {
       const fullPath = `${this.dialogParentPath}/${name}`;
       await invoke("create_file", {
         path: fullPath,
-        is_dir: this.dialogMode === 'folder',
+        isDir: this.dialogMode === 'folder',
       });
       await this.loadDirectory(this.projectPath);
       this.showDialog = false;
