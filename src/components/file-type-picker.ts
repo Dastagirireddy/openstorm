@@ -145,17 +145,17 @@ export class FileTypePicker extends TailwindElement() {
         tabindex="-1"
       >
         <div
-          class="absolute bg-white rounded-lg shadow-xl border border-[#d0d0d0] overflow-hidden z-50 w-[280px]"
+          class="absolute bg-white rounded-lg shadow-xl border border-[#d0d0d0] overflow-hidden z-50 w-[260px]"
           style="left: ${this.anchorX}px; top: ${this.anchorY}px;"
           @click=${(e: Event) => e.stopPropagation()}
         >
           <!-- Search Input -->
-          <div class="px-3 py-2 border-b border-[#e0e0e0] bg-[#fafafa]">
+          <div class="px-2 py-1.5 border-b border-[#e0e0e0] bg-[#fafafa]">
             <input
               ${ref => { this.searchInput = ref as HTMLInputElement; }}
               type="text"
-              class="w-full px-2.5 py-1.5 text-[13px] border border-[#c0c0c0] rounded-md focus:outline-none focus:ring-2 focus:ring-[#5b47c9] focus:border-transparent"
-              placeholder="Search file types..."
+              class="w-full px-2 py-1 text-[12px] border border-[#c0c0c0] rounded focus:outline-none focus:ring-2 focus:ring-[#5b47c9] focus:border-transparent"
+              placeholder="Search..."
               value="${this.searchQuery}"
               @input=${(e: Event) => { this.searchQuery = (e.target as HTMLInputElement).value; this.selectedIndex = 0; }}
               @click=${(e: Event) => e.stopPropagation()}
@@ -163,14 +163,14 @@ export class FileTypePicker extends TailwindElement() {
           </div>
 
           <!-- Template List -->
-          <div class="max-h-[360px] overflow-y-auto py-1">
+          <div class="max-h-[320px] overflow-y-auto">
             ${this.groupedTemplates.map(groupData => {
               const { group, templates } = groupData;
               const groupLabel = this.getGroupLabel(group);
 
               return html`
-                <div class="mt-1 first:mt-0">
-                  <div class="px-3 py-1 text-[10px] font-semibold text-[#6a6a6a] uppercase tracking-wider bg-[#f5f5f5] border-t border-b border-[#e0e0e0] first:border-t-0">
+                <div>
+                  <div class="px-2.5 py-1 text-[9px] font-semibold text-[#6a6a6a] uppercase tracking-wider bg-[#f5f5f5] border-b border-[#e0e0e0] first:border-t-0 sticky top-0">
                     ${groupLabel}
                   </div>
                   ${templates.map(template => {
@@ -179,16 +179,16 @@ export class FileTypePicker extends TailwindElement() {
 
                     return html`
                       <div
-                        class="flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}"
+                        class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}"
                         @click=${() => this.handleSelect(template)}
                       >
                         ${template.icon
-                          ? html`<file-icon path="${template.icon}" size="16"></file-icon>`
-                          : html`<os-icon name="file" color="#5a5a5a" size="16"></os-icon>`
+                          ? html`<file-icon path="${template.icon}" size="14"></file-icon>`
+                          : html`<os-icon name="file" color="#5a5a5a" size="14"></os-icon>`
                         }
-                        <span class="flex-1 text-[13px] truncate">${template.name}</span>
+                        <span class="flex-1 text-[12px] truncate">${template.name}</span>
                         ${template.shortcut ? html`
-                          <span class="text-[10px] text-[#8a8a8a] font-mono bg-[#f0f0f0] px-1.5 py-0.5 rounded">${template.shortcut}</span>
+                          <span class="text-[9px] text-[#8a8a8a] font-mono bg-[#e8e8e8] px-1 rounded">${template.shortcut}</span>
                         ` : ''}
                       </div>
                     `;
@@ -198,17 +198,19 @@ export class FileTypePicker extends TailwindElement() {
             })}
 
             ${flatTemplates.length === 0 ? html`
-              <div class="px-4 py-6 text-center text-[13px] text-[#6a6a6a]">
-                No file types found
+              <div class="px-3 py-4 text-center text-[12px] text-[#6a6a6a]">
+                No matches
               </div>
             ` : ''}
           </div>
 
           <!-- Footer hint -->
-          <div class="px-3 py-2 border-t border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between text-[10px] text-[#8a8a8a]">
+          <div class="px-2.5 py-1.5 border-t border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between text-[9px] text-[#8a8a8a]">
             <span>↑↓ Navigate</span>
-            <span>Enter Select</span>
-            <span>Esc Cancel</span>
+            <span>·</span>
+            <span>Enter</span>
+            <span>·</span>
+            <span>Esc</span>
           </div>
         </div>
       </div>
