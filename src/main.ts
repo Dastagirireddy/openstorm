@@ -38,6 +38,8 @@ import "./components/icon.js";
 import "./components/resizable-container.js";
 import "./components/dialog.js";
 import "./components/file-type-picker.js";
+import "./components/file-create-dialog.js";
+import "./components/context-menu.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 

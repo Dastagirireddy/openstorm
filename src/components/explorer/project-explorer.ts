@@ -4,10 +4,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { FileNode } from '../../lib/file-types.js';
 import type { FileTemplate } from '../file-type-picker.js';
+import type { ContextMenuItem } from '../context-menu.js';
 import '../icon.js';
 import '../file-icon.js';
 import '../dialog.js';
-import '../file-type-picker.js';
+import '../file-create-dialog.js';
+import '../context-menu.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
@@ -17,15 +19,15 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private isLoading = false;
   @state() private expandedFolders = new Set<string>();
   @state() private isProjectExpanded = true;
-  @state() private showTypePicker = false;
-  @state() private showDialog = false;
-  @state() private dialogMode: 'file' | 'folder' = 'file';
-  @state() private dialogDefaultValue = '';
+  @state() private showCreateDialog = false;
+  @state() private showFolderDialog = false;
+  @state() private showContextMenu = false;
   @state() private dialogParentPath = '';
-  @state() private selectedTemplate: FileTemplate | null = null;
   @state() private availableTemplates: FileTemplate[] = [];
-  @state() private pickerAnchorX = 0;
-  @state() private pickerAnchorY = 0;
+  @state() private contextMenuItems: ContextMenuItem[] = [];
+  @state() private contextMenuAnchorX = 0;
+  @state() private contextMenuAnchorY = 0;
+  @state() private contextMenuNode: FileNode | null = null;
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -58,11 +60,10 @@ export class ProjectExplorer extends TailwindElement() {
     document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
   }
 
-  private handleCreateFile = (e?: CustomEvent<{ parentPath?: string; anchorX?: number; anchorY?: number }>): void => {
-    // Use selected folder path if a folder is selected, otherwise use project root or provided path
+  private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
     let parentPath = (e?.detail?.parentPath as string);
+
     if (!parentPath) {
-      // If a folder is selected and it's a directory, use it as the parent
       const selectedNode = this.files.find(f => f.path === this.selectedPath);
       if (selectedNode && selectedNode.is_dir) {
         parentPath = selectedNode.path;
@@ -70,62 +71,182 @@ export class ProjectExplorer extends TailwindElement() {
         parentPath = this.projectPath;
       }
     }
+
     this.dialogParentPath = parentPath;
-    this.pickerAnchorX = (e?.detail?.anchorX as number) || 0;
-    this.pickerAnchorY = (e?.detail?.anchorY as number) || 0;
     this.availableTemplates = this.detectTemplates();
-    this.showTypePicker = true;
+    this.showCreateDialog = true;
+  };
+
+  private handleContextMenu = (e: MouseEvent, node: FileNode): void => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Select the node first
+    this.selectedPath = node.path;
+    if (node.is_dir) {
+      this.expandedFolders.add(node.path);
+    }
+    this.contextMenuNode = node;
+
+    // Build context menu items based on file/folder
+    const items: ContextMenuItem[] = [];
+
+    if (node.is_dir) {
+      items.push(
+        { id: 'new-file', label: 'New File', icon: 'file-plus' },
+        { id: 'new-folder', label: 'New Folder', icon: 'folder-plus' },
+        { id: 'separator', label: '', separator: true },
+      );
+    } else {
+      items.push(
+        { id: 'open', label: 'Open', icon: 'file' },
+        { id: 'separator', label: '', separator: true },
+      );
+    }
+
+    items.push(
+      { id: 'rename', label: 'Rename', icon: 'edit' },
+      { id: 'delete', label: 'Delete', icon: 'trash', disabled: false },
+    );
+
+    this.contextMenuItems = items;
+    this.contextMenuAnchorX = e.clientX;
+    this.contextMenuAnchorY = e.clientY;
+    this.showContextMenu = true;
+
+    this.requestUpdate();
+  };
+
+  private handleContextMenuSelect = (e: CustomEvent<{ itemId: string }>): void => {
+    const itemId = e.detail.itemId;
+    const node = this.contextMenuNode;
+
+    if (!node) return;
+
+    switch (itemId) {
+      case 'new-file':
+        this.dialogParentPath = node.path;
+        this.availableTemplates = this.detectTemplates();
+        this.showCreateDialog = true;
+        break;
+      case 'new-folder':
+        this.dialogParentPath = node.path;
+        this.showFolderDialog = true;
+        break;
+      case 'open':
+        if (!node.is_dir) {
+          this.dispatchEvent(
+            new CustomEvent('file-selected', {
+              detail: { path: node.path, name: node.name },
+              bubbles: true,
+              composed: true,
+            }),
+          );
+        }
+        break;
+      case 'rename':
+        // TODO: Implement rename dialog
+        console.log('Rename:', node.path);
+        break;
+      case 'delete':
+        // TODO: Implement delete
+        console.log('Delete:', node.path);
+        break;
+    }
+
+    this.showContextMenu = false;
+    this.contextMenuNode = null;
   };
 
   private handleCreateFolder = (e?: CustomEvent<{ parentPath?: string }>): void => {
-    this.dialogMode = 'folder';
-    this.dialogDefaultValue = '';
     this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
-    this.showDialog = true;
+    this.showFolderDialog = true;
   };
 
-  private handleTemplateSelect = (e: CustomEvent<{ template: FileTemplate }>): void => {
-    this.selectedTemplate = e.detail.template;
-    this.dialogMode = 'file';
-    this.dialogDefaultValue = this.getDefaultFileName(e.detail.template);
-    this.showTypePicker = false;
-    this.showDialog = true;
-  };
-
-  private handleDialogConfirm = async (e: CustomEvent<{ value: string }>): Promise<void> => {
-    const name = e.detail.value;
-    if (!name || !this.dialogParentPath) return;
+  private handleCreateDialogConfirm = async (e: CustomEvent<{ name: string; template: FileTemplate; parentPath: string }>): Promise<void> => {
+    const name = e.detail.name;
+    const parentPath = e.detail.parentPath;
+    if (!name || !parentPath) return;
 
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
-      const fullPath = `${this.dialogParentPath}/${name}`;
+      const fullPath = `${parentPath}/${name}`;
       await invoke("create_file", {
         path: fullPath,
-        isDir: this.dialogMode === 'folder',
+        isDir: false,
       });
-      await this.loadDirectory(this.projectPath);
-      this.showDialog = false;
-      this.selectedTemplate = null;
+
+      // Refresh the parent folder's children if it's expanded
+      if (this.expandedFolders.has(parentPath)) {
+        const parentNode = this.findNodeByPath(parentPath, this.files);
+        if (parentNode) {
+          await this.loadChildren(parentNode);
+        }
+      }
+
+      // Also refresh root if parent is root
+      if (parentPath === this.projectPath) {
+        await this.loadDirectory(this.projectPath);
+      }
+
+      this.showCreateDialog = false;
 
       this.dispatchEvent(
-        new CustomEvent(this.dialogMode === 'file' ? "file-created" : "folder-created", {
+        new CustomEvent("file-created", {
           detail: { path: fullPath },
           bubbles: true,
           composed: true,
         }),
       );
     } catch (error) {
-      console.error(`Failed to create ${this.dialogMode}:`, error);
+      console.error(`Failed to create file:`, error);
+    }
+  };
+
+  private handleCreateDialogCancel = (): void => {
+    this.showCreateDialog = false;
+  };
+
+  private handleFolderDialogConfirm = async (e: CustomEvent<{ value: string }>): Promise<void> => {
+    const name = e.detail.value;
+    if (!name || !this.dialogParentPath) return;
+
+    try {
+      const fullPath = `${this.dialogParentPath}/${name}`;
+      await invoke("create_file", {
+        path: fullPath,
+        isDir: true,
+      });
+
+      // Refresh the parent folder's children if it's expanded
+      if (this.expandedFolders.has(this.dialogParentPath)) {
+        const parentNode = this.findNodeByPath(this.dialogParentPath, this.files);
+        if (parentNode) {
+          await this.loadChildren(parentNode);
+        }
+      }
+
+      // Also refresh root if parent is root
+      if (this.dialogParentPath === this.projectPath) {
+        await this.loadDirectory(this.projectPath);
+      }
+
+      this.showFolderDialog = false;
+
+      this.dispatchEvent(
+        new CustomEvent("folder-created", {
+          detail: { path: fullPath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    } catch (error) {
+      console.error(`Failed to create folder:`, error);
     }
   };
 
   private handleDialogCancel = (): void => {
-    this.showDialog = false;
-    this.selectedTemplate = null;
-  };
-
-  private handleTypePickerCancel = (): void => {
-    this.showTypePicker = false;
+    this.showCreateDialog = false;
+    this.showFolderDialog = false;
   };
 
   /**
@@ -409,25 +530,16 @@ export class ProjectExplorer extends TailwindElement() {
     return templates;
   }
 
-  private getDefaultFileName(template: FileTemplate): string {
-    const baseNames: Record<string, string> = {
-      'generic': 'untitled',
-      'typescript': 'index',
-      'javascript': 'index',
-      'rust': 'module',
-      'go': 'main',
-      'html': 'index',
-      'css': 'styles',
-      'python': 'main',
-    };
-
-    const base = baseNames[template.id] || 'untitled';
-    return template.extension ? `${base}.${template.extension}` : base;
+  private findNodeByPath(path: string, nodes: FileNode[]): FileNode | null {
+    for (const node of nodes) {
+      if (node.path === path) return node;
+      if (node.children) {
+        const found = this.findNodeByPath(path, node.children);
+        if (found) return found;
+      }
+    }
+    return null;
   }
-
-  private handleDialogCancel = (): void => {
-    this.showDialog = false;
-  };
 
   private handleRefresh = (): void => {
     // Reload the directory to show new files
@@ -471,11 +583,13 @@ export class ProjectExplorer extends TailwindElement() {
 
   private selectFile(node: FileNode): void {
     this.selectedPath = node.path;
-    this.dispatchEvent(new CustomEvent('file-selected', {
-      detail: { path: node.path, name: node.name },
-      bubbles: true,
-      composed: true,
-    }));
+    if (!node.is_dir) {
+      this.dispatchEvent(new CustomEvent('file-selected', {
+        detail: { path: node.path, name: node.name },
+        bubbles: true,
+        composed: true,
+      }));
+    }
     this.requestUpdate();
   }
 
@@ -529,14 +643,28 @@ export class ProjectExplorer extends TailwindElement() {
           class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors
             ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
           style="padding-left: ${indent + 8}px"
-          @click=${() => this.toggleNode(node)}
           @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}>
           ${node.is_dir
-            ? html`<os-icon name=${isExpanded ? 'chevron-down' : 'chevron-right'} color="#5a5a5a" size="16" class="flex-shrink-0 transition-transform" />`
+            ? html`
+                <os-icon
+                  name=${isExpanded ? 'chevron-down' : 'chevron-right'}
+                  color="#5a5a5a"
+                  size="16"
+                  class="flex-shrink-0 transition-transform cursor-pointer hover:bg-[#d0d0d0] rounded p-0.5"
+                  @click=${(e: MouseEvent) => {
+                    e.stopPropagation();
+                    this.toggleNode(node);
+                  }}
+                />
+              `
             : html`<span class="w-4 flex-shrink-0"></span>`}
 
-          <span class="flex-shrink-0">${this.renderIcon(node, isExpanded)}</span>
-          <span class="truncate select-none">${node.name}</span>
+          <span
+            class="flex-shrink-0 flex items-center gap-2 flex-1 min-w-0"
+            @click=${() => this.selectFile(node)}>
+            ${this.renderIcon(node, isExpanded)}
+            <span class="truncate select-none">${node.name}</span>
+          </span>
         </div>
 
         ${node.children && isExpanded
@@ -545,29 +673,6 @@ export class ProjectExplorer extends TailwindElement() {
       </div>
     `;
   }
-
-  private handleContextMenu = (e: MouseEvent, node: FileNode): void => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Select the node first
-    this.selectedPath = node.path;
-    if (node.is_dir) {
-      this.expandedFolders.add(node.path);
-      this.requestUpdate();
-    }
-
-    // For now, just dispatch create-file event with the folder path
-    // A full context menu could be added later
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    document.dispatchEvent(new CustomEvent('create-file', {
-      detail: {
-        parentPath: node.path,
-        anchorX: rect.left,
-        anchorY: rect.bottom + 4
-      }
-    }));
-  };
 
   private renderEmptyState(): TemplateResult {
     const hasProject = !!this.projectPath;
@@ -634,12 +739,7 @@ export class ProjectExplorer extends TailwindElement() {
           <button
             class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer relative"
             title="New File"
-            @click=${(e: MouseEvent) => {
-              const rect = (e.target as HTMLElement).getBoundingClientRect();
-              document.dispatchEvent(new CustomEvent('create-file', {
-                detail: { anchorX: rect.left, anchorY: rect.bottom + 4 }
-              }));
-            }}>
+            @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
             <os-icon name="file-plus" color="currentColor" size="14" />
           </button>
           <button
@@ -661,12 +761,6 @@ export class ProjectExplorer extends TailwindElement() {
 
   render() {
     const projectName = this.projectPath ? this.projectPath.split('/').pop() : 'OpenStorm';
-    const dialogTitle = this.selectedTemplate
-      ? `New ${this.selectedTemplate.name}`
-      : this.dialogMode === 'file' ? 'New File' : 'New Folder';
-    const dialogPlaceholder = this.selectedTemplate
-      ? `${this.getDefaultFileName(this.selectedTemplate)}`
-      : this.dialogMode === 'file' ? 'filename.txt' : 'folder-name';
 
     return html`
       <div class="flex flex-col h-full overflow-hidden bg-[#f7f7f7]">
@@ -692,24 +786,32 @@ export class ProjectExplorer extends TailwindElement() {
         </div>
       </div>
 
-      <!-- File Type Picker Dropdown -->
-      <file-type-picker
-        ?open=${this.showTypePicker}
+      <!-- Unified File Create Dialog (IntelliJ-style) -->
+      <file-create-dialog
+        ?open=${this.showCreateDialog}
         .templates=${this.availableTemplates}
-        .anchorX=${this.pickerAnchorX}
-        .anchorY=${this.pickerAnchorY}
-        @template-select=${this.handleTemplateSelect}
-        @cancel=${this.handleTypePickerCancel}
-      ></file-type-picker>
+        .parentPath=${this.dialogParentPath}
+        @confirm=${this.handleCreateDialogConfirm}
+        @cancel=${this.handleCreateDialogCancel}
+      ></file-create-dialog>
 
-      <!-- Filename Dialog -->
+      <!-- Folder Dialog -->
       <os-dialog
-        ?open=${this.showDialog}
-        title="${dialogTitle}"
-        placeholder="${dialogPlaceholder}"
-        @confirm=${this.handleDialogConfirm}
+        ?open=${this.showFolderDialog}
+        title="New Folder"
+        placeholder="folder-name"
+        @confirm=${this.handleFolderDialogConfirm}
         @cancel=${this.handleDialogCancel}
       ></os-dialog>
+
+      <!-- Context Menu -->
+      <context-menu
+        ?open=${this.showContextMenu}
+        .items=${this.contextMenuItems}
+        .anchorX=${this.contextMenuAnchorX}
+        .anchorY=${this.contextMenuAnchorY}
+        @select=${this.handleContextMenuSelect}
+      ></context-menu>
     `;
   }
 }
