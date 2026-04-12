@@ -60,6 +60,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private isTerminalResizing = false;
   @state() private terminalResizeStartY = 0;
   @state() private terminalResizeStartHeight = 0;
+  @state() private activeFilePath = '';
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -110,7 +111,21 @@ export class OpenStormApp extends TailwindElement() {
 
   private setupOpenFolderHandler(): void {
     document.addEventListener("open-folder", this.handleOpenFolder);
+    // Handle locate file events - dispatch to project explorer with active file path
+    document.addEventListener("locate-file", this.handleLocateFile);
   }
+
+  private handleLocateFile = (): void => {
+    if (this.activeFilePath) {
+      document.dispatchEvent(
+        new CustomEvent("locate-file-external", {
+          detail: { path: this.activeFilePath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
+  };
 
   private handleOpenFolder = async (): Promise<void> => {
     try {
@@ -237,6 +252,7 @@ export class OpenStormApp extends TailwindElement() {
     const existingTab = this.tabs.find((t) => t.path === path);
     if (existingTab) {
       this.activeTabId = existingTab.id;
+      this.activeFilePath = path;
       this.saveStatus = existingTab.modified ? "unsaved" : "saved";
       this.tabs = this.tabs.map((t) =>
         t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
@@ -263,6 +279,7 @@ export class OpenStormApp extends TailwindElement() {
       };
       this.tabs = [...this.tabs, newTab];
       this.activeTabId = path;
+      this.activeFilePath = path;
       this.saveStatus = "saved";
       this.enforceTabLimit();
 
@@ -298,6 +315,7 @@ export class OpenStormApp extends TailwindElement() {
     this.activeTabId = tabId;
     const tab = this.tabs.find((t) => t.id === tabId);
     if (tab) {
+      this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
       document.dispatchEvent(
         new CustomEvent("open-file", {
@@ -552,6 +570,7 @@ export class OpenStormApp extends TailwindElement() {
                           class="flex flex-col overflow-hidden bg-[#f7f7f7] border-r border-[#c7c7c7] h-full"
                           style="width: ${this.sidebarWidth}px;"
                           .projectPath=${this.projectPath}
+                          .selectedPath=${this.activeFilePath}
                           @file-selected=${this.handleFileSelect}
                           @open-folder=${() =>
                             document.dispatchEvent(new CustomEvent("open-folder"))}

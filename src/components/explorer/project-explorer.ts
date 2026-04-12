@@ -16,8 +16,8 @@ import '../delete-dialog.js';
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
   @property() projectPath = '';
+  @property() selectedPath = '';
   @state() private files: FileNode[] = [];
-  @state() private selectedPath = '';
   @state() private isLoading = false;
   @state() private expandedFolders = new Set<string>();
   @state() private isProjectExpanded = true;
@@ -34,6 +34,8 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private contextMenuNode: FileNode | null = null;
   @state() private renameNode: FileNode | null = null;
   @state() private deleteNode: FileNode | null = null;
+  @state() private fileToReveal: string | null = null;
+  @state() private expandVersion = 0;
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -59,6 +61,8 @@ export class ProjectExplorer extends TailwindElement() {
     document.addEventListener('create-folder', this.handleCreateFolder as EventListener);
     // Listen for keyboard shortcuts
     document.addEventListener('keydown', this.handleKeyDown as EventListener);
+    // Listen for locate file events from external sources
+    document.addEventListener('locate-file-external', this.handleLocateFileExternal as EventListener);
   }
 
   disconnectedCallback(): void {
@@ -67,6 +71,7 @@ export class ProjectExplorer extends TailwindElement() {
     document.removeEventListener('create-file', this.handleCreateFile as EventListener);
     document.removeEventListener('create-folder', this.handleCreateFolder as EventListener);
     document.removeEventListener('keydown', this.handleKeyDown as EventListener);
+    document.removeEventListener('locate-file-external', this.handleLocateFileExternal as EventListener);
   }
 
   private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
@@ -652,10 +657,91 @@ export class ProjectExplorer extends TailwindElement() {
     }
   };
 
-  updated(changedProperties: Map<string, unknown>): void {
-    super.updated(changedProperties);
+  private handleLocateFile = (): void => {
+    const path = this.selectedPath;
+    if (!path) return;
+    if (this.files.length === 0) return;
+
+    this.fileToReveal = path;
+    this.expandToPath(path);
+  };
+
+  private handleLocateFileExternal = (e?: CustomEvent<{ path: string }>): void => {
+    const path = e?.detail?.path;
+    if (!path) return;
+
+    this.fileToReveal = path;
+    this.expandToPath(path);
+  };
+
+  private async expandToPath(path: string): Promise<void> {
+    // Path is absolute, we need to expand folders relative to project root
+    if (!path.startsWith(this.projectPath)) {
+      return;
+    }
+
+    const relativePath = path.substring(this.projectPath.length).replace(/^\/+/, '');
+    if (!relativePath) return;
+
+    const segments = relativePath.split('/');
+
+    // Ensure project tree is expanded
+    this.isProjectExpanded = true;
+
+    // Build cumulative paths and expand each folder
+    let cumulativePath = this.projectPath;
+    for (let i = 0; i < segments.length - 1; i++) {
+      cumulativePath = `${cumulativePath}/${segments[i]}`;
+
+      // Always set in expandedFolders
+      this.expandedFolders.add(cumulativePath);
+      // Load children for this folder if not already loaded
+      const node = this.findNodeByPath(cumulativePath, this.files);
+      if (node && node.is_dir && !node.children) {
+        await this.loadFolderChildren(cumulativePath);
+      }
+    }
+
+    // Force reactivity by incrementing version counter
+    this.expandVersion++;
+  }
+
+  private async loadFolderChildren(folderPath: string): Promise<void> {
+    try {
+      const result = await invoke('list_directory', { path: folderPath });
+      const children = result as FileNode[];
+      // Find and update the node in the files array
+      this.updateNodeChildren(this.files, folderPath, children);
+    } catch (error) {
+      console.error('Failed to load children:', error);
+    }
+  }
+
+  private updateNodeChildren(nodes: FileNode[], path: string, children: FileNode[]): void {
+    for (const node of nodes) {
+      if (node.path === path) {
+        node.children = children;
+        return;
+      }
+      if (node.children) {
+        this.updateNodeChildren(node.children, path, children);
+      }
+    }
+  }
+
+  protected willUpdate(changedProperties: Map<string, unknown>): void {
+    super.willUpdate(changedProperties);
     if (changedProperties.has('projectPath') && this.projectPath && this.files.length === 0) {
       this.loadDirectory(this.projectPath);
+    }
+  }
+
+  updated(changedProperties: Map<string, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('selectedPath') && this.selectedPath && this.files.length > 0) {
+      // Optional: auto-expand tree when selectedPath changes from parent
+      // Uncomment to enable auto-reveal on file open:
+      // this.expandToPath(this.selectedPath);
     }
   }
 
@@ -830,7 +916,7 @@ export class ProjectExplorer extends TailwindElement() {
           <button
             class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
             title="Locate in File Tree"
-            @click=${() => this.dispatchEvent(new CustomEvent('locate-file'))}>
+            @click=${() => this.handleLocateFile()}>
             <os-icon name="locate" color="currentColor" size="14" />
           </button>
           <button
