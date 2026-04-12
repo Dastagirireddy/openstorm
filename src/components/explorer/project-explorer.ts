@@ -3,9 +3,11 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { FileNode } from '../../lib/file-types.js';
+import type { FileTemplate } from '../file-type-picker.js';
 import '../icon.js';
 import '../file-icon.js';
 import '../dialog.js';
+import '../file-type-picker.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {
@@ -15,10 +17,13 @@ export class ProjectExplorer extends TailwindElement() {
   @state() private isLoading = false;
   @state() private expandedFolders = new Set<string>();
   @state() private isProjectExpanded = true;
+  @state() private showTypePicker = false;
   @state() private showDialog = false;
   @state() private dialogMode: 'file' | 'folder' = 'file';
   @state() private dialogDefaultValue = '';
   @state() private dialogParentPath = '';
+  @state() private selectedTemplate: FileTemplate | null = null;
+  @state() private availableTemplates: FileTemplate[] = [];
 
   async loadDirectory(path: string): Promise<void> {
     this.isLoading = true;
@@ -52,16 +57,22 @@ export class ProjectExplorer extends TailwindElement() {
   }
 
   private handleCreateFile = (e?: CustomEvent<{ parentPath?: string }>): void => {
-    this.dialogMode = 'file';
-    this.dialogDefaultValue = '';
     this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
-    this.showDialog = true;
+    this.availableTemplates = this.detectTemplates();
+    this.showTypePicker = true;
   };
 
   private handleCreateFolder = (e?: CustomEvent<{ parentPath?: string }>): void => {
     this.dialogMode = 'folder';
     this.dialogDefaultValue = '';
     this.dialogParentPath = e?.detail?.parentPath || this.projectPath;
+    this.showDialog = true;
+  };
+
+  private handleTemplateSelect = (e: CustomEvent<{ template: FileTemplate }>): void => {
+    this.selectedTemplate = e.detail.template;
+    this.dialogDefaultValue = this.getDefaultFileName(e.detail.template);
+    this.showTypePicker = false;
     this.showDialog = true;
   };
 
@@ -77,6 +88,8 @@ export class ProjectExplorer extends TailwindElement() {
         is_dir: this.dialogMode === 'folder',
       });
       await this.loadDirectory(this.projectPath);
+      this.showDialog = false;
+      this.selectedTemplate = null;
 
       this.dispatchEvent(
         new CustomEvent(this.dialogMode === 'file' ? "file-created" : "folder-created", {
@@ -89,6 +102,192 @@ export class ProjectExplorer extends TailwindElement() {
       console.error(`Failed to create ${this.dialogMode}:`, error);
     }
   };
+
+  private handleDialogCancel = (): void => {
+    this.showDialog = false;
+    this.selectedTemplate = null;
+  };
+
+  private handleTypePickerCancel = (): void => {
+    this.showTypePicker = false;
+  };
+
+  /**
+   * Detect project type and return relevant file templates
+   */
+  private detectTemplates(): FileTemplate[] {
+    const templates: FileTemplate[] = [];
+
+    // Always show generic file at top
+    templates.push({
+      id: 'generic',
+      name: 'Generic File',
+      description: 'Empty file with no extension',
+      extension: '',
+      category: 'generic',
+    });
+
+    // Detect project types from existing files
+    const hasRust = this.files.some(f => f.name.endsWith('.rs') || f.name === 'Cargo.toml');
+    const hasGo = this.files.some(f => f.name.endsWith('.go') || f.name === 'go.mod');
+    const hasNode = this.files.some(f => f.name === 'package.json');
+    const hasPython = this.files.some(f => f.name.endsWith('.py') || f.name === 'requirements.txt');
+    const hasWeb = this.files.some(f => ['.html', '.htm', '.xhtml'].some(ext => f.name.endsWith(ext)));
+    const hasCss = this.files.some(f => ['.css', '.scss', '.sass', '.less', '.tailwind.css'].some(ext => f.name.endsWith(ext)));
+    const hasReact = this.files.some(f => ['.jsx', '.tsx'].some(ext => f.name.endsWith(ext)));
+    const hasTypeScript = this.files.some(f => f.name.endsWith('.ts') || f.name.endsWith('.tsx'));
+
+    // Add detected templates
+    const detected: FileTemplate[] = [];
+
+    if (hasRust) {
+      detected.push({
+        id: 'rust',
+        name: 'Rust Source',
+        description: 'Rust source file',
+        extension: 'rs',
+        icon: 'test.rs',
+        category: 'detected',
+      });
+      detected.push({
+        id: 'rust-test',
+        name: 'Rust Test',
+        description: 'Rust test module',
+        extension: 'rs',
+        icon: 'test.rs',
+        category: 'detected',
+      });
+    }
+
+    if (hasGo) {
+      detected.push({
+        id: 'go',
+        name: 'Go Package',
+        description: 'Go source file',
+        extension: 'go',
+        icon: 'main.go',
+        category: 'detected',
+      });
+      detected.push({
+        id: 'go-test',
+        name: 'Go Test',
+        description: 'Go test file',
+        extension: 'go',
+        icon: 'main_test.go',
+        category: 'detected',
+      });
+    }
+
+    if (hasNode) {
+      detected.push({
+        id: 'javascript',
+        name: 'JavaScript Module',
+        description: 'JavaScript ES module',
+        extension: 'js',
+        icon: 'module.js',
+        category: 'detected',
+      });
+      if (hasReact) {
+        detected.push({
+          id: 'react-component',
+          name: 'React Component',
+          description: 'React functional component',
+          extension: 'tsx',
+          icon: 'Component.tsx',
+          category: 'detected',
+        });
+      }
+      if (hasTypeScript) {
+        detected.push({
+          id: 'typescript',
+          name: 'TypeScript Module',
+          description: 'TypeScript module',
+          extension: 'ts',
+          icon: 'module.ts',
+          category: 'detected',
+        });
+      }
+    }
+
+    if (hasWeb) {
+      detected.push({
+        id: 'html',
+        name: 'HTML Document',
+        description: 'HTML5 document',
+        extension: 'html',
+        icon: 'index.html',
+        category: 'detected',
+      });
+    }
+
+    if (hasCss) {
+      detected.push({
+        id: 'css',
+        name: 'Stylesheet',
+        description: 'CSS stylesheet',
+        extension: 'css',
+        icon: 'styles.css',
+        category: 'detected',
+      });
+    }
+
+    if (hasPython) {
+      detected.push({
+        id: 'python',
+        name: 'Python Module',
+        description: 'Python source file',
+        extension: 'py',
+        icon: 'module.py',
+        category: 'detected',
+      });
+    }
+
+    templates.push(...detected);
+
+    // Add common languages as fallback
+    if (!hasRust) {
+      templates.push({
+        id: 'rust-lang',
+        name: 'Rust Source',
+        description: 'Rust source file',
+        extension: 'rs',
+        icon: 'main.rs',
+        category: 'language',
+      });
+    }
+
+    if (!hasGo) {
+      templates.push({
+        id: 'go-lang',
+        name: 'Go Package',
+        description: 'Go source file',
+        extension: 'go',
+        icon: 'main.go',
+        category: 'language',
+      });
+    }
+
+    return templates;
+  }
+
+  private getDefaultFileName(template: FileTemplate): string {
+    const baseNames: Record<string, string> = {
+      'generic': 'untitled',
+      'rust': 'module',
+      'rust-test': 'tests',
+      'go': 'main',
+      'go-test': 'main_test',
+      'javascript': 'index',
+      'typescript': 'index',
+      'react-component': 'Component',
+      'html': 'index',
+      'css': 'styles',
+      'python': 'main',
+    };
+
+    const base = baseNames[template.id] || 'untitled';
+    return template.extension ? `${base}.${template.extension}` : base;
+  }
 
   private handleDialogCancel = (): void => {
     this.showDialog = false;
@@ -297,8 +496,12 @@ export class ProjectExplorer extends TailwindElement() {
 
   render() {
     const projectName = this.projectPath ? this.projectPath.split('/').pop() : 'OpenStorm';
-    const dialogTitle = this.dialogMode === 'file' ? 'New File' : 'New Folder';
-    const dialogPlaceholder = this.dialogMode === 'file' ? 'filename.txt' : 'folder-name';
+    const dialogTitle = this.selectedTemplate
+      ? `New ${this.selectedTemplate.name}`
+      : this.dialogMode === 'file' ? 'New File' : 'New Folder';
+    const dialogPlaceholder = this.selectedTemplate
+      ? `${this.getDefaultFileName(this.selectedTemplate)}`
+      : this.dialogMode === 'file' ? 'filename.txt' : 'folder-name';
 
     return html`
       <div class="flex flex-col h-full overflow-hidden bg-[#f7f7f7]">
@@ -324,6 +527,15 @@ export class ProjectExplorer extends TailwindElement() {
         </div>
       </div>
 
+      <!-- File Type Picker -->
+      <file-type-picker
+        ?open=${this.showTypePicker}
+        .templates=${this.availableTemplates}
+        @template-select=${this.handleTemplateSelect}
+        @cancel=${this.handleTypePickerCancel}
+      ></file-type-picker>
+
+      <!-- Filename Dialog -->
       <os-dialog
         ?open=${this.showDialog}
         title="${dialogTitle}"

@@ -37,6 +37,7 @@ import "./components/search-overlay.js";
 import "./components/icon.js";
 import "./components/resizable-container.js";
 import "./components/dialog.js";
+import "./components/file-type-picker.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
