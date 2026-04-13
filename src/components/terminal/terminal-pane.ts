@@ -76,6 +76,7 @@ const componentStyles = css`
     overflow-y: auto !important;
   }
 
+
   .xterm-screen {
     position: absolute !important;
     top: 0 !important;
@@ -125,7 +126,6 @@ const componentStyles = css`
 
   .xterm-selection div {
     background-color: #0969da !important;
-    mix-blend-mode: multiply !important;
   }
 `;
 
