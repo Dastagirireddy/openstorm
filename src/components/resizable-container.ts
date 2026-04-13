@@ -86,7 +86,6 @@ export class ResizableContainer extends TailwindElement() {
             class="resize-handle ${isHorizontal ? 'horizontal' : 'vertical'}"
             @mousedown=${this.handleDragStart}
           >
-            <div class="handle-indicator"></div>
           </div>
         </div>
 
@@ -187,29 +186,6 @@ export class ResizableContainer extends TailwindElement() {
     .resize-handle:hover,
     .panel.first.dragging .resize-handle {
       background: transparent;
-    }
-
-    .handle-indicator {
-      position: absolute;
-      background: #d0d7de;
-      border-radius: 1px;
-      transition: background 0.15s ease, transform 0.1s ease;
-    }
-
-    .resize-handle.horizontal .handle-indicator {
-      width: 1px;
-      height: 24px;
-    }
-
-    .resize-handle.vertical .handle-indicator {
-      height: 1px;
-      width: 24px;
-    }
-
-    .resize-handle:hover .handle-indicator,
-    .panel.first.dragging .resize-handle .handle-indicator {
-      background: #0969da;
-      transform: scale(1.2);
     }
   `;
 }
