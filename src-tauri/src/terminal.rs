@@ -3,10 +3,13 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, AppHandle};
 
 pub struct Terminal {
+    #[allow(dead_code)]
     pub id: u32,
     writer: Arc<Mutex<Box<dyn std::io::Write + Send>>>,
     #[allow(dead_code)]
-    child: Arc<Mutex<Box<dyn portable_pty::ChildKiller + Send>>>,
+    child: Arc<Mutex<Box<dyn portable_pty::Child + Send + Sync>>>,
+    #[allow(dead_code)]
+    master: Arc<Mutex<Box<dyn portable_pty::MasterPty + Send>>>,
 }
 
 pub struct PtyManager {
@@ -41,14 +44,31 @@ impl PtyManager {
 
         let cwd = cwd.unwrap_or_else(|| std::env::current_dir().unwrap().to_string_lossy().to_string());
 
-        let mut cmd = CommandBuilder::new("sh");
+        // Detect user's default shell from $SHELL env var, fallback to platform default
+        let shell = std::env::var("SHELL")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                // Platform fallbacks
+                #[cfg(target_os = "macos")]
+                return "/bin/zsh".to_string();
+                #[cfg(not(target_os = "macos"))]
+                return "/bin/sh".to_string();
+            });
+
+        let mut cmd = CommandBuilder::new(shell.clone());
         cmd.cwd(cwd.clone());
 
-        // On macOS, use zsh
-        #[cfg(target_os = "macos")]
-        {
-            cmd = CommandBuilder::new("zsh");
-            cmd.cwd(cwd.clone());
+        // Set terminal-specific environment variables
+        cmd.env("TERM", "xterm-256color");
+        cmd.env("COLORTERM", "truecolor");
+
+        // Inherit important environment variables from parent process
+        let inherit_vars = ["PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "EDITOR", "PAGER"];
+        for key in inherit_vars {
+            if let Ok(value) = std::env::var(key) {
+                cmd.env(key, value);
+            }
         }
 
         let pair = self
@@ -76,10 +96,16 @@ impl PtyManager {
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone reader: {}", e))?;
 
+        let master = pair.master;
+        let master_arc = Arc::new(Mutex::new(master));
+        let child_arc = Arc::new(Mutex::new(child));
+        let writer_arc = Arc::new(Mutex::new(writer));
+
         let terminal = Terminal {
             id,
-            writer: Arc::new(Mutex::new(writer)),
-            child: Arc::new(Mutex::new(child)),
+            writer: writer_arc,
+            child: child_arc,
+            master: master_arc.clone(),
         };
 
         {
@@ -95,13 +121,15 @@ impl PtyManager {
         std::thread::spawn(move || {
             let mut reader = reader;
             let mut buf = [0u8; 4096];
+            let exit_emitted = false;
+
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break, // EOF
+                    Ok(0) => break, // EOF - process exited
                     Ok(n) => {
                         let output = String::from_utf8_lossy(&buf[..n]).to_string();
 
-                        // Emit event to frontend
+                        // Emit output event to frontend
                         if let Some(ref handle) = app_handle_opt {
                             let _ = handle.emit("terminal-output", serde_json::json!({
                                 "id": terminal_id,
@@ -109,13 +137,31 @@ impl PtyManager {
                             }));
                         }
 
-                        // Check if terminal was closed
+                        // Check if terminal was closed by user
                         let term = terminals.lock().unwrap();
                         if !term.contains_key(&terminal_id) {
                             break;
                         }
                     }
-                    Err(_) => break,
+                    Err(e) => {
+                        // Emit error event
+                        if let Some(ref handle) = app_handle_opt {
+                            let _ = handle.emit("terminal-error", serde_json::json!({
+                                "id": terminal_id,
+                                "error": e.to_string()
+                            }));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // Emit exit event when process ends
+            if !exit_emitted {
+                if let Some(ref handle) = app_handle_opt {
+                    let _ = handle.emit("terminal-exit", serde_json::json!({
+                        "id": terminal_id
+                    }));
                 }
             }
         });
@@ -140,15 +186,30 @@ impl PtyManager {
     }
 
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
-        // Note: portable-pty resize requires access to the master handle
-        // For now, this is a no-op but the terminal will still work
-        let _ = (id, cols, rows);
-        Ok(())
+        let terminals = self.terminals.lock().unwrap();
+        if let Some(terminal) = terminals.get(&id) {
+            let master = terminal.master.lock().unwrap();
+            master
+                .resize(PtySize {
+                    rows,
+                    cols,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|e| format!("Failed to resize pty: {}", e))?;
+            Ok(())
+        } else {
+            Err(format!("Terminal {} not found", id))
+        }
     }
 
     pub fn close(&self, id: u32) -> Result<(), String> {
         let mut terminals = self.terminals.lock().unwrap();
-        terminals.remove(&id);
+        if let Some(terminal) = terminals.remove(&id) {
+            // Kill the child process to clean up resources
+            let mut child = terminal.child.lock().unwrap();
+            child.kill().map_err(|e| format!("Failed to kill process: {}", e))?;
+        }
         Ok(())
     }
 }

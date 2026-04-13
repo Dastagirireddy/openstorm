@@ -658,7 +658,6 @@ export class OpenStormApp extends TailwindElement() {
                     <div
                       class="absolute top-0 left-0 right-0 h-[6px] cursor-row-resize z-10 flex items-center justify-center"
                       @mousedown=${this.handleTerminalResizeStart}>
-                      <div class="h-[1px] w-8 bg-[#d0d7de] hover:bg-[#0969da] transition-colors"></div>
                     </div>
                     <!-- Terminal content -->
                     <div class="w-full h-full overflow-hidden" style="touch-action: auto; -webkit-overflow-scrolling: touch;">
