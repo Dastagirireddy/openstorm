@@ -1,0 +1,13 @@
+{
+  "id": "docker-compose",
+  "name": "Docker Compose",
+  "description": "Multi-container Docker setup with Compose",
+  "category": "devops",
+  "language": "docker",
+  "icon": "server",
+  "iconColor": "#2496ed",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-project"}
+  ]
+}

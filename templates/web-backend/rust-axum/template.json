@@ -1,0 +1,14 @@
+{
+  "id": "rust-axum",
+  "name": "Rust Axum",
+  "description": "High-performance Rust web API with Axum",
+  "category": "web-backend",
+  "language": "rust",
+  "icon": "server",
+  "iconColor": "#ea580c",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-api"},
+    {"name": "port", "type": "number", "default": 3000}
+  ]
+}

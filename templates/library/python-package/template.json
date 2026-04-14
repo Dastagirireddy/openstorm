@@ -1,0 +1,13 @@
+{
+  "id": "python-package",
+  "name": "Python Package",
+  "description": "Reusable Python package with setuptools",
+  "category": "library",
+  "language": "python",
+  "icon": "package",
+  "iconColor": "#3776ab",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-package"}
+  ]
+}

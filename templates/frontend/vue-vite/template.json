@@ -1,0 +1,13 @@
+{
+  "id": "vue-vite",
+  "name": "Vue 3 + Vite",
+  "description": "Modern Vue 3 SPA with Vite and TypeScript",
+  "category": "frontend",
+  "language": "vue",
+  "icon": "globe",
+  "iconColor": "#42b883",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-app"}
+  ]
+}

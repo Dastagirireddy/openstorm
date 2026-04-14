@@ -1,0 +1,14 @@
+{
+  "id": "nextjs",
+  "name": "Next.js",
+  "description": "React framework with SSR and App Router",
+  "category": "frontend",
+  "language": "react",
+  "icon": "globe",
+  "iconColor": "#000000",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-app"},
+    {"name": "port", "type": "number", "default": 3000}
+  ]
+}

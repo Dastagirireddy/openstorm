@@ -1,0 +1,15 @@
+{
+  "id": "java-spring",
+  "name": "Spring Boot",
+  "description": "Enterprise Java REST API with Spring Boot",
+  "category": "web-backend",
+  "language": "java",
+  "icon": "server",
+  "iconColor": "#65a44e",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-api"},
+    {"name": "port", "type": "number", "default": 8080},
+    {"name": "group-id", "type": "string", "default": "com.example"}
+  ]
+}

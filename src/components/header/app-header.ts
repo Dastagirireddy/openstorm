@@ -30,6 +30,7 @@ export class AppHeader extends TailwindElement() {
   @property() projectPath = '';
   @property() activeFile = '';
   @property() saveStatus: 'saved' | 'unsaved' = 'saved';
+  @property() isSingleFileMode = false;
 
   private renderAction(action: HeaderAction): TemplateResult {
     return html`
@@ -100,46 +101,50 @@ export class AppHeader extends TailwindElement() {
             ` : ''}
           </div>
 
-          <!-- Right: Toolbar sections -->
-          <div class="flex items-center gap-2 shrink-0">
-            <!-- Run section -->
-            ${this.renderSection({
-              id: 'run',
-              actions: [
-                { id: 'config', icon: 'chevron-down', title: 'Run configurations', label: 'Current File' },
-                { id: 'run', icon: 'play', title: 'Run' },
-                { id: 'debug', icon: 'bug', title: 'Debug' },
-                { id: 'coverage', icon: 'gauge', title: 'Run with Coverage' },
-                { id: 'profile', icon: 'clock', title: 'Profile' },
-                { id: 'stop', icon: 'square', title: 'Stop' },
-              ],
-            })}
+          <!-- Right: Toolbar sections (hidden in single-file mode) -->
+          ${!this.isSingleFileMode
+            ? html`
+                <div class="flex items-center gap-2 shrink-0">
+                  <!-- Run section -->
+                  ${this.renderSection({
+                    id: 'run',
+                    actions: [
+                      { id: 'config', icon: 'chevron-down', title: 'Run configurations', label: 'Current File' },
+                      { id: 'run', icon: 'play', title: 'Run' },
+                      { id: 'debug', icon: 'bug', title: 'Debug' },
+                      { id: 'coverage', icon: 'gauge', title: 'Run with Coverage' },
+                      { id: 'profile', icon: 'clock', title: 'Profile' },
+                      { id: 'stop', icon: 'square', title: 'Stop' },
+                    ],
+                  })}
 
-            <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
+                  <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
 
-            <!-- Git section -->
-            ${this.renderSection({
-              id: 'git',
-              actions: [
-                { id: 'git-label', icon: '', title: 'Git:', label: 'Git:' },
-                { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: '#3b82f6' },
-                { id: 'commit', icon: 'check', title: 'Commit', color: '#22c55e' },
-                { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: '#22c55e' },
-                { id: 'history', icon: 'clock', title: 'History' },
-                { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback' },
-              ],
-            })}
+                  <!-- Git section -->
+                  ${this.renderSection({
+                    id: 'git',
+                    actions: [
+                      { id: 'git-label', icon: '', title: 'Git:', label: 'Git:' },
+                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: '#3b82f6' },
+                      { id: 'commit', icon: 'check', title: 'Commit', color: '#22c55e' },
+                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: '#22c55e' },
+                      { id: 'history', icon: 'clock', title: 'History' },
+                      { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback' },
+                    ],
+                  })}
 
-            <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
+                  <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
 
-            <!-- Update section -->
-            ${this.renderSection({
-              id: 'update',
-              actions: [
-                { id: 'update', icon: 'cloud', title: 'Update Project', color: '#f97316' },
-              ],
-            })}
-          </div>
+                  <!-- Update section -->
+                  ${this.renderSection({
+                    id: 'update',
+                    actions: [
+                      { id: 'update', icon: 'cloud', title: 'Update Project', color: '#f97316' },
+                    ],
+                  })}
+                </div>
+              `
+            : ''}
         </div>
 
         <!-- Unsaved indicator bar -->

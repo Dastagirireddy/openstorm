@@ -1,0 +1,13 @@
+{
+  "id": "go-cli",
+  "name": "Go CLI",
+  "description": "Command-line tool with Go and Cobra",
+  "category": "cli",
+  "language": "go",
+  "icon": "terminal",
+  "iconColor": "#00add8",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-cli"}
+  ]
+}

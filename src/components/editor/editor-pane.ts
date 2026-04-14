@@ -46,12 +46,14 @@ export class EditorPane extends TailwindElement() {
   connectedCallback(): void {
     super.connectedCallback();
     document.addEventListener('open-file', this._handleOpenFile as EventListener);
+    document.addEventListener('open-file-external', this._handleOpenFile as EventListener);
     document.addEventListener('clear-editor', this._handleClearEditor as EventListener);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('open-file', this._handleOpenFile as EventListener);
+    document.removeEventListener('open-file-external', this._handleOpenFile as EventListener);
     document.removeEventListener('clear-editor', this._handleClearEditor as EventListener);
     this.editorView?.destroy();
   }

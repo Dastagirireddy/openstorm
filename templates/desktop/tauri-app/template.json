@@ -1,0 +1,14 @@
+{
+  "id": "tauri-app",
+  "name": "Tauri App",
+  "description": "Desktop app with Tauri 2.0 and Rust",
+  "category": "desktop",
+  "language": "rust",
+  "icon": "box",
+  "iconColor": "#24c8db",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-app"},
+    {"name": "window-title", "type": "string", "default": "My App"}
+  ]
+}

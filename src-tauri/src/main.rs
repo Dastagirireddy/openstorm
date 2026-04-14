@@ -4,6 +4,7 @@ mod commands;
 mod file_watcher;
 mod lsp;
 mod terminal;
+mod templates;
 
 use tauri::{Manager, RunEvent};
 
@@ -27,6 +28,11 @@ fn main() {
             terminal::terminal_write,
             terminal::terminal_resize,
             terminal::terminal_close,
+            templates::list_templates,
+            templates::list_categories,
+            templates::get_template,
+            templates::create_project,
+            templates::open_folder_dialog,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -44,7 +50,7 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app_handle, event| {
+        .run(|app_handle, event| {
             if let RunEvent::WindowEvent { label, event, .. } = event {
                 if label == "main" {
                     match event {
