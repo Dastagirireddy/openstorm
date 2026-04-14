@@ -342,13 +342,8 @@ export class OpenStormApp extends TailwindElement() {
       this.tabs = this.tabs.map((t) =>
         t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
       );
-      document.dispatchEvent(
-        new CustomEvent("open-file", {
-          detail: { path, content: existingTab.content },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      // Don't dispatch open-file event - just switch to existing tab
+      // Dispatching open-file would trigger the global handler and open the file dialog
       return;
     }
 
@@ -368,8 +363,10 @@ export class OpenStormApp extends TailwindElement() {
       this.saveStatus = "saved";
       this.enforceTabLimit();
 
+      // Dispatch open-file for editor-pane to update its view
+      // Use open-file-external instead to avoid triggering the global open-file handler
       document.dispatchEvent(
-        new CustomEvent("open-file", {
+        new CustomEvent("open-file-external", {
           detail: { path, content },
           bubbles: true,
           composed: true,
@@ -402,8 +399,9 @@ export class OpenStormApp extends TailwindElement() {
     if (tab) {
       this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
+      // Use open-file-external to avoid triggering the global open-file handler
       document.dispatchEvent(
-        new CustomEvent("open-file", {
+        new CustomEvent("open-file-external", {
           detail: { path: tab.path, content: tab.content },
           bubbles: true,
           composed: true,
