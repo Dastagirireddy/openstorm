@@ -42,6 +42,8 @@ import "./components/file-create-dialog.js";
 import "./components/context-menu.js";
 import "./components/rename-dialog.js";
 import "./components/delete-dialog.js";
+import "./components/welcome-screen.js";
+import "./components/template-picker.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -111,8 +113,11 @@ export class OpenStormApp extends TailwindElement() {
 
   private setupOpenFolderHandler(): void {
     document.addEventListener("open-folder", this.handleOpenFolder);
+    document.addEventListener("open-file", this.handleOpenSingleFile);
     // Handle locate file events - dispatch to project explorer with active file path
     document.addEventListener("locate-file", this.handleLocateFile);
+    // Handle open-recent-project events from welcome screen
+    document.addEventListener("open-recent-project", this.handleOpenRecentProject);
   }
 
   private handleLocateFile = (): void => {
@@ -125,6 +130,33 @@ export class OpenStormApp extends TailwindElement() {
         }),
       );
     }
+  };
+
+  private handleOpenRecentProject = async (e: CustomEvent<{ path: string }>): Promise<void> => {
+    const { path } = e.detail;
+    console.log('Opening recent project:', path);
+
+    const newProjectPath = path;
+
+    // Reset state for new project
+    this.projectPath = newProjectPath;
+    this.activeActivity = "explorer";
+    this.tabs = [];
+    this.activeTabId = "";
+    this.terminalCreated = false;
+
+    // Call handleFolderOpened to start file watcher and create terminal
+    await this.handleFolderOpened({
+      detail: { path: newProjectPath },
+    } as CustomEvent<{ path: string }>);
+
+    document.dispatchEvent(
+      new CustomEvent("project-opened", {
+        detail: { path: this.projectPath },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   };
 
   private handleOpenFolder = async (): Promise<void> => {
@@ -159,6 +191,59 @@ export class OpenStormApp extends TailwindElement() {
       }
     } catch (error) {
       console.error("Failed to open folder:", error);
+    }
+  };
+
+  private handleOpenSingleFile = async (): Promise<void> => {
+    try {
+      const selected = await open({
+        directory: false,
+        multiple: false,
+        title: "Open File",
+      });
+      if (selected) {
+        const filePath = selected as string;
+        const name = filePath.split("/").pop() || "";
+
+        // Read the file content
+        const content = await invoke("read_file", { path: filePath });
+
+        // Check if file is already open
+        const existingTab = this.tabs.find((t) => t.path === filePath);
+        if (existingTab) {
+          this.activeTabId = existingTab.id;
+          this.activeFilePath = filePath;
+          this.saveStatus = existingTab.modified ? "unsaved" : "saved";
+          this.tabs = this.tabs.map((t) =>
+            t.id === existingTab.id ? { ...t, content, lastUsed: Date.now() } : t,
+          );
+        } else {
+          const newTab: EditorTab = {
+            id: filePath,
+            name,
+            path: filePath,
+            modified: false,
+            content,
+            lastUsed: Date.now(),
+          };
+          this.tabs = [...this.tabs, newTab];
+          this.activeTabId = filePath;
+          this.activeFilePath = filePath;
+          this.saveStatus = "saved";
+          this.enforceTabLimit();
+        }
+
+        // Dispatch event only for editor-pane to update its view
+        document.dispatchEvent(
+          new CustomEvent("open-file-external", {
+            detail: { path: filePath, content },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }
+    } catch (error) {
+      console.error("Failed to open file:", error);
     }
   };
 
@@ -356,109 +441,6 @@ export class OpenStormApp extends TailwindElement() {
     this.terminalCreated = true;
   };
 
-  private renderWelcomeScreen(): ReturnType<typeof html> {
-    return html`
-      <div class="flex flex-col h-full items-center justify-center bg-white">
-        <div class="flex flex-col items-center max-w-[500px] px-8">
-          <!-- Logo -->
-          <div class="mb-6">
-            <os-brand-logo size="80"></os-brand-logo>
-          </div>
-          <div class="flex flex-col items-center mb-8">
-            <h1 class="text-[32px] font-bold text-[#1a1a1a]">OpenStorm</h1>
-            <p class="text-[13px] text-[#5a5a5a]">Enterprise-grade IDE</p>
-          </div>
-
-          <!-- Recent Projects -->
-          <div class="w-full mb-8">
-            <h2
-              class="text-[11px] font-semibold text-[#5a5a5a] uppercase tracking-wide mb-3"
-            >
-              Recent Projects
-            </h2>
-            <div
-              class="bg-[#f7f7f7] rounded-lg border border-[#e0e0e0] p-6 text-center"
-            >
-              <p class="text-[13px] text-[#8a8a8a]">No recent projects</p>
-            </div>
-          </div>
-
-          <!-- Start Actions -->
-          <div class="w-full">
-            <h2
-              class="text-[11px] font-semibold text-[#5a5a5a] uppercase tracking-wide mb-3"
-            >
-              Start
-            </h2>
-            <div class="flex flex-col gap-2">
-              <div
-                class="flex items-center gap-3 px-4 py-3.5 bg-[#f7f7f7] rounded-lg cursor-pointer transition-colors hover:bg-[#e8e8e8] hover:shadow-sm group border border-transparent hover:border-[#c7c7c7]"
-                @click=${this.handleOpenFolder}
-              >
-                <div
-                  class="w-10 h-10 rounded-lg bg-[#e8e8e8] flex items-center justify-center flex-shrink-0 group-hover:bg-white transition-colors"
-                >
-                  <svg
-                    class="w-5 h-5 text-[#5a5a5a] group-hover:text-[#3592c4]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <path
-                      d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
-                    />
-                  </svg>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-[14px] font-medium text-[#1a1a1a]">
-                    Open Folder
-                  </div>
-                  <div class="text-[12px] text-[#8a8a8a]">
-                    Open an existing project folder
-                  </div>
-                </div>
-              </div>
-
-              <div
-                class="flex items-center gap-3 px-4 py-3.5 bg-[#f7f7f7] rounded-lg cursor-pointer transition-colors hover:bg-[#e8e8e8] hover:shadow-sm group border border-transparent hover:border-[#c7c7c7]"
-                @click=${() => {
-                  this.activeActivity = "explorer";
-                  this.handleOpenFolder();
-                }}
-              >
-                <div
-                  class="w-10 h-10 rounded-lg bg-[#e8e8e8] flex items-center justify-center flex-shrink-0 group-hover:bg-white transition-colors"
-                >
-                  <svg
-                    class="w-5 h-5 text-[#5a5a5a] group-hover:text-[#3592c4]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  >
-                    <path
-                      d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"
-                    />
-                    <polyline points="14 2 14 8 20 8" />
-                  </svg>
-                </div>
-                <div class="flex-1 min-w-0">
-                  <div class="text-[14px] font-medium text-[#1a1a1a]">
-                    Open File
-                  </div>
-                  <div class="text-[12px] text-[#8a8a8a]">
-                    Open a single file
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
   private closeTab(tabId: string): void {
     const tabIndex = this.tabs.findIndex((t) => t.id === tabId);
     if (tabIndex === -1) return;
@@ -512,19 +494,26 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   render() {
-    // Show full-window welcome screen when no project is open
-    if (!this.projectPath) {
+    // Show full-window welcome screen when no project is open AND no files are open
+    if (!this.projectPath && this.tabs.length === 0) {
       return html`
         <div class="flex flex-col h-screen w-screen overflow-hidden bg-white">
-          ${this.renderWelcomeScreen()}
+          <welcome-screen></welcome-screen>
         </div>
       `;
     }
+
+    // Determine if we're in single-file mode (file open, no project)
+    const isSingleFileMode = !this.projectPath && this.tabs.length > 0;
 
     // Show full IDE when project is open
     const projectName = this.projectPath.split("/").pop() || "OpenStorm";
     const activeFile =
       this.tabs.find((t) => t.id === this.activeTabId)?.path || "";
+
+    // In single-file mode, hide explorer and terminal by default
+    const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
+    const showTerminal = !isSingleFileMode && this.terminalVisible;
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden bg-white">
@@ -534,26 +523,31 @@ export class OpenStormApp extends TailwindElement() {
           .projectPath=${this.projectPath}
           .activeFile=${activeFile}
           .saveStatus=${this.saveStatus === "unsaved" ? "unsaved" : "saved"}
+          .isSingleFileMode=${isSingleFileMode}
         >
         </app-header>
 
         <!-- Main Content Area (Editor + Terminal) -->
         <div class="flex flex-1 overflow-hidden">
-          <!-- Activity Bar -->
-          <activity-bar
-            class="shrink-0"
-            .activeItem=${this.activeActivity}
-            @item-change=${(e: CustomEvent<{ item: ActivityItem }>) => {
-              this.activeActivity = e.detail.item;
-            }}
-          >
-          </activity-bar>
+          <!-- Activity Bar (hidden in single-file mode) -->
+          ${!isSingleFileMode
+            ? html`
+                <activity-bar
+                  class="shrink-0"
+                  .activeItem=${this.activeActivity}
+                  @item-change=${(e: CustomEvent<{ item: ActivityItem }>) => {
+                    this.activeActivity = e.detail.item;
+                  }}
+                >
+                </activity-bar>
+              `
+            : ""}
 
           <!-- Editor + Terminal Column -->
           <div class="flex flex-col flex-1 overflow-hidden min-h-0 relative">
             <!-- Editor Area -->
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
-              ${this.activeActivity === "explorer"
+              ${showExplorer
                 ? html`
                     <resizable-container
                       direction="horizontal"
@@ -613,7 +607,7 @@ export class OpenStormApp extends TailwindElement() {
                     </resizable-container>
                   `
                 : html`
-                    <!-- Editor only when explorer is hidden -->
+                    <!-- Editor only (explorer hidden or single-file mode) -->
                     <div
                       class="flex flex-col flex-1 overflow-hidden bg-white h-full w-full"
                     >
@@ -648,7 +642,7 @@ export class OpenStormApp extends TailwindElement() {
             </div>
 
             <!-- Terminal Area (resizable) + Resize Handle -->
-            ${this.terminalVisible
+            ${showTerminal
               ? html`
                   <!-- Terminal container with absolute resize handle -->
                   <div
@@ -678,7 +672,7 @@ export class OpenStormApp extends TailwindElement() {
             <!-- Status Bar (fixed at bottom) -->
             <status-bar
               class="shrink-0"
-              .terminalVisible=${this.terminalVisible}
+              .terminalVisible=${showTerminal}
               @toggle-terminal=${() => this.toggleTerminal()}>
             </status-bar>
           </div>

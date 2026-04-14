@@ -1,0 +1,13 @@
+{
+  "id": "node-cli",
+  "name": "Node CLI",
+  "description": "Command-line tool with Node.js and Commander",
+  "category": "cli",
+  "language": "node",
+  "icon": "terminal",
+  "iconColor": "#333333",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-cli"}
+  ]
+}

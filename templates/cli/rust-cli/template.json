@@ -1,0 +1,13 @@
+{
+  "id": "rust-cli",
+  "name": "Rust CLI",
+  "description": "Command-line tool with Rust and Clap",
+  "category": "cli",
+  "language": "rust",
+  "icon": "terminal",
+  "iconColor": "#ea580c",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-cli"}
+  ]
+}

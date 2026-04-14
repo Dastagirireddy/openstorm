@@ -1,0 +1,23 @@
+{
+  "id": "fastapi",
+  "name": "FastAPI App",
+  "description": "Modern Python web framework",
+  "category": "web-backend",
+  "language": "python",
+  "icon": "server",
+  "iconColor": "#00b6ec",
+  "version": "1.0.0",
+  "variables": [
+    {
+      "name": "project-name",
+      "type": "string",
+      "required": true,
+      "placeholder": "my-api"
+    },
+    {
+      "name": "port",
+      "type": "number",
+      "default": 8000
+    }
+  ]
+}

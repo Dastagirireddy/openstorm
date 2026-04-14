@@ -1,0 +1,23 @@
+{
+  "id": "express-api",
+  "name": "Express API",
+  "description": "Node.js REST API with Express",
+  "category": "web-backend",
+  "language": "node",
+  "icon": "server",
+  "iconColor": "#22c55e",
+  "version": "1.0.0",
+  "variables": [
+    {
+      "name": "project-name",
+      "type": "string",
+      "required": true,
+      "placeholder": "my-api"
+    },
+    {
+      "name": "port",
+      "type": "number",
+      "default": 3000
+    }
+  ]
+}

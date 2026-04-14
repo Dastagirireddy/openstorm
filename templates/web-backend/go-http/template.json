@@ -1,0 +1,14 @@
+{
+  "id": "go-http",
+  "name": "Go HTTP",
+  "description": "Lightweight Go REST API with net/http",
+  "category": "web-backend",
+  "language": "go",
+  "icon": "server",
+  "iconColor": "#00add8",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-api"},
+    {"name": "port", "type": "number", "default": 8080}
+  ]
+}

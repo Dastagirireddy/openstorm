@@ -1,0 +1,13 @@
+{
+  "id": "rust-lib",
+  "name": "Rust Library",
+  "description": "Reusable Rust library crate",
+  "category": "library",
+  "language": "rust",
+  "icon": "package",
+  "iconColor": "#ea580c",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-lib"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "react-vite",
+  "name": "React + Vite",
+  "description": "Modern React SPA with Vite and TypeScript",
+  "category": "frontend",
+  "language": "react",
+  "icon": "globe",
+  "iconColor": "#61dafb",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-app"}
+  ]
+}

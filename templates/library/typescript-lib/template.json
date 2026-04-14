@@ -1,0 +1,13 @@
+{
+  "id": "typescript-lib",
+  "name": "TypeScript Library",
+  "description": "Reusable TypeScript library with rollup",
+  "category": "library",
+  "language": "typescript",
+  "icon": "package",
+  "iconColor": "#3178c6",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-lib"}
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "id": "python-cli",
+  "name": "Python CLI",
+  "description": "Command-line tool with Python and Click",
+  "category": "cli",
+  "language": "python",
+  "icon": "terminal",
+  "iconColor": "#3776ab",
+  "version": "1.0.0",
+  "variables": [
+    {"name": "project-name", "type": "string", "required": true, "placeholder": "my-cli"}
+  ]
+}
