@@ -265,7 +265,17 @@ export class OpenStormApp extends TailwindElement() {
         e.preventDefault();
         this.toggleTerminal();
       }
+      // Alt+Shift+F or Option+Shift+F for format code
+      if ((e.altKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        this.formatActiveFile();
+      }
     });
+  }
+
+  private async formatActiveFile(): Promise<void> {
+    // Dispatch event to editor-pane to format code
+    document.dispatchEvent(new CustomEvent('format-code'));
   }
 
   private async saveActiveFile(): Promise<void> {
@@ -450,8 +460,9 @@ export class OpenStormApp extends TailwindElement() {
       if (this.tabs.length > 0) {
         const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
         this.activeTabId = this.tabs[newActiveIndex].id;
+        // Use open-file-external to avoid triggering the global open-file handler (which opens the file dialog)
         document.dispatchEvent(
-          new CustomEvent("open-file", {
+          new CustomEvent("open-file-external", {
             detail: {
               path: this.tabs[newActiveIndex].path,
               content: this.tabs[newActiveIndex].content,
