@@ -70,7 +70,6 @@ export class OpenStormApp extends TailwindElement() {
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
-    this.setupCursorPositionHandler();
     // Terminal will be auto-created when project is opened
   }
 
@@ -95,19 +94,6 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("auto-saved", ((e: CustomEvent) => {
       console.log("Auto-saved:", e.detail.path);
       this.saveStatus = "saved";
-    }) as EventListener);
-  }
-
-  private setupCursorPositionHandler(): void {
-    // Listen for cursor position updates from editor
-    document.addEventListener("cursor-position", ((e: CustomEvent) => {
-      const { line, column } = e.detail;
-      const statusBar = document.querySelector("status-bar") as HTMLElement & {
-        setCursorPosition: (line: number, col: number) => void;
-      };
-      if (statusBar?.setCursorPosition) {
-        statusBar.setCursorPosition(line, column);
-      }
     }) as EventListener);
   }
 

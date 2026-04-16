@@ -13,8 +13,8 @@ export interface LspServerInfo {
 @customElement('status-bar')
 export class StatusBar extends TailwindElement() {
   @state() private branch = 'main';
-  @state() private cursorLine = 1;
-  @state() private cursorCol = 1;
+  @state() private cursorLine = 0;
+  @state() private cursorCol = 0;
   @state() private encoding = 'UTF-8';
   @state() private lineEnding = 'LF';
   @state() private spaces = 4;
@@ -25,6 +25,7 @@ export class StatusBar extends TailwindElement() {
   @state() private activeLanguage: string | null = null;
   @state() private installProgress: { languageId: string; serverName: string; percentage: number; stage: string } | null = null;
   @state() terminalVisible = true;
+  @state() private fileOpen = false;
 
   static properties = {
     terminalVisible: { type: Boolean },
@@ -33,6 +34,20 @@ export class StatusBar extends TailwindElement() {
   async connectedCallback(): Promise<void> {
     super.connectedCallback();
     await this.checkLspStatus();
+    // Listen for cursor position updates from editor
+    document.addEventListener('cursor-position', (e: Event) => {
+      const customEvent = e as CustomEvent<{ line: number; column: number }>;
+      this.setCursorPosition(customEvent.detail.line, customEvent.detail.column);
+    });
+    // Listen for file open/close events to show/hide cursor position
+    document.addEventListener('open-file-external', () => {
+      this.fileOpen = true;
+    });
+    document.addEventListener('clear-editor', () => {
+      this.fileOpen = false;
+      this.cursorLine = 0;
+      this.cursorCol = 0;
+    });
     // Re-check when language changes
     document.addEventListener('active-language-changed', (e: Event) => {
       const customEvent = e as CustomEvent<{ languageId: string }>;
@@ -300,7 +315,7 @@ export class StatusBar extends TailwindElement() {
 
         <!-- Right section -->
         <div class="flex items-center gap-3">
-          ${this.cursorLine > 0
+          ${this.fileOpen
             ? html`<div class="flex items-center gap-1 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors font-mono">
                 <span>Ln ${this.cursorLine}, Col ${this.cursorCol}</span>
               </div>`

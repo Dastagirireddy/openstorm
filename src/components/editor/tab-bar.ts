@@ -4,6 +4,7 @@ import { ref, createRef } from 'lit/directives/ref.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { EditorTab } from '../../lib/file-types.js';
 import '../file-icon.js';
+import '../icon.js';
 
 @customElement('tab-bar')
 export class TabBar extends TailwindElement() {
@@ -122,15 +123,12 @@ export class TabBar extends TailwindElement() {
           ? html`<span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>`
           : html`
               <button
-                class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#c7c7c7] transition-all flex-shrink-0"
+                class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0 flex items-center justify-center hover:bg-[#d0d0d0]"
                 @click=${(e: MouseEvent) => {
                   e.stopPropagation();
                   this.closeTab(tab.id);
                 }}>
-                <svg class="w-3.5 h-3.5 text-[#5a5a5a] hover:text-[#1a1a1a]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
+                <os-icon name="x" color="#5a5a5a" size="12"></os-icon>
               </button>
             `}
       </div>
@@ -173,9 +171,7 @@ export class TabBar extends TailwindElement() {
             this.showDropdown = !this.showDropdown;
           }}
           title="Hidden tabs (${this.hiddenTabs.length})">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
+          <os-icon name="chevron-down" size="16"></os-icon>
         </button>
 
         ${this.showDropdown ? html`

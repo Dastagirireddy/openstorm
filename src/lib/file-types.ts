@@ -24,6 +24,8 @@ export interface EditorTab {
   content: string;
   pinned?: boolean;
   lastUsed?: number;
+  cursorLine?: number;
+  cursorCol?: number;
 }
 
 /**

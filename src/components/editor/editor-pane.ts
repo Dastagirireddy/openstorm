@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate } from '@codemirror/view';
-import { EditorState } from '@codemirror/state';
+import { EditorState, EditorSelection } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
@@ -71,8 +71,6 @@ const intellijLightHighlight = HighlightStyle.define([
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
-  @query('#editor-container') private editorContainer!: HTMLElement;
-
   @state() tabs: EditorTab[] = [];
   @state() activeTabId: string = '';
 
@@ -258,12 +256,32 @@ export class EditorPane extends TailwindElement() {
         },
       }),
 
-      // Listen for changes
+      // Listen for changes and cursor position updates
       EditorView.updateListener.of((update: ViewUpdate) => {
         if (update.docChanged) {
           const content = update.state.doc.toString();
           this._handleContentChange(content);
           this._notifyDocumentChanged(content);
+        }
+        // Track cursor position per tab on selection changes
+        if (update.selectionSet) {
+          const pos = update.state.selection.main.head;
+          const line = update.state.doc.lineAt(pos);
+          const column = pos - line.from;
+
+          // Update cursor position in the active tab
+          const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+          if (activeTab) {
+            activeTab.cursorLine = line.number;
+            activeTab.cursorCol = column + 1;
+          }
+
+          // Dispatch cursor position for status bar
+          document.dispatchEvent(new CustomEvent('cursor-position', {
+            detail: { line: line.number, column: column + 1 },
+            bubbles: true,
+            composed: true,
+          }));
         }
       }),
 
@@ -559,21 +577,38 @@ export class EditorPane extends TailwindElement() {
 
   private _updateEditor = (): void => {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!activeTab || !this.editorContainer) return;
+    if (!activeTab) {
+      // No active tab - destroy editor view if it exists
+      if (this.editorView) {
+        this.editorView.destroy();
+        this.editorView = null;
+      }
+      return;
+    }
+
+    // Re-query editorContainer since Lit may have re-created the DOM
+    const editorContainer = this.renderRoot.querySelector('#editor-container');
+    if (!editorContainer) return;
 
     const language = this.getLanguageExtension(activeTab.path);
     const newLanguageKey = activeTab.path.split('.').pop() || '';
     const tabChanged = this._currentTabId !== activeTab.id;
 
-    if (!this.editorView) {
-      // First time - create new editor
+    // Check if editorView's DOM element is still in the document
+    const editorViewInDom = this.editorView && document.contains(this.editorView.dom);
+
+    if (!this.editorView || !editorViewInDom) {
+      // Editor doesn't exist or its DOM was removed - create new editor
+      if (this.editorView && !editorViewInDom) {
+        this.editorView.destroy();
+      }
       const state = EditorState.create({
         doc: activeTab.content,
         extensions: [...this.getCommonExtensions(), language]
       });
       this.editorView = new EditorView({
         state,
-        parent: this.editorContainer
+        parent: editorContainer
       });
       // Notify LSP server that document is opened
       this._notifyDocumentOpened(activeTab.content);
@@ -584,20 +619,36 @@ export class EditorPane extends TailwindElement() {
       // Editor exists - check if language or tab changed
       const languageChanged = newLanguageKey !== this._currentLanguage;
 
-      // Get current selection to restore after update
-      const selection = this.editorView.state.selection;
-
       if (tabChanged || languageChanged) {
-        // Tab switched - load the new tab's content
+        // Get stored cursor position for the new tab, or default to line 1, col 1
+        const storedLine = activeTab.cursorLine ?? 1;
+        const storedCol = activeTab.cursorCol ?? 1;
+
+        // Calculate position from stored line/col
+        const lineInfo = activeTab.content.split('\n');
+        let pos = 0;
+        for (let i = 1; i < storedLine && i <= lineInfo.length; i++) {
+          pos += lineInfo[i - 1].length + 1; // +1 for newline
+        }
+        pos = Math.min(pos + (storedCol - 1), activeTab.content.length);
+
+        // Create state with restored cursor position
         const state = EditorState.create({
           doc: activeTab.content,
           extensions: [...this.getCommonExtensions(), language],
-          selection: selection
+          selection: EditorSelection.create([EditorSelection.cursor(pos)])
         });
         this.editorView.setState(state);
         this._currentLanguage = newLanguageKey;
         this._currentTabId = activeTab.id;
         this._isInitialTabLoad = true;
+
+        // Dispatch cursor position immediately after tab switch
+        document.dispatchEvent(new CustomEvent('cursor-position', {
+          detail: { line: storedLine, column: storedCol },
+          bubbles: true,
+          composed: true,
+        }));
       }
     }
   }
@@ -622,8 +673,11 @@ export class EditorPane extends TailwindElement() {
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
     if (changedProperties.has('activeTabId') || changedProperties.has('tabs')) {
-      this._updateEditor();
-      this._notifyLanguageChange();
+      // Wait for DOM to be ready before updating editor
+      requestAnimationFrame(() => {
+        this._updateEditor();
+        this._notifyLanguageChange();
+      });
     }
   }
 
