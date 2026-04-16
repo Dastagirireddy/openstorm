@@ -26,48 +26,50 @@ const defaultOptions: FormatterOptions = {
 };
 
 /**
- * JavaScript/TypeScript formatter using Prettier
+ * JavaScript/TypeScript formatter using LSP (typescript-language-server)
  */
 const jsFormatter: LanguageFormatter = {
   extensions: ['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs'],
   async format(content: string, options: FormatterOptions): Promise<string> {
-    // Check for template syntax (Handlebars, Mustache, etc.)
+    // Check for template syntax (Handlebars, Mustache, EJS, etc.)
     if (/\{\{.*\}\}/.test(content) || /\{%.*%\}/.test(content) || /<%.*%>/.test(content)) {
       console.log('[JS Formatter] Detected template syntax, skipping format');
       return content;
     }
 
     try {
-      // Prettier 3.x API - use default export
-      const prettier = await import('prettier');
-      const prettierTypescript = await import('prettier/plugins/typescript');
-      const prettierBabel = await import('prettier/plugins/babel');
-      const prettierEstree = await import('prettier/plugins/estree');
-
-      // Use typescript parser for .ts/.tsx, babel for .js/.jsx/.mjs/.cjs
-      const parser = (options as any).extension === 'ts' || (options as any).extension === 'tsx'
+      const { invoke } = await import('@tauri-apps/api/core');
+      const languageId = options.extension === 'ts' || options.extension === 'tsx'
         ? 'typescript'
-        : 'babel';
+        : 'javascript';
 
-      const result = await prettier.format(content, {
-        parser,
-        plugins: [prettierTypescript, prettierBabel, prettierEstree],
-        tabWidth: options.tabWidth,
-        useTabs: options.useTabs,
-        singleQuote: options.singleQuote,
-        trailingComma: options.trailingComma,
-        printWidth: options.printWidth,
-      });
+      // Check if server is installed
+      const status: any[] = await invoke('get_lsp_server_status');
+      const serverInfo = status.find(s => s.language_id === languageId);
 
-      // Safety check for garbage output
-      if (result.includes('̰') || result.includes('~') || result.trim() === '') {
-        console.error('Prettier returned garbage output');
+      if (!serverInfo || !serverInfo.is_installed) {
+        // Dispatch event to show install prompt in status bar
+        document.dispatchEvent(new CustomEvent('lsp-server-missing', {
+          detail: { languageId, serverName: serverInfo?.server_name || `${languageId}-language-server` },
+          bubbles: true,
+        }));
+        console.warn(`[JS Formatter] ${languageId}-language-server not installed. Click "Install" in status bar.`);
         return content;
       }
 
-      return result;
+      const command = languageId === 'typescript' ? 'format_typescript' : 'format_javascript';
+      const result = await invoke(command, { content, tabWidth: options.tabWidth });
+      const resultStr = result as string;
+
+      // Safety check for garbage output
+      if (resultStr.includes('~') || resultStr.trim() === '' || /[\u0300-\u036f]/.test(resultStr)) {
+        console.error('LSP returned garbage output, returning original');
+        return content;
+      }
+
+      return resultStr;
     } catch (error) {
-      console.error('Prettier format error:', error);
+      console.error('LSP format error:', error);
       return content;
     }
   },

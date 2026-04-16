@@ -441,6 +441,10 @@ export class OpenStormApp extends TailwindElement() {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("start_watching", { path: this.projectPath });
       console.log("File watcher started for:", this.projectPath);
+
+      // Initialize LSP connection pool
+      await invoke("initialize_lsp_pool", { rootPath: this.projectPath });
+      console.log("LSP connection pool initialized for:", this.projectPath);
     } catch (error) {
       console.error("Failed to start file watcher:", error);
     }
