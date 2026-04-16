@@ -8,7 +8,7 @@ import '../file-icon.js';
 @customElement('tab-bar')
 export class TabBar extends TailwindElement() {
   @property({ type: Array }) tabs: EditorTab[] = [];
-  @property() activeTab = '';
+  @property({ type: String }) activeTab = '';
   @property({ type: Number }) tabLimit = 10;
 
   @state() private showDropdown = false;
@@ -105,8 +105,8 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="group flex items-center gap-2 min-w-[120px] max-w-[200px] h-full px-3 cursor-pointer border-r border-[#c7c7c7] transition-colors shrink-0
-          ${isActive ? 'bg-white text-[#1a1a1a] border-t-2 border-t-[#3592c4]' : 'bg-[#f0f0f0] text-[#5a5a5a] hover:bg-[#e8e8e8] border-t-2 border-t-transparent'}"
+        class="group flex items-center gap-2 min-w-[120px] max-w-[200px] h-full px-3 cursor-pointer border-r-0 transition-colors shrink-0
+          ${isActive ? 'bg-white text-[#1a1a1a] border-t-2 border-t-indigo-500' : 'bg-[#f0f0f0] text-[#5a5a5a] hover:bg-[#e8e8e8] border-t-2 border-t-transparent'}"
         data-tab-id="${tab.id}"
         @click=${() => this.selectTab(tab.id)}
         @auxclick=${(e: MouseEvent) => {
@@ -119,7 +119,7 @@ export class TabBar extends TailwindElement() {
         ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate select-none">${tab.name}</span>
         ${tab.modified
-          ? html`<span class="w-2 h-2 rounded-full bg-[#3592c4] flex-shrink-0"></span>`
+          ? html`<span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>`
           : html`
               <button
                 class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#c7c7c7] transition-all flex-shrink-0"
@@ -142,14 +142,14 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${isActive ? 'bg-[#b3d4ff] text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
+        class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${isActive ? 'bg-indigo-200 text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
         @click=${() => {
           this.selectTab(tab.id);
           this.showDropdown = false;
         }}>
         ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate">${tab.name}</span>
-        ${tab.modified ? html`<span class="w-2 h-2 rounded-full bg-[#3592c4] flex-shrink-0"></span>` : ''}
+        ${tab.modified ? html`<span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>` : ''}
       </div>
     `;
   }
@@ -159,7 +159,7 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="flex flex-row overflow-x-auto overflow-y-hidden bg-[#f0f0f0] border-b border-[#c7c7c7] h-[35px]"
+        class="flex flex-row overflow-x-auto overflow-y-hidden bg-[#f0f0f0] h-[35px]"
         ${ref(this.tabsContainerRef)}>
         ${this.visibleTabs.map(tab => this.renderTab(tab))}
       </div>

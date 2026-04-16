@@ -77,6 +77,8 @@ export class EditorPane extends TailwindElement() {
   @state() activeTabId: string = '';
 
   private editorView: EditorView | null = null;
+  private _isInitialTabLoad = true;
+  private _currentLanguage: string = '';
 
   /**
    * Maps file paths to CodeMirror language extensions
@@ -189,7 +191,7 @@ export class EditorPane extends TailwindElement() {
           color: "#000000",
         },
         ".cm-tooltip-autocomplete ul li[aria-selected]": {
-          backgroundColor: "#0969da",
+          backgroundColor: "#4f46e5",
           color: "#ffffff !important",
         },
         ".cm-tooltip-autocomplete ul li[aria-selected] .cm-completionLabel, .cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail": {
@@ -553,11 +555,15 @@ export class EditorPane extends TailwindElement() {
   /**
    * Updates or creates the editor view without unnecessary destruction
    */
+  private _currentTabId: string | null = null;
+
   private _updateEditor = (): void => {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab || !this.editorContainer) return;
 
     const language = this.getLanguageExtension(activeTab.path);
+    const newLanguageKey = activeTab.path.split('.').pop() || '';
+    const tabChanged = this._currentTabId !== activeTab.id;
 
     if (!this.editorView) {
       // First time - create new editor
@@ -571,31 +577,38 @@ export class EditorPane extends TailwindElement() {
       });
       // Notify LSP server that document is opened
       this._notifyDocumentOpened(activeTab.content);
+      this._isInitialTabLoad = true;
+      this._currentLanguage = newLanguageKey;
+      this._currentTabId = activeTab.id;
     } else {
-      // Editor exists - only update the document if it changed
-      // Preserve selection and cursor position
-      const currentDoc = this.editorView.state.doc.toString();
-      if (currentDoc !== activeTab.content) {
-        // Get current selection to restore after update
-        const selection = this.editorView.state.selection;
+      // Editor exists - check if language or tab changed
+      const languageChanged = newLanguageKey !== this._currentLanguage;
 
-        this.editorView.dispatch({
-          changes: {
-            from: 0,
-            to: currentDoc.length,
-            insert: activeTab.content,
-          },
-          selection: selection,
+      // Get current selection to restore after update
+      const selection = this.editorView.state.selection;
+
+      if (tabChanged || languageChanged) {
+        // Tab switched - load the new tab's content
+        const state = EditorState.create({
+          doc: activeTab.content,
+          extensions: [...this.getCommonExtensions(), language],
+          selection: selection
         });
+        this.editorView.setState(state);
+        this._currentLanguage = newLanguageKey;
+        this._currentTabId = activeTab.id;
+        this._isInitialTabLoad = true;
       }
-
-      // Update language extensions if needed
-      // (CodeMirror doesn't support hot-swapping extensions easily,
-      // so we rely on the initial language detection)
     }
   }
 
   private _handleContentChange(content: string) {
+    // Ignore initial tab load - content is already saved
+    if (this._isInitialTabLoad) {
+      this._isInitialTabLoad = false;
+      return;
+    }
+
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (activeTab) {
       this.dispatchEvent(new CustomEvent('content-changed', {

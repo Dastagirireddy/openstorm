@@ -157,8 +157,8 @@ export class StatusBar extends TailwindElement() {
     }
 
     console.log(`[LSP] Auto-installing ${serverInfo.server_name}...`);
-    // Pass true to show completion notification
-    await this.installLspServer(languageId, true);
+    // Pass false to keep auto-install silent
+    await this.installLspServer(languageId, false);
   }
 
   public getActiveServerInfo(): LspServerInfo | null {
@@ -255,7 +255,7 @@ export class StatusBar extends TailwindElement() {
             if (!serverInfo) return html``;
             const isInstalling = this.installProgress !== null || (serverInfo as any).is_installing === true;
             const statusIcon = isInstalling
-              ? html`<svg class="w-3 h-3 text-blue-600 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              ? html`<svg class="w-3 h-3 text-indigo-600 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <circle cx="12" cy="12" r="10"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
                 </svg>`
               : serverInfo.is_installed
@@ -269,12 +269,12 @@ export class StatusBar extends TailwindElement() {
             // Show progress bar when installing
             if (isInstalling && this.installProgress) {
               return html`
-                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-blue-50 border border-[#d0d7de] min-w-[200px]">
+                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-indigo-50 border border-[#d0d7de] min-w-[200px]">
                   ${statusIcon}
                   <div class="flex-1">
-                    <div class="text-xs text-[#0969da] truncate">Downloading ${this.installProgress.serverName}...</div>
+                    <div class="text-xs text-indigo-700 truncate">Downloading ${this.installProgress.serverName}...</div>
                     <div class="w-full h-1.5 bg-[#eaeef2] rounded-full overflow-hidden">
-                      <div class="h-full bg-[#0969da] transition-all duration-200" style="width: ${this.installProgress.percentage}%"></div>
+                      <div class="h-full bg-indigo-600 transition-all duration-200" style="width: ${this.installProgress.percentage}%"></div>
                     </div>
                     <div class="text-[10px] text-[#57606a] mt-0.5">${this.installProgress.stage} (${Math.round(this.installProgress.percentage)}%)</div>
                   </div>
