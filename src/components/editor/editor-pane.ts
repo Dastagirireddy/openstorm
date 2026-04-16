@@ -2,7 +2,7 @@ import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate } from '@codemirror/view';
 import { EditorState, EditorSelection } from '@codemirror/state';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
 
@@ -77,6 +77,7 @@ export class EditorPane extends TailwindElement() {
   private editorView: EditorView | null = null;
   private _isInitialTabLoad = true;
   private _currentLanguage: string = '';
+  private _savedContent: Map<string, string> = new Map();
 
   /**
    * Maps file paths to CodeMirror language extensions
@@ -118,7 +119,35 @@ export class EditorPane extends TailwindElement() {
       bracketMatching(),
       indentOnInput(),
       syntaxHighlighting(intellijLightHighlight),
-      keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap]),
+      // Keymap order matters - historyKeymap must come before defaultKeymap
+      // so undo/redo takes precedence
+      // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z
+      keymap.of([
+        {
+          key: 'Mod-z',
+          run: (view) => {
+            console.log('[Editor] Undo key pressed (Mod-z)');
+            return undo(view.dispatch);
+          },
+        },
+        {
+          key: 'Mod-y',
+          run: (view) => {
+            console.log('[Editor] Redo key pressed (Mod-y)');
+            return redo(view.dispatch);
+          },
+        },
+        {
+          key: 'Mod-Shift-z',
+          run: (view) => {
+            console.log('[Editor] Redo key pressed (Mod-Shift-z)');
+            return redo(view.dispatch);
+          },
+        },
+        ...historyKeymap,
+        ...defaultKeymap,
+        ...foldKeymap,
+      ]),
 
       // LSP Intellisense
       autocompletion({
@@ -615,6 +644,8 @@ export class EditorPane extends TailwindElement() {
       this._isInitialTabLoad = true;
       this._currentLanguage = newLanguageKey;
       this._currentTabId = activeTab.id;
+      // Store initial content as "saved" state
+      this._savedContent.set(activeTab.path, activeTab.content);
     } else {
       // Editor exists - check if language or tab changed
       const languageChanged = newLanguageKey !== this._currentLanguage;
@@ -661,18 +692,25 @@ export class EditorPane extends TailwindElement() {
     }
 
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (activeTab) {
-      this.dispatchEvent(new CustomEvent('content-changed', {
-        detail: { path: activeTab.path, content },
-        bubbles: true,
-        composed: true,
-      }));
-    }
+    if (!activeTab) return;
+
+    // Compare with saved content to determine if file is truly modified
+    const savedContent = this._savedContent.get(activeTab.path) || '';
+    const isModified = content !== savedContent;
+
+    // Dispatch content-changed event with modified status
+    this.dispatchEvent(new CustomEvent('content-changed', {
+      detail: { path: activeTab.path, content, isModified },
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
-    if (changedProperties.has('activeTabId') || changedProperties.has('tabs')) {
+    // Only update editor when activeTabId changes, not when tabs content changes
+    // The editor view handles content changes internally via EditorView.updateListener
+    if (changedProperties.has('activeTabId')) {
       // Wait for DOM to be ready before updating editor
       requestAnimationFrame(() => {
         this._updateEditor();
@@ -716,9 +754,22 @@ export class EditorPane extends TailwindElement() {
     }));
   }
 
+  connectedCallback(): void {
+    super.connectedCallback();
+    // Listen for save events to update saved content
+    document.addEventListener('file-saved', this._handleFileSaved.bind(this));
+  }
+
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.editorView?.destroy();
+    document.removeEventListener('file-saved', this._handleFileSaved.bind(this));
+  }
+
+  private _handleFileSaved(event: Event): void {
+    const customEvent = event as CustomEvent<{ path: string; content: string }>;
+    const { path, content } = customEvent.detail;
+    this._savedContent.set(path, content);
   }
 
   render() {

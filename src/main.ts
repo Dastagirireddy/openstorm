@@ -280,6 +280,12 @@ export class OpenStormApp extends TailwindElement() {
       this.tabs = this.tabs.map((t) =>
         t.path === activeTab.path ? { ...t, modified: false } : t,
       );
+      // Notify editor-pane to update saved content
+      document.dispatchEvent(new CustomEvent('file-saved', {
+        detail: { path: activeTab.path, content: activeTab.content },
+        bubbles: true,
+        composed: true,
+      }));
     } catch (error) {
       console.error("Failed to save file:", error);
       this.saveStatus = "error";
@@ -374,18 +380,18 @@ export class OpenStormApp extends TailwindElement() {
   };
 
   private handleContentChanged = (
-    e: CustomEvent<{ path: string; content: string }>,
+    e: CustomEvent<{ path: string; content: string; isModified?: boolean }>,
   ): void => {
-    const { path, content } = e.detail;
+    const { path, content, isModified = true } = e.detail;
     const tabIndex = this.tabs.findIndex((t) => t.path === path);
 
     if (tabIndex !== -1) {
       this.tabs = this.tabs.map((t, i) =>
-        i === tabIndex ? { ...t, content, modified: true } : t,
+        i === tabIndex ? { ...t, content, modified: isModified } : t,
       );
     }
 
-    this.saveStatus = "unsaved";
+    this.saveStatus = isModified ? "unsaved" : "saved";
   };
 
   private handleTabSelect = (e: CustomEvent<{ tabId: string }>): void => {
