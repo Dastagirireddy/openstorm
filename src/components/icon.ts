@@ -19,6 +19,8 @@ const iconMap: Record<string, any> = {
   'cloud': Cloud,
   'folder': Folder,
   'folder-open': FolderOpen,
+  'folder-filled': 'custom-filled-folder',
+  'folder-open-filled': 'custom-filled-folder-open',
   'folder-plus': FolderPlus,
   'check': Check,
   'gauge': Gauge,
@@ -112,9 +114,39 @@ export class Icon extends LitElement {
       return html``;
     }
 
-    const paths = buildSvgPaths(iconData);
     const size = String(this.size);
     const strokeWidth = String(this.strokeWidth);
+
+    // Handle custom filled folder icons
+    if (iconData === 'custom-filled-folder') {
+      return svg`
+        <svg
+          width=${size}
+          height=${size}
+          viewBox="0 0 24 24"
+          fill=${this.color}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>
+      `;
+    }
+
+    if (iconData === 'custom-filled-folder-open') {
+      return svg`
+        <svg
+          width=${size}
+          height=${size}
+          viewBox="0 0 24 24"
+          fill=${this.color}
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/>
+        </svg>
+      `;
+    }
+
+    const paths = buildSvgPaths(iconData);
 
     return svg`
       <svg

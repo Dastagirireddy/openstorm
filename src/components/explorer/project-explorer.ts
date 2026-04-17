@@ -5,6 +5,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import type { FileNode } from '../../lib/file-types.js';
 import type { FileTemplate } from '../file-type-picker.js';
 import type { ContextMenuItem } from '../context-menu.js';
+import { getFolderInfo, isSpecialFolder, type FolderType } from '../../lib/folder-types.js';
 import '../icon.js';
 import '../file-icon.js';
 import '../dialog.js';
@@ -819,28 +820,65 @@ export class ProjectExplorer extends TailwindElement() {
     this.requestUpdate();
   }
 
+  private getFolderColor(node: FileNode, isExpanded: boolean): string {
+    if (!node.is_dir) return '#5a5a5a';
+
+    const folderInfo = getFolderInfo(node.name, node.path);
+    // Use darker color when expanded, lighter when collapsed
+    return isExpanded ? folderInfo.color : folderInfo.iconColor;
+  }
+
+  private getFolderType(node: FileNode): FolderType {
+    if (!node.is_dir) return 'source';
+    const folderInfo = getFolderInfo(node.name, node.path);
+    return folderInfo.type;
+  }
+
   private renderIcon(node: FileNode, isExpanded: boolean): TemplateResult {
     if (node.is_dir) {
-      const iconName = isExpanded ? 'folder-open' : 'folder';
+      const isSpecial = isSpecialFolder(node.name, node.path);
+      const iconName = isExpanded
+        ? (isSpecial ? 'folder-open-filled' : 'folder-open')
+        : (isSpecial ? 'folder-filled' : 'folder');
+      const color = this.getFolderColor(node, isExpanded);
       return html`
-        <os-icon name="${iconName}" color="${isExpanded ? '#c9a228' : '#5a5a5a'}" size="16" />
+        <os-icon name="${iconName}" color="${color}" size="16" />
       `;
     }
 
     return html`<file-icon path="${node.path}" size="16" .isExecutable="${node.is_executable}"></file-icon>`;
   }
 
+  private getFolderTypeLabel(type: FolderType): string {
+    const labels: Record<FolderType, string> = {
+      'root': 'Project Root',
+      'build': 'Build/Output Folder',
+      'tmp': 'Temporary/Cache Folder',
+      'node_modules': 'Dependencies Folder',
+      'vcs': 'Version Control',
+      'ide': 'IDE Settings',
+      'source': 'Source Folder'
+    };
+    return labels[type];
+  }
+
   private renderNode(node: FileNode, depth: number): TemplateResult {
     const isSelected = this.selectedPath === node.path;
     const isExpanded = this.expandedFolders.has(node.path);
     const indent = depth * 12;
+    const folderType = this.getFolderType(node);
+    const folderInfo = node.is_dir ? getFolderInfo(node.name, node.path) : null;
+    const folderColor = folderInfo?.color || null;
+    const folderBgColor = folderInfo?.bgColor || null;
+    const folderTypeLabel = node.is_dir ? this.getFolderTypeLabel(folderType) : '';
 
     return html`
       <div>
         <div
           class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors
             ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
-          style="padding-left: ${indent + 8}px"
+          style="padding-left: ${indent + 8}px; ${folderColor ? `border-left: 3px solid ${folderColor}; background-color: ${folderBgColor || 'transparent'};` : 'border-left: 3px solid transparent;'} margin-left: -3px;"
+          title="${folderTypeLabel}"
           @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}>
           ${node.is_dir
             ? html`
