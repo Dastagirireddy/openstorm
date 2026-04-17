@@ -31,6 +31,7 @@
     "@iconify-json/skill-icons": "^1.2.4",
     "@lezer/highlight": "^1.2.3",
     "@prettier/plugin-php": "^0.25.0",
+    "@replit/codemirror-indentation-markers": "^6.5.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-shell": "^2",

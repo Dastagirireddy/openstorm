@@ -18,6 +18,7 @@ pub struct LspServerConfig {
     pub npm_package: Option<String>,
     pub binary_name: String,
     pub extract_binary: Option<String>, // Path inside archive to extract
+    pub install_via_go_tool: bool,      // Use `go install` for installation (e.g., gopls)
 }
 
 /// Progress callback type
@@ -33,6 +34,7 @@ pub fn get_server_config(language_id: &str) -> Option<LspServerConfig> {
             npm_package: None,
             binary_name: "rust-analyzer".to_string(),
             extract_binary: Some("rust-analyzer".to_string()),
+            install_via_go_tool: false,
         }),
         "typescript" | "javascript" => Some(LspServerConfig {
             language_id: language_id.to_string(),
@@ -41,6 +43,7 @@ pub fn get_server_config(language_id: &str) -> Option<LspServerConfig> {
             npm_package: Some("typescript-language-server".to_string()),
             binary_name: "typescript-language-server".to_string(),
             extract_binary: Some("node_modules/typescript-language-server/lib/cli.js".to_string()),
+            install_via_go_tool: false,
         }),
         "python" => Some(LspServerConfig {
             language_id: "python".to_string(),
@@ -49,14 +52,17 @@ pub fn get_server_config(language_id: &str) -> Option<LspServerConfig> {
             npm_package: Some("pyright".to_string()),
             binary_name: "pyright".to_string(),
             extract_binary: None, // npm install handles this
+            install_via_go_tool: false,
         }),
         "go" => Some(LspServerConfig {
             language_id: "go".to_string(),
             server_name: "gopls".to_string(),
-            github_repo: Some("golang/tools".to_string()),
+            github_repo: None,
             npm_package: None,
             binary_name: "gopls".to_string(),
-            extract_binary: Some("gopls".to_string()),
+            extract_binary: None,
+            // gopls doesn't provide pre-built binaries, use go install
+            install_via_go_tool: true,
         }),
         "cpp" | "c" => Some(LspServerConfig {
             language_id: "cpp".to_string(),
@@ -65,6 +71,7 @@ pub fn get_server_config(language_id: &str) -> Option<LspServerConfig> {
             npm_package: None,
             binary_name: "clangd".to_string(),
             extract_binary: None,
+            install_via_go_tool: false,
         }),
         _ => None,
     }
@@ -95,7 +102,12 @@ pub fn is_server_installed_cached(config: &LspServerConfig) -> bool {
         return true;
     }
 
-    // Try to run --version to verify it works for native binaries
+    // For Go binaries (gopls), just check existence since --version may not work
+    if config.install_via_go_tool {
+        return true;
+    }
+
+    // Try to run --version to verify it works for other native binaries
     Command::new(&binary_path)
         .arg("--version")
         .output()
@@ -185,6 +197,11 @@ where
         return install_npm_package(npm_package, &config.binary_name, &cache_dir, on_progress.clone()).await;
     }
 
+    // Handle Go-based servers (gopls)
+    if config.install_via_go_tool {
+        return install_via_go_tool(&config, &cache_dir, on_progress.clone()).await;
+    }
+
     // Handle GitHub releases
     if let Some(repo) = &config.github_repo {
         return download_from_github(repo, &config, &cache_dir, on_progress.clone()).await;
@@ -194,6 +211,115 @@ where
         "No installation method available for {}",
         config.server_name
     ))
+}
+
+/// Install via Go toolchain (for gopls and other Go LSP servers)
+async fn install_via_go_tool(
+    config: &LspServerConfig,
+    cache_dir: &Path,
+    on_progress: Arc<dyn Fn(InstallProgress) + Send + Sync + 'static>,
+) -> Result<String, String> {
+    on_progress(InstallProgress {
+        stage: format!("Installing {} via go install...", config.server_name),
+        downloaded: 0,
+        total: 0,
+        percentage: 0.0,
+    });
+
+    // Check if go is installed
+    let go_check = Command::new("go")
+        .arg("version")
+        .output();
+
+    match go_check {
+        Ok(output) if output.status.success() => {
+            eprintln!("[LSP Installer] Go is installed: {}", String::from_utf8_lossy(&output.stdout).trim());
+        }
+        Ok(output) => {
+            return Err(format!("Go is installed but returned error: {}", String::from_utf8_lossy(&output.stderr)));
+        }
+        Err(_) => {
+            return Err("Go is not installed. Please install Go from https://go.dev/dl/ to use gopls.".to_string());
+        }
+    }
+
+    fs::create_dir_all(cache_dir)
+        .map_err(|e| format!("Failed to create cache dir: {}", e))?;
+
+    // gopls package path
+    let package = "golang.org/x/tools/gopls@latest";
+
+    eprintln!("[LSP Installer] Running: go install {}", package);
+
+    let output = Command::new("go")
+        .args(["install", package])
+        .output()
+        .map_err(|e| format!("Failed to run go install: {}", e))?;
+
+    eprintln!("[LSP Installer] go install stdout: {}", String::from_utf8_lossy(&output.stdout));
+    eprintln!("[LSP Installer] go install stderr: {}", String::from_utf8_lossy(&output.stderr));
+
+    if !output.status.success() {
+        return Err(format!(
+            "go install failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    on_progress(InstallProgress {
+        stage: "Finding installed binary...".to_string(),
+        downloaded: 50,
+        total: 100,
+        percentage: 50.0,
+    });
+
+    // Get GOBIN or GOPATH to find where the binary was installed
+    let gobin_output = Command::new("go")
+        .args(["env", "GOBIN"])
+        .output()
+        .map_err(|e| format!("Failed to run go env: {}", e))?;
+
+    let gobin = String::from_utf8_lossy(&gobin_output.stdout).trim().to_string();
+
+    let source_binary = if !gobin.is_empty() {
+        PathBuf::from(gobin).join(&config.binary_name)
+    } else {
+        // Fallback to GOPATH/bin
+        let gopath_output = Command::new("go")
+            .args(["env", "GOPATH"])
+            .output()
+            .map_err(|e| format!("Failed to run go env: {}", e))?;
+        let gopath = String::from_utf8_lossy(&gopath_output.stdout).trim().to_string();
+        PathBuf::from(gopath).join("bin").join(&config.binary_name)
+    };
+
+    if !source_binary.exists() {
+        return Err(format!("gopls binary not found at {:?}", source_binary));
+    }
+
+    eprintln!("[LSP Installer] Found binary at: {:?}", source_binary);
+
+    // Copy binary to our cache directory
+    let dest_binary = cache_dir.join(&config.binary_name);
+    fs::copy(&source_binary, &dest_binary)
+        .map_err(|e| format!("Failed to copy binary: {}", e))?;
+
+    // Set executable permissions on Unix
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&dest_binary, fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+    }
+
+    on_progress(InstallProgress {
+        stage: "Installation complete!".to_string(),
+        downloaded: 100,
+        total: 100,
+        percentage: 100.0,
+    });
+
+    Ok(format!("{} installed successfully", config.server_name))
 }
 
 /// Install an npm package

@@ -2,6 +2,7 @@ import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
+import './icon.js';
 
 export interface LspServerInfo {
   language_id: string;
@@ -24,6 +25,7 @@ export class StatusBar extends TailwindElement() {
   @state() private lspStatus: LspServerInfo[] = [];
   @state() private activeLanguage: string | null = null;
   @state() private installProgress: { languageId: string; serverName: string; percentage: number; stage: string } | null = null;
+  @state() private installFailed: Map<string, string> = new Map(); // languageId -> error message
   @state() terminalVisible = true;
   @state() private fileOpen = false;
 
@@ -75,6 +77,12 @@ export class StatusBar extends TailwindElement() {
       return; // Already installed or not found in status
     }
 
+    // Skip if we already tried and failed - let user click Retry button instead
+    if (this.installFailed.has(languageId)) {
+      console.log(`[LSP] Skipping install prompt for ${serverName} - previous install failed`);
+      return;
+    }
+
     // Show a subtle notification in status bar
     this.statusMessage = `${serverName} not installed. Click to install.`;
     this.dispatchEvent(new CustomEvent('lsp-install-prompt', {
@@ -90,6 +98,11 @@ export class StatusBar extends TailwindElement() {
 
   public clearInstallProgress(): void {
     this.installProgress = null;
+    this.requestUpdate();
+  }
+
+  public dismissInstallError(languageId: string): void {
+    this.installFailed.delete(languageId);
     this.requestUpdate();
   }
 
@@ -115,10 +128,6 @@ export class StatusBar extends TailwindElement() {
         this.requestUpdate();
       }
 
-      if (showNotification) {
-        this.statusMessage = `Downloading ${serverName}...`;
-      }
-
       // Listen for progress events from backend (Tauri window events)
       const { listen } = await import('@tauri-apps/api/event');
       const unlisten = await listen('lsp-install-progress', (event: any) => {
@@ -130,27 +139,33 @@ export class StatusBar extends TailwindElement() {
 
       await unlisten();
       this.clearInstallProgress();
+      this.installFailed.delete(languageId); // Clear failed state on success
+
+      // Re-check status to update the indicator
+      await this.checkLspStatus();
 
       if (showNotification) {
-        this.statusMessage = result as string || `${serverName} ready!`;
+        this.statusMessage = `${serverName} ready`;
         this.dispatchEvent(new CustomEvent('lsp-install-complete', {
           detail: { languageId, success: true },
           bubbles: true,
         }));
       }
-
-      await this.checkLspStatus();
     } catch (error) {
       this.clearInstallProgress();
+      // Store error message for display
+      const errorMsg = error instanceof Object ? JSON.stringify(error) : String(error);
+      this.installFailed.set(languageId, errorMsg);
+      // Re-check status to update the indicator
+      await this.checkLspStatus();
       if (showNotification) {
-        this.statusMessage = `Failed to install: ${error}`;
+        this.statusMessage = `${serverName} install failed`;
         this.dispatchEvent(new CustomEvent('lsp-install-complete', {
-          detail: { languageId, success: false, error },
+          detail: { languageId, success: false, error: errorMsg },
           bubbles: true,
         }));
       }
       console.error('Failed to install LSP server:', error);
-      await this.checkLspStatus();
     }
   }
 
@@ -165,6 +180,12 @@ export class StatusBar extends TailwindElement() {
       return;
     }
 
+    // Skip if we already tried and failed
+    if (this.installFailed.has(languageId)) {
+      console.log(`[LSP] Skipping auto-install for ${serverInfo.server_name} - previous install failed`);
+      return;
+    }
+
     // Skip auto-install for very large servers (clangd is ~500MB)
     if (serverInfo.server_name === 'clangd') {
       console.log('[LSP] clangd is large (~500MB), waiting for user confirmation');
@@ -176,138 +197,183 @@ export class StatusBar extends TailwindElement() {
     await this.installLspServer(languageId, false);
   }
 
+  /**
+   * Get the error message for a failed install
+   */
+  public getInstallError(languageId: string): string | null {
+    return this.installFailed.get(languageId) || null;
+  }
+
+  /**
+   * Get the background style class for the status message
+   */
+  private getStatusMessageStyle(): string {
+    if (this.statusMessage.includes('failed')) {
+      return 'bg-red-50 text-red-700';
+    }
+    if (this.statusMessage.includes('ready')) {
+      return 'bg-green-50 text-green-700';
+    }
+    if (this.statusMessage.includes('Downloading')) {
+      return 'bg-indigo-50 text-indigo-700';
+    }
+    if (this.statusMessage.includes('not installed')) {
+      return 'bg-yellow-50 text-yellow-700';
+    }
+    return '';
+  }
+
+  /**
+   * Get the icon name for the status message
+   */
+  private getStatusMessageIcon(): string {
+    if (this.statusMessage.includes('failed')) {
+      return 'circle-dot';
+    }
+    if (this.statusMessage.includes('ready')) {
+      return 'check';
+    }
+    if (this.statusMessage.includes('Downloading')) {
+      return 'clock';
+    }
+    if (this.statusMessage.includes('not installed')) {
+      return 'circle-dot';
+    }
+    return 'check';
+  }
+
+  /**
+   * Get the icon color for the status message
+   */
+  private getStatusMessageColor(): string {
+    if (this.statusMessage.includes('failed')) {
+      return '#dc2626';
+    }
+    if (this.statusMessage.includes('ready')) {
+      return '#16a34a';
+    }
+    if (this.statusMessage.includes('Downloading')) {
+      return '#4f46e5';
+    }
+    if (this.statusMessage.includes('not installed')) {
+      return '#ca8a04';
+    }
+    return '#22c55e';
+  }
+
   public getActiveServerInfo(): LspServerInfo | null {
     if (!this.activeLanguage) return null;
     return this.lspStatus.find(s => s.language_id === this.activeLanguage) || null;
   }
 
-  private renderStatusItem(icon: ReturnType<typeof html>, label: string, hasHover = true): ReturnType<typeof html> {
-    return html`
-      <div class="flex items-center gap-1.5 ${hasHover ? 'hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors' : ''}">
-        ${icon}
-        <span>${label}</span>
-      </div>
-    `;
-  }
-
-  private renderIconButton(icon: ReturnType<typeof html>, title: string, onClick: () => void): ReturnType<typeof html> {
-    return html`
-      <button
-        class="p-1 hover:bg-[#eaeef2] hover:text-[#0969da] rounded transition-colors"
-        title="${title}"
-        @click=${onClick}>
-        ${icon}
-      </button>
-    `;
-  }
-
   render() {
-    const branchIcon = html`
-      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="18" r="3"/>
-        <circle cx="6" cy="6" r="3"/>
-        <circle cx="18" cy="6" r="3"/>
-        <path d="M6 9v3a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9"/>
-      </svg>
-    `;
-
-    const checkIcon = html`
-      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-        <polyline points="22 4 12 14.01 9 11.01"/>
-      </svg>
-    `;
-
-    const errorIcon = html`
-      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <line x1="15" y1="9" x2="9" y2="15"/>
-        <line x1="9" y1="9" x2="15" y2="15"/>
-      </svg>
-    `;
-
-    const warningIcon = html`
-      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-        <line x1="12" y1="9" x2="12" y2="13"/>
-        <line x1="12" y1="17" x2="12.01" y2="17"/>
-      </svg>
-    `;
-
-    const terminalIcon = html`
-      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="4 17 10 11 4 5"/>
-        <line x1="12" y1="19" x2="20" y2="19"/>
-      </svg>
-    `;
-
     return html`
       <div
         class="flex h-[28px] items-center justify-between px-3 bg-[#f6f8fa] border-t border-[#d0d7de] text-[#57606a] text-[12px] shrink-0 select-none">
 
         <!-- Left section -->
         <div class="flex items-center gap-3">
-          ${this.renderStatusItem(branchIcon, this.branch)}
+          <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+            <os-icon name="git-branch" size="12"></os-icon>
+            <span>${this.branch}</span>
+          </div>
 
           ${this.hasErrors
-            ? this.renderStatusItem(errorIcon, '0 Errors', true)
+            ? html`
+              <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+                <os-icon name="x" size="12" color="#ef4444"></os-icon>
+                <span>0 Errors</span>
+              </div>`
             : ''}
 
           ${this.hasWarnings
-            ? this.renderStatusItem(warningIcon, '0 Warnings', true)
+            ? html`
+              <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+                <os-icon name="circle-dot" size="12" color="#f59e0b"></os-icon>
+                <span>0 Warnings</span>
+              </div>`
             : ''}
 
-          ${this.renderStatusItem(checkIcon, this.statusMessage)}
+          <div class="flex items-center gap-1.5 px-2 py-0.5 rounded ${this.getStatusMessageStyle()}">
+            <os-icon name="${this.getStatusMessageIcon()}" size="12" color="${this.getStatusMessageColor()}"></os-icon>
+            <span>${this.statusMessage}</span>
+          </div>
 
           <!-- Terminal toggle button -->
-          ${this.renderIconButton(terminalIcon, 'Toggle Terminal (Ctrl+`)', () => {
-            this.dispatchEvent(new CustomEvent('toggle-terminal', { bubbles: true }));
-          })}
+          <button
+            class="p-1 hover:bg-[#eaeef2] hover:text-[#0969da] rounded transition-colors"
+            title="Toggle Terminal (Ctrl+\`)"
+            @click=${() => {
+              this.dispatchEvent(new CustomEvent('toggle-terminal', { bubbles: true }));
+            }}>
+            <os-icon name="terminal" size="14"></os-icon>
+          </button>
 
           <!-- LSP Status Indicator -->
           ${(() => {
             const serverInfo = this.getActiveServerInfo();
             if (!serverInfo) return html``;
             const isInstalling = this.installProgress !== null || (serverInfo as any).is_installing === true;
-            const statusIcon = isInstalling
-              ? html`<svg class="w-3 h-3 text-indigo-600 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
-                </svg>`
-              : serverInfo.is_installed
-                ? html`<svg class="w-3 h-3 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/>
-                  </svg>`
-                : html`<svg class="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
-                  </svg>`;
 
-            // Show progress bar when installing
-            if (isInstalling && this.installProgress) {
+            // Downloading state - clean single line
+            if (isInstalling) {
               return html`
-                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-indigo-50 border border-[#d0d7de] min-w-[200px]">
-                  ${statusIcon}
-                  <div class="flex-1">
-                    <div class="text-xs text-indigo-700 truncate">Downloading ${this.installProgress.serverName}...</div>
-                    <div class="w-full h-1.5 bg-[#eaeef2] rounded-full overflow-hidden">
-                      <div class="h-full bg-indigo-600 transition-all duration-200" style="width: ${this.installProgress.percentage}%"></div>
-                    </div>
-                    <div class="text-[10px] text-[#57606a] mt-0.5">${this.installProgress.stage} (${Math.round(this.installProgress.percentage)}%)</div>
-                  </div>
+                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-indigo-50 border border-[#d0d7de]">
+                  <os-icon name="clock" size="12" color="#4f46e5" class="animate-spin"></os-icon>
+                  <span class="text-indigo-700">Downloading ${serverInfo.server_name}...</span>
                 </div>
               `;
             }
 
-            return html`
-              <div class="flex items-center gap-2 px-2 py-0.5 rounded ${serverInfo.is_installed ? 'bg-green-50' : 'bg-yellow-50'} border border-[#d0d7de]">
-                ${statusIcon}
-                <span>${serverInfo.is_installed ? serverInfo.server_name : 'Install ' + serverInfo.server_name}</span>
-                ${!serverInfo.is_installed ? html`
+            const hasFailed = this.installFailed.has(serverInfo.language_id);
+            const errorMessage = this.getInstallError(serverInfo.language_id);
+
+            // Failed state
+            if (hasFailed) {
+              const displayError = errorMessage?.includes('not installed')
+                ? 'Go not installed'
+                : errorMessage?.includes('npm')
+                  ? 'Node.js not installed'
+                  : 'Install failed';
+
+              return html`
+                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-red-50 border border-[#d0d7de]">
+                  <os-icon name="circle-dot" size="12" color="#dc2626"></os-icon>
+                  <span class="text-red-700">${serverInfo.server_name}: ${displayError}</span>
                   <button
                     class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
                     @click=${() => this.installLspServer(serverInfo.language_id)}>
-                    Install
+                    Retry
                   </button>
-                ` : ''}
+                  <button
+                    class="ml-1 px-1.5 py-0.5 text-xs text-[#57606a] hover:text-[#24292f] transition-colors"
+                    @click=${() => this.dismissInstallError(serverInfo.language_id)}>
+                    <os-icon name="x" size="12"></os-icon>
+                  </button>
+                </div>
+              `;
+            }
+
+            // Installed state
+            if (serverInfo.is_installed) {
+              return html`
+                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-green-50 border border-[#d0d7de]">
+                  <os-icon name="check" size="12" color="#16a34a"></os-icon>
+                  <span class="text-green-700">${serverInfo.server_name} ready</span>
+                </div>
+              `;
+            }
+
+            // Not installed state
+            return html`
+              <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-yellow-50 border border-[#d0d7de]">
+                <os-icon name="circle-dot" size="12" color="#ca8a04"></os-icon>
+                <span class="text-yellow-700">${serverInfo.server_name} not installed</span>
+                <button
+                  class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
+                  @click=${() => this.installLspServer(serverInfo.language_id)}>
+                  Install
+                </button>
               </div>
             `;
           })()}
@@ -321,9 +387,15 @@ export class StatusBar extends TailwindElement() {
               </div>`
             : ''}
 
-          ${this.renderStatusItem(html``, `${this.spaces} spaces`, false)}
-          ${this.renderStatusItem(html``, this.encoding.toUpperCase(), false)}
-          ${this.renderStatusItem(html``, this.lineEnding, false)}
+          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+            ${this.spaces} spaces
+          </div>
+          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+            ${this.encoding.toUpperCase()}
+          </div>
+          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
+            ${this.lineEnding}
+          </div>
         </div>
       </div>
     `;

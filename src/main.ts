@@ -104,6 +104,8 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("locate-file", this.handleLocateFile);
     // Handle open-recent-project events from welcome screen
     document.addEventListener("open-recent-project", this.handleOpenRecentProject);
+    // Handle go-to-location events from Cmd+Click navigation
+    document.addEventListener("go-to-location", this.handleGoToLocation);
   }
 
   private handleLocateFile = (): void => {
@@ -116,6 +118,76 @@ export class OpenStormApp extends TailwindElement() {
         }),
       );
     }
+  };
+
+  private handleGoToLocation = async (e: CustomEvent<{ uri: string; line: number; column: number }>): Promise<void> => {
+    const { uri, line, column } = e.detail;
+
+    // Convert file:// URI to local path
+    const targetPath = uri.replace('file://', '');
+
+    console.log('[go-to-location] Navigating to:', targetPath, `line ${line + 1}, col ${column + 1}`);
+
+    // Check if target file is already open
+    const existingTab = this.tabs.find(t => t.path === targetPath);
+
+    if (existingTab) {
+      // Switch to existing tab
+      this.activeTabId = existingTab.id;
+      this.activeFilePath = targetPath;
+      this.saveStatus = existingTab.modified ? "unsaved" : "saved";
+      this.tabs = this.tabs.map(t =>
+        t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
+      );
+    } else {
+      // Open the file
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        const content = await invoke("read_file", { path: targetPath });
+        const name = targetPath.split("/").pop() || "";
+
+        const newTab: EditorTab = {
+          id: targetPath,
+          name,
+          path: targetPath,
+          modified: false,
+          content,
+          lastUsed: Date.now(),
+        };
+        this.tabs = [...this.tabs, newTab];
+        this.activeTabId = targetPath;
+        this.activeFilePath = targetPath;
+        this.saveStatus = "saved";
+        this.enforceTabLimit();
+
+        // Dispatch event for editor-pane to update its view
+        document.dispatchEvent(
+          new CustomEvent("open-file-external", {
+            detail: { path: targetPath, content },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      } catch (error) {
+        console.error("Failed to open target file:", error);
+        return;
+      }
+    }
+
+    // Wait for editor to be ready, then position cursor at definition
+    // Use requestAnimationFrame to ensure the editor has rendered
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Dispatch cursor position for the editor to restore
+        document.dispatchEvent(
+          new CustomEvent("restore-cursor-position", {
+            detail: { line: line + 1, column: column + 1 },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      });
+    });
   };
 
   private handleOpenRecentProject = async (e: CustomEvent<{ path: string }>): Promise<void> => {

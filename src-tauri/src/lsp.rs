@@ -317,6 +317,8 @@ impl LspClient {
             return Err("LSP server not initialized".to_string());
         }
 
+        eprintln!("[LSP] get_definition: uri={}, line={}, col={}, language={}", uri, line, column, language_id);
+
         self.did_open(uri, content, language_id)?;
 
         let params = GotoDefinitionParams {
@@ -330,26 +332,42 @@ impl LspClient {
             partial_result_params: Default::default(),
         };
 
+        eprintln!("[LSP] Sending definition request for position {}:{} ", line, column);
         let response: Result<JsonRpcResponse<GotoDefinitionResponse>, String> = self.send_request("textDocument/definition", params);
         let response = match response {
             Ok(r) => r,
-            Err(e) => return Err(e),
+            Err(e) => {
+                eprintln!("[LSP] Definition request error: {}", e);
+                return Err(e);
+            }
         };
 
         if let Some(error) = response.error {
+            eprintln!("[LSP] Definition error response: {}", error.message);
             return Err(format!("LSP definition error: {}", error.message));
         }
 
+        eprintln!("[LSP] Definition response has result: {}", response.result.is_some());
         match response.result {
-            Some(GotoDefinitionResponse::Scalar(location)) => Ok(vec![location]),
-            Some(GotoDefinitionResponse::Array(locations)) => Ok(locations),
+            Some(GotoDefinitionResponse::Scalar(location)) => {
+                eprintln!("[LSP] Found definition (scalar): {:?}", location.uri);
+                Ok(vec![location])
+            },
+            Some(GotoDefinitionResponse::Array(locations)) => {
+                eprintln!("[LSP] Found {} definition(s)", locations.len());
+                Ok(locations)
+            },
             Some(GotoDefinitionResponse::Link(links)) => {
+                eprintln!("[LSP] Found {} definition link(s)", links.len());
                 Ok(links.into_iter().map(|link| Location {
                     uri: link.target_uri,
                     range: link.target_selection_range,
                 }).collect())
             }
-            None => Ok(Vec::new()),
+            None => {
+                eprintln!("[LSP] No definition found");
+                Ok(Vec::new())
+            }
         }
     }
 
