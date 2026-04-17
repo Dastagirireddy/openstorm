@@ -3,6 +3,7 @@
 mod commands;
 mod file_watcher;
 mod lsp;
+mod lsp_installer;
 mod terminal;
 mod templates;
 
@@ -33,6 +34,22 @@ fn main() {
             templates::get_template,
             templates::create_project,
             templates::open_folder_dialog,
+            lsp::format_rust,
+            lsp::format_go,
+            lsp::format_python,
+            lsp::format_cpp,
+            lsp::format_javascript,
+            lsp::format_typescript,
+            lsp::get_lsp_server_status,
+            lsp::install_lsp_server,
+            lsp::initialize_lsp_pool,
+            lsp::get_completions,
+            lsp::get_hover,
+            lsp::get_definition,
+            lsp::notify_document_opened,
+            lsp::notify_document_changed,
+            lsp::notify_document_closed,
+            lsp::notify_document_saved,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -50,7 +67,7 @@ fn main() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
+        .run(|_app_handle, event| {
             if let RunEvent::WindowEvent { label, event, .. } = event {
                 if label == "main" {
                     match event {

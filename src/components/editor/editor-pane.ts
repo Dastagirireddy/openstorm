@@ -1,9 +1,14 @@
 import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
-import { EditorView, basicSetup } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { keymap, placeholder } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate } from '@codemirror/view';
+import { EditorState, EditorSelection } from '@codemirror/state';
+import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
+import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
+import { tags as t } from '@lezer/highlight';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { Facet } from '@codemirror/state';
+
+// Language Imports
 import { rust } from '@codemirror/lang-rust';
 import { javascript } from '@codemirror/lang-javascript';
 import { go } from '@codemirror/lang-go';
@@ -17,49 +22,136 @@ import { yaml } from '@codemirror/lang-yaml';
 import { java } from '@codemirror/lang-java';
 import { sql } from '@codemirror/lang-sql';
 import { php } from '@codemirror/lang-php';
-import { bracketMatching, indentOnInput, foldGutter, foldKeymap } from '@codemirror/language';
-import { highlightActiveLineGutter, drawSelection, dropCursor, highlightActiveLine } from '@codemirror/view';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
+
 import { TailwindElement } from '../../tailwind-element.js';
-import type { EditorTab } from '../../lib/file-types.js';
+import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
 import { getFileExtension } from '../../lib/file-icons.js';
-import '../icon.js';
+import type { EditorTab } from '../../lib/file-types.js';
+import {
+  getCompletions,
+  getHover,
+  getDefinition,
+  notifyDocumentOpened,
+  notifyDocumentChanged,
+  notifyDocumentClosed,
+  completionKindToType,
+  getCompletionIcon,
+  formatHoverContent,
+  pathToFileUri,
+} from '../../lib/lsp-client.js';
+import {
+  autocompletion,
+  CompletionContext,
+  CompletionResult,
+  Completion,
+} from '@codemirror/autocomplete';
+import { hoverTooltip, HoverTooltip } from '@codemirror/view';
+
+/**
+ * IntelliJ Classic Light Theme Constants
+ */
+const IJ_COLORS = {
+  background: '#ffffff',
+  gutterBackground: '#f0f0f0',
+  gutterBorder: '#d1d1d1',
+  activeLine: '#e4ffaf7a', 
+  selection: '#2142832e',
+  lineNumbers: '#adadad',
+};
+
+const intellijLightHighlight = HighlightStyle.define([
+  { tag: [t.keyword, t.modifier], color: '#0033b3', fontWeight: 'bold' },
+  { tag: [t.definition(t.variableName), t.function(t.variableName)], color: '#00627a' },
+  { tag: t.propertyName, color: '#871094' },
+  { tag: t.string, color: '#067d17' },
+  { tag: t.number, color: '#1750eb' },
+  { tag: [t.comment, t.lineComment], color: '#8c8c8c', fontStyle: 'italic' },
+  { tag: t.meta, color: '#9e880d' }, 
+  { tag: t.operator, color: '#000000' },
+  { tag: t.bracket, color: '#000000' }
+]);
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
-  @query('#editor-container') private editorContainer!: HTMLElement;
-
   @state() tabs: EditorTab[] = [];
   @state() activeTabId: string = '';
-  @state() tabLimit = 10;
-  @state() autoSaveEnabled: boolean = true;
-  @state() autoSaveDelay: number = 1000; // 1 second
 
   private editorView: EditorView | null = null;
-  private autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _isInitialTabLoad = true;
+  private _currentLanguage: string = '';
+  private _savedContent: Map<string, string> = new Map();
+  private _definitionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _lastCheckedPosition: string | null = null;
+  private _lastHasDefinition: boolean = false;
 
-  private get activeTab(): EditorTab | undefined {
-    return this.tabs.find(t => t.id === this.activeTabId);
+  /**
+   * Detects the indentation unit from file content
+   * Analyzes the first 100 lines to find the most common indentation
+   * Falls back to language-specific defaults for empty files
+   */
+  private detectIndentUnit(content: string, path?: string): string {
+    // For empty files, use language-specific defaults
+    if (!content || !content.trim()) {
+      if (path) {
+        const ext = getFileExtension(path).toLowerCase();
+        // JS/TS typically use 2 spaces
+        if (['ts', 'tsx', 'js', 'jsx', 'mjs'].includes(ext)) {
+          return '  ';
+        }
+        // Go, Rust, Python typically use 4 spaces (or tabs for Go)
+        if (['go', 'rs', 'py'].includes(ext)) {
+          return '    ';
+        }
+      }
+      // Default to 4 spaces
+      return '    ';
+    }
+
+    const lines = content.split('\n').slice(0, 100);
+    const indentCounts = new Map<number, number>();
+
+    for (const line of lines) {
+      if (!line.trim()) continue; // Skip empty lines
+
+      const match = line.match(/^(\t+)/);
+      if (match && match[1].length > 0) {
+        // Tab indentation
+        indentCounts.set(1, (indentCounts.get(1) || 0) + 1);
+        continue;
+      }
+
+      const spaces = line.match(/^( +)/);
+      if (spaces) {
+        const count = spaces[1].length;
+        // Count common indent sizes (2, 4, 8 spaces)
+        if (count >= 2) {
+          const normalized = count >= 8 ? 8 : count >= 4 ? 4 : 2;
+          indentCounts.set(normalized, (indentCounts.get(normalized) || 0) + 1);
+        }
+      }
+    }
+
+    // Find most common indent size
+    let maxCount = 0;
+    let indentSize = 4; // Default to 4 spaces
+
+    for (const [size, count] of indentCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        indentSize = size;
+      }
+    }
+
+    // Return indent unit string
+    if (indentSize === 1) return '\t';
+    return ' '.repeat(indentSize);
   }
 
-  connectedCallback(): void {
-    super.connectedCallback();
-    document.addEventListener('open-file', this._handleOpenFile as EventListener);
-    document.addEventListener('open-file-external', this._handleOpenFile as EventListener);
-    document.addEventListener('clear-editor', this._handleClearEditor as EventListener);
-  }
-
-  disconnectedCallback(): void {
-    super.disconnectedCallback();
-    document.removeEventListener('open-file', this._handleOpenFile as EventListener);
-    document.removeEventListener('open-file-external', this._handleOpenFile as EventListener);
-    document.removeEventListener('clear-editor', this._handleClearEditor as EventListener);
-    this.editorView?.destroy();
-  }
-
+  /**
+   * Maps file paths to CodeMirror language extensions
+   */
   private getLanguageExtension(path: string) {
-    const ext = getFileExtension(path);
+    const ext = getFileExtension(path).toLowerCase();
     switch (ext) {
       case 'rs': return rust();
       case 'ts': case 'tsx': case 'js': case 'jsx': case 'mjs': return javascript();
@@ -74,376 +166,986 @@ export class EditorPane extends TailwindElement() {
       case 'java': return java();
       case 'sql': return sql();
       case 'php': return php();
-      case 'sh': case 'bash': case 'zsh': case 'rb': return javascript();
       default: return javascript();
     }
   }
 
-  // Custom light theme syntax highlighting
-  private static lightTheme = HighlightStyle.define([
-    { tag: t.keyword, color: '#0000ff', fontWeight: 'bold' },
-    { tag: t.atom, color: '#0000ff' },
-    { tag: t.number, color: '#098658' },
-    { tag: t.comment, color: '#808080', fontStyle: 'italic' },
-    { tag: t.string, color: '#a31515' },
-    { tag: t.variableName, color: '#001080' },
-    { tag: t.propertyName, color: '#001080' },
-    { tag: t.typeName, color: '#267f99' },
-    { tag: t.function(t.variableName), color: '#795e26' },
-    { tag: t.macroName, color: '#795e26' },
-    { tag: t.operator, color: '#000000' },
-    { tag: t.className, color: '#267f99' },
-    { tag: t.definition(t.typeName), color: '#267f99' },
-    { tag: t.angleBracket, color: '#808080' },
-    { tag: t.bracket, color: '#000000' },
-    { tag: t.paren, color: '#000000' },
-    { tag: t.squareBracket, color: '#000000' },
-    { tag: t.tagName, color: '#800000' },
-    { tag: t.attributeName, color: '#ff0000' },
-    { tag: t.content, color: '#000000' },
-    { tag: t.null, color: '#0000ff' },
-    { tag: t.bool, color: '#0000ff' },
-  ]);
-
-  private createEditorView(content: string): EditorView {
-    const language = this.activeTab ? this.getLanguageExtension(this.activeTab.path) : undefined;
-
-    return new EditorView({
-      state: EditorState.create({
-        doc: content,
-        extensions: [
-          // Core extensions
-          EditorState.tabSize.of(4),
-          EditorState.allowMultipleSelections.of(true),
-
-          // Language support
-          language,
-          bracketMatching(),
-          indentOnInput(),
-
-          // Folding - using cleaner icons
-          foldGutter({
-            openText: '−',
-            closedText: '+',
-          }),
-
-          // Selection & cursor
-          drawSelection(),
-          dropCursor(),
-          highlightActiveLineGutter(),
-          highlightActiveLine(),
-
-          // History
-          history(),
-
-          // Keymaps
-          keymap.of([
-            ...defaultKeymap,
-            ...historyKeymap,
-            ...foldKeymap,
-          ]),
-
-          // Custom theme
-          syntaxHighlighting(this.lightTheme),
-          EditorView.theme({
-            '&': {
-              fontSize: '14px',
-              fontFamily: "'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Monaco, monospace",
-              lineHeight: '1.6',
-              background: '#ffffff',
-              color: '#1a1a1a',
-              height: '100%',
-            },
-            '.cm-content': {
-              padding: '4px 0',
-              color: '#1a1a1a',
-              '&:empty': { height: '1em' },
-            },
-            '.cm-line': { padding: '0 4px' },
-            '.cm-scroller': {
-              overflow: 'auto',
-              height: '100%',
-              outline: 'none !important',
-            },
-            '.cm-gutters': {
-              background: '#f7f7f7',
-              borderRight: '1px solid #c7c7c7',
-              color: '#5a5a5a',
-              fontSize: '13px',
-              border: 'none',
-              paddingRight: '2px',
-            },
-            '.cm-gutter': {
-              '& .foldGutter': { color: '#5a5a5a' },
-              '& .foldGutter:hover': { color: '#1a1a1a', cursor: 'pointer' },
-            },
-            '.cm-foldGutter': { width: '15px' },
-            '.cm-lineNumbers': {
-              minWidth: '50px',
-              '& .activeLine': { color: '#1a1a1a' },
-            },
-            '.cm-activeLineGutter': {
-              background: '#e8e8e8',
-              color: '#1a1a1a',
-              fontWeight: '600',
-            },
-            '.cm-activeLine': { background: '#e8e8e880' },
-            '.cm-selectionBackground': { background: '#b3d4ff' },
-            '.cm-focused .cm-selectionBackground': { background: '#b3d4ff' },
-            '.cm-cursor': { borderLeftColor: '#1a1a1a' },
-            '.cm-matchingBracket': {
-              background: '#e8e8e8',
-              borderBottom: '1px solid #3592c4',
-              fontWeight: '600',
-            },
-            // Syntax colors
-            '.cm-keyword': { color: '#0000ff', fontWeight: 'bold' },
-            '.cm-atom': { color: '#0000ff' },
-            '.cm-number': { color: '#098658' },
-            '.cm-comment': { color: '#808080', fontStyle: 'italic' },
-            '.cm-string': { color: '#a31515' },
-            '.cm-variable': { color: '#001080' },
-            '.cm-variableName': { color: '#001080' },
-            '.cm-property': { color: '#001080' },
-            '.cm-propertyName': { color: '#001080' },
-            '.cm-typeName': { color: '#267f99' },
-            '.cm-function': { color: '#795e26' },
-            '.cm-operator': { color: '#000000' },
-            '.cm-class': { color: '#267f99' },
-            '.cm-tag': { color: '#800000' },
-            '.cm-attribute': { color: '#ff0000' },
-            '.cm-bool': { color: '#0000ff' },
-            '.cm-null': { color: '#0000ff' },
-          }),
-
-          // Update listener for content changes + auto-save + cursor position
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged && this.activeTab) {
-              // Dispatch content changed event
-              this.dispatchEvent(new CustomEvent('content-changed', {
-                detail: { path: this.activeTab.path, content: update.state.doc.toString() },
-                bubbles: true,
-                composed: true,
-              }));
-
-              // Trigger auto-save if enabled
-              if (this.autoSaveEnabled) {
-                this.triggerAutoSave();
-              }
-            }
-
-            // Track cursor position changes
-            if (update.selectionSet) {
-              const pos = update.state.selection.main.head;
-              const line = update.state.doc.lineAt(pos);
-              const col = pos - line.from + 1;
-              const lineNum = line.number;
-
-              this.dispatchEvent(new CustomEvent('cursor-position', {
-                detail: { line: lineNum, column: col },
-                bubbles: true,
-                composed: true,
-              }));
-            }
-          }),
-        ],
+  /**
+   * Generates the core extension stack for IntelliJ look and feel
+   * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
+   */
+  private getCommonExtensions(indentUnitStr: string = "    ") {
+    return [
+      EditorState.tabSize.of(4),
+      indentUnit.of(indentUnitStr),
+      lineNumbers(),
+      highlightActiveLineGutter(),
+      ...customFoldGutter(),
+      history(),
+      drawSelection(),
+      dropCursor(),
+      highlightActiveLine(),
+      bracketMatching(),
+      indentOnInput(),
+      // indentationMarkers with "fullScope" tracks both tabs and spaces
+      indentationMarkers({
+        highlightActiveBlock: true,
+        markerType: "fullScope",
+        thickness: 1,
+        activeThickness: 1,
+        colors: {
+          light: '#d0d0d0',
+          dark: '#505050',
+          activeLight: '#b0b0b0',
+          activeDark: '#707070',
+        },
       }),
-      parent: this.editorContainer,
-    });
+      syntaxHighlighting(intellijLightHighlight),
+      // Keymap order matters - historyKeymap must come before defaultKeymap
+      // so undo/redo takes precedence
+      // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z
+      keymap.of([
+        {
+          key: 'Mod-z',
+          run: (view) => {
+            console.log('[Editor] Undo key pressed (Mod-z)');
+            return undo(view.dispatch);
+          },
+        },
+        {
+          key: 'Mod-y',
+          run: (view) => {
+            console.log('[Editor] Redo key pressed (Mod-y)');
+            return redo(view.dispatch);
+          },
+        },
+        {
+          key: 'Mod-Shift-z',
+          run: (view) => {
+            console.log('[Editor] Redo key pressed (Mod-Shift-z)');
+            return redo(view.dispatch);
+          },
+        },
+        ...historyKeymap,
+        ...defaultKeymap,
+        ...foldKeymap,
+      ]),
+
+      // LSP Intellisense
+      autocompletion({
+        override: [this._lspCompletionSource.bind(this)],
+        activateOnTyping: true,
+        activateOnTypingDelay: 50,
+        minChars: 1,
+        maxRenderedOptions: 10,
+        defaultKeymap: true,
+      }),
+      hoverTooltip(this._lspHoverTooltip.bind(this), {
+        hoverTime: 500,
+      }),
+
+      // Theme matching IntelliJ Classic
+      EditorView.theme({
+        "&": {
+          height: "100%",
+          fontSize: "15px",
+          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+          backgroundColor: IJ_COLORS.background,
+          direction: "ltr !important",
+        },
+        ".cm-content": {
+          padding: "10px 0",
+          direction: "ltr !important",
+          caretColor: "#000000",
+          cursor: "text",
+        },
+        // Use 2px padding to match library's expected padding for indent markers
+        ".cm-line": {
+          padding: "0 2px",
+          cursor: "text",
+        },
+        ".cm-gutters": {
+          backgroundColor: IJ_COLORS.gutterBackground,
+          color: IJ_COLORS.lineNumbers,
+          borderRight: `1px solid ${IJ_COLORS.gutterBorder}`,
+          border: "none",
+          direction: "ltr !important",
+        },
+        ".cm-activeLine": { backgroundColor: IJ_COLORS.activeLine },
+        ".cm-activeLineGutter": { backgroundColor: "#d4ebf7", color: "#000000" },
+        ".cm-lineNumbers .cm-gutterElement": {
+          padding: "0 8px 0 12px",
+          minWidth: "40px"
+        },
+        ".cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
+        "&.cm-focused .cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
+        ".cm-cursor": { borderLeft: "2px solid #000000" },
+        // Pointer cursor when hovering over a definition (Cmd+Click target)
+        "&.cm-has-definition .cm-content, &.cm-has-definition .cm-line": {
+          cursor: "pointer !important",
+        },
+        // Autocomplete styling - IntelliJ style
+        ".cm-tooltip-autocomplete": {
+          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+          fontSize: "13px",
+          padding: "0",
+          backgroundColor: "#ffffff",
+          border: "1px solid #c7c7c7",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
+          borderRadius: "4px",
+          overflow: "hidden",
+        },
+        ".cm-tooltip-autocomplete ul": {
+          padding: "4px 0",
+          margin: "0",
+        },
+        ".cm-tooltip-autocomplete ul li": {
+          padding: "4px 12px",
+          margin: "0",
+          cursor: "default",
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          color: "#000000",
+        },
+        ".cm-tooltip-autocomplete ul li[aria-selected]": {
+          backgroundColor: "#4f46e5",
+          color: "#ffffff !important",
+        },
+        ".cm-tooltip-autocomplete ul li[aria-selected] .cm-completionLabel, .cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail": {
+          color: "#ffffff !important",
+        },
+        // Completion item type icons/colors
+        ".cm-tooltip-autocomplete .cm-completionLabel": {
+          fontWeight: "500",
+          color: "#000000",
+        },
+        ".cm-tooltip-autocomplete .cm-completionDetail": {
+          color: "#666666",
+          marginLeft: "8px",
+          fontSize: "12px",
+        },
+        // Type-specific colors (matching IntelliJ)
+        ".cm-tooltip-autocomplete .cm-completionIcon-method, .cm-tooltip-autocomplete .cm-completionIcon-function": {
+          color: "#871094",
+        },
+        ".cm-tooltip-autocomplete .cm-completionIcon-variable, .cm-tooltip-autocomplete .cm-completionIcon-field": {
+          color: "#00627a",
+        },
+        ".cm-tooltip-autocomplete .cm-completionIcon-class, .cm-tooltip-autocomplete .cm-completionIcon-interface": {
+          color: "#0033b3",
+        },
+        ".cm-tooltip-autocomplete .cm-completionIcon-keyword": {
+          color: "#0033b3",
+        },
+        // Hover tooltip - IntelliJ style (exact match)
+        ".cm-tooltip": {
+          padding: "0",
+          maxWidth: "450px",
+          backgroundColor: "#ffffff",
+          color: "#1d1d1d",
+          fontFamily: "'Inter', system-ui, sans-serif",
+          fontSize: "12px",
+          border: "1px solid #c9c9c9",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          borderRadius: "0",
+        },
+        ".cm-tooltip .cm-tooltip-hover": {
+          padding: "0",
+        },
+        // Top header with error message
+        ".cm-tooltip .tooltip-top-header": {
+          padding: "4px 8px",
+          display: "flex",
+          justifyContent: "space-between",
+          color: "#1d1d1d",
+        },
+        ".cm-tooltip .tooltip-top-header .error-msg": {
+          fontSize: "11px",
+          color: "#666666",
+        },
+        ".cm-tooltip .tooltip-top-header .menu-icon": {
+          color: "#888888",
+          cursor: "pointer",
+          fontSize: "14px",
+        },
+        // Quick actions bar
+        ".cm-tooltip .intellij-actions": {
+          display: "flex",
+          gap: "12px",
+          padding: "2px 8px 6px 8px",
+        },
+        ".cm-tooltip .intellij-actions .action-item": {
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+        },
+        ".cm-tooltip .intellij-actions .action-link": {
+          color: "#2470b3",
+          cursor: "pointer",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .intellij-actions .action-shortcut": {
+          color: "#909090",
+          fontSize: "10px",
+        },
+        // Divider
+        ".cm-tooltip .intellij-divider": {
+          border: "none",
+          borderTop: "1px solid #ebebeb",
+          margin: "0",
+        },
+        // Signature
+        ".cm-tooltip .tooltip-signature": {
+          padding: "8px",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .tooltip-signature code": {
+          color: "#1d1d1d",
+        },
+        ".cm-tooltip .tooltip-signature .keyword": {
+          color: "#871094",
+          fontWeight: "bold",
+        },
+        ".cm-tooltip .tooltip-signature .variable": {
+          color: "#1d1d1d",
+        },
+        ".cm-tooltip .tooltip-signature .type": {
+          color: "#0033b3",
+        },
+        // Availability bar
+        ".cm-tooltip .availability-bar": {
+          padding: "6px 8px",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          color: "#595959",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .availability-bar .check-icon": {
+          color: "#4fa54f",
+          fontWeight: "bold",
+          fontSize: "12px",
+        },
+        ".cm-tooltip .availability-bar .avail-text": {
+          flex: "1",
+        },
+        ".cm-tooltip .availability-bar .chevron-icon": {
+          color: "#888888",
+          fontSize: "12px",
+        },
+        // Body content
+        ".cm-tooltip .tooltip-body": {
+          padding: "8px",
+          lineHeight: "1.5",
+          fontSize: "11px",
+          color: "#333333",
+        },
+        ".cm-tooltip .tooltip-body p": {
+          margin: "0 0 6px 0",
+        },
+        ".cm-tooltip .tooltip-body p:last-child": {
+          margin: "0",
+        },
+        ".cm-tooltip .tooltip-body code": {
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: "10px",
+          backgroundColor: "#f5f5f5",
+          padding: "1px 4px",
+          borderRadius: "2px",
+          border: "1px solid #e8e8e8",
+        },
+        ".cm-tooltip .tooltip-body pre": {
+          backgroundColor: "#f9f9f9",
+          border: "1px solid #e8e8e8",
+          borderRadius: "2px",
+          padding: "8px",
+          overflow: "auto",
+          fontSize: "10px",
+          margin: "6px 0",
+          fontFamily: "'JetBrains Mono', monospace",
+        },
+        ".cm-tooltip .tooltip-body .kw": { color: "#871094", fontWeight: "bold" },
+        ".cm-tooltip .tooltip-body .type": { color: "#0033b3" },
+        ".cm-tooltip .tooltip-body .string": { color: "#067d17" },
+        ".cm-tooltip .tooltip-body .comment": { color: "#999999", fontStyle: "italic" },
+        // Footer
+        ".cm-tooltip .tooltip-footer": {
+          padding: "8px",
+          borderTop: "1px solid #ebebeb",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          fontSize: "10px",
+        },
+        ".cm-tooltip .tooltip-footer .ts-badge": {
+          background: "#3178c6",
+          color: "white",
+          fontSize: "9px",
+          padding: "1px 3px",
+          borderRadius: "2px",
+          fontWeight: "bold",
+        },
+        ".cm-tooltip .tooltip-footer .footer-meta": {
+          color: "#888888",
+        },
+        ".cm-tooltip .tooltip-footer .mdn-link": {
+          color: "#2470b3",
+          textDecoration: "none",
+          marginLeft: "auto",
+        },
+        ".cm-tooltip .tooltip-footer .mdn-link:hover": {
+          textDecoration: "underline",
+        },
+      }),
+
+      // Listen for changes and cursor position updates
+      EditorView.updateListener.of((update: ViewUpdate) => {
+        if (update.docChanged) {
+          const content = update.state.doc.toString();
+          this._handleContentChange(content);
+          this._notifyDocumentChanged(content);
+        }
+        // Track cursor position per tab on selection changes
+        if (update.selectionSet) {
+          const pos = update.state.selection.main.head;
+          const line = update.state.doc.lineAt(pos);
+          const column = pos - line.from;
+
+          // Update cursor position in the active tab
+          const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+          if (activeTab) {
+            activeTab.cursorLine = line.number;
+            activeTab.cursorCol = column + 1;
+          }
+
+          // Dispatch cursor position for status bar
+          document.dispatchEvent(new CustomEvent('cursor-position', {
+            detail: { line: line.number, column: column + 1 },
+            bubbles: true,
+            composed: true,
+          }));
+        }
+      }),
+
+      // Click handler and hover feedback for Ctrl+Click go-to-definition
+      EditorView.domEventHandlers({
+        click: (event, view) => {
+          if ((event.ctrlKey || event.metaKey) && view.state.selection.main) {
+            this._handleGoToDefinition(view);
+            return true;
+          }
+          return false;
+        },
+        mousemove: (event, view) => {
+          const isCtrlOrMeta = event.ctrlKey || event.metaKey;
+          if (isCtrlOrMeta) {
+            // Show pointer cursor immediately when Cmd is held
+            view.dom.classList.add('cm-has-definition');
+
+            const rect = view.dom.getBoundingClientRect();
+            const pos = view.posAtCoords({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+            if (pos !== null) {
+              const line = view.state.doc.lineAt(pos);
+              const column = pos - line.from;
+              this._checkDefinitionAtPosition(view, line.number - 1, column);
+            }
+          } else {
+            view.dom.classList.remove('cm-has-definition');
+          }
+          return false;
+        },
+        keyup: (event, view) => {
+          if (event.key === 'Control' || event.key === 'Meta') {
+            view.dom.classList.remove('cm-has-definition');
+            if (this._definitionCheckTimeout) {
+              clearTimeout(this._definitionCheckTimeout);
+              this._definitionCheckTimeout = null;
+            }
+          }
+          return false;
+        },
+      })
+    ];
   }
 
-  private triggerAutoSave(): void {
-    // Clear existing timeout
-    if (this.autoSaveTimeout) {
-      clearTimeout(this.autoSaveTimeout);
+  /**
+   * Check if there's a definition at the given position and update cursor style
+   */
+  private _checkDefinitionAtPosition(view: EditorView, line: number, column: number): void {
+    // Clear any pending check
+    if (this._definitionCheckTimeout) {
+      clearTimeout(this._definitionCheckTimeout);
     }
 
-    // Set new timeout
-    this.autoSaveTimeout = setTimeout(() => {
-      if (this.activeTab) {
-        this.saveActiveFile();
+    this._definitionCheckTimeout = setTimeout(async () => {
+      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+      if (!activeTab) return;
+
+      const ext = getFileExtension(activeTab.path);
+      const languageMap: Record<string, string> = {
+        'rs': 'rust',
+        'go': 'go',
+        'py': 'python',
+        'cpp': 'cpp',
+        'c': 'c',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'js': 'javascript',
+        'jsx': 'javascript',
+      };
+      const languageId = languageMap[ext];
+      if (!languageId) return;
+
+      try {
+        const locations = await getDefinition(
+          languageId,
+          activeTab.path,
+          view.state.doc.toString(),
+          line,
+          column
+        );
+
+        if (locations.length > 0) {
+          view.dom.classList.add('cm-has-definition');
+        } else {
+          view.dom.classList.remove('cm-has-definition');
+        }
+      } catch (error) {
+        view.dom.classList.remove('cm-has-definition');
       }
-    }, this.autoSaveDelay);
+    }, 30);
   }
 
-  private async saveActiveFile(): Promise<void> {
+  /**
+   * Handle Ctrl+Click go-to-definition
+   */
+  private async _handleGoToDefinition(view: EditorView): Promise<void> {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!activeTab || !activeTab.modified) return;
+    if (!activeTab) return;
+
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+    const languageId = languageMap[ext];
+    if (!languageId) return;
+
+    const pos = view.state.selection.main.head;
+    const line = view.state.doc.lineAt(pos);
+    const column = pos - line.from;
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('write_file', {
-        path: activeTab.path,
-        content: activeTab.content,
-      });
-
-      this.tabs = this.tabs.map(t =>
-        t.id === activeTab.id ? { ...t, modified: false } : t
+      const locations = await getDefinition(
+        languageId,
+        activeTab.path,
+        view.state.doc.toString(),
+        line.number - 1,
+        column
       );
 
-      this.dispatchEvent(new CustomEvent('auto-saved', {
-        detail: { path: activeTab.path },
+      if (locations.length === 0) {
+        console.log('[LSP] No definition found');
+        return;
+      }
+
+      // Navigate to the first location
+      const loc = locations[0];
+      console.log('[LSP] Going to definition:', loc);
+
+      // Convert file:// URI to local path for comparison
+      const targetPath = loc.uri.replace('file://', '');
+      const isSameFile = targetPath === activeTab.path;
+
+      // Show status message
+      const statusBar = document.querySelector('status-bar') as any;
+      if (statusBar) {
+        statusBar.setStatusMessage(`Jumping to ${loc.uri.split('/').pop()}:${loc.start_line + 1}`);
+      }
+
+      // Dispatch event to navigate to the definition
+      document.dispatchEvent(new CustomEvent('go-to-location', {
+        detail: {
+          uri: loc.uri,
+          line: loc.start_line,
+          column: loc.start_char,
+        },
         bubbles: true,
         composed: true,
       }));
     } catch (error) {
-      console.error('Auto-save failed:', error);
+      console.error('[Editor] LSP definition error:', error);
     }
   }
 
-  private renderWelcome(): ReturnType<typeof html> {
-    return html`
-      <div class="flex flex-col items-center justify-center h-full bg-white px-8">
-        <div class="flex flex-col items-center mb-4">
-          <os-brand-logo size="64"></os-brand-logo>
-        </div>
-        <div class="flex flex-col items-center mb-8">
-          <h1 class="text-[28px] font-bold text-[#1a1a1a]">OpenStorm</h1>
-          <p class="text-[12px] text-[#5a5a5a]">Enterprise-grade IDE</p>
-        </div>
-
-        <p class="text-[13px] text-[#5a5a5a] mb-8 max-w-[400px] text-center">
-          Start coding by opening a file or folder. Use keyboard shortcuts for quick access.
-        </p>
-
-        <div class="flex flex-col gap-2 w-full max-w-[420px]">
-          <div class="flex items-center gap-2 mb-1">
-            <svg class="w-4 h-4 text-[#3592c4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-            <span class="text-[11px] font-semibold text-[#5a5a5a] uppercase tracking-wide">Start</span>
-          </div>
-
-          <div
-            class="flex items-center gap-3 px-4 py-3 bg-[#f7f7f7] rounded-lg cursor-pointer transition-colors hover:bg-[#e8e8e8] hover:shadow-sm group border border-transparent hover:border-[#c7c7c7]"
-            @click=${() => this.dispatchEvent(new CustomEvent('open-folder'))}>
-            <div class="w-9 h-9 rounded-lg bg-[#e8e8e8] flex items-center justify-center flex-shrink-0 group-hover:bg-white transition-colors">
-              <svg class="w-5 h-5 text-[#5a5a5a] group-hover:text-[#3592c4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="text-[13px] font-medium text-[#1a1a1a]">Open Folder</div>
-              <div class="text-[11px] text-[#8a8a8a]">Open an entire project folder</div>
-            </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <span class="px-1.5 py-0.5 bg-white rounded text-[10px] font-medium text-[#5a5a5a] border border-[#e0e0e0]">⌘</span>
-              <span class="px-1.5 py-0.5 bg-white rounded text-[10px] font-medium text-[#5a5a5a] border border-[#e0e0e0]">K</span>
-              <span class="px-1.5 py-0.5 bg-white rounded text-[10px] font-medium text-[#5a5a5a] border border-[#e0e0e0]">O</span>
-            </div>
-          </div>
-
-          <div
-            class="flex items-center gap-3 px-4 py-3 bg-[#f7f7f7] rounded-lg cursor-pointer transition-colors hover:bg-[#e8e8e8] hover:shadow-sm group border border-transparent hover:border-[#c7c7c7]"
-            @click=${() => this.dispatchEvent(new CustomEvent('quick-search'))}>
-            <div class="w-9 h-9 rounded-lg bg-[#e8e8e8] flex items-center justify-center flex-shrink-0 group-hover:bg-white transition-colors">
-              <svg class="w-5 h-5 text-[#5a5a5a] group-hover:text-[#3592c4]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.35-4.35"/>
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <div class="text-[13px] font-medium text-[#1a1a1a]">Quick Open</div>
-              <div class="text-[11px] text-[#8a8a8a]">Search and open files quickly</div>
-            </div>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <span class="px-1.5 py-0.5 bg-white rounded text-[10px] font-medium text-[#5a5a5a] border border-[#e0e0e0]">⌘</span>
-              <span class="px-1.5 py-0.5 bg-white rounded text-[10px] font-medium text-[#5a5a5a] border border-[#e0e0e0]">P</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  render() {
-    const hasContent = this.tabs.length > 0 || this.activeTab;
-
-    // Don't show welcome screen - parent (main.ts) handles it when no project is open
-    if (!hasContent) {
-      return html`<div class="flex items-center justify-center h-full bg-white"></div>`;
+  /**
+   * LSP completion source for CodeMirror
+   */
+  private async _lspCompletionSource(context: CompletionContext): Promise<CompletionResult | null> {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) {
+      return null;
     }
 
-    return html`
-      <div class="flex flex-col h-full overflow-hidden bg-white">
-        <!-- Tab bar slot - parent renders tabs -->
-        <slot name="tab-bar"></slot>
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+    const languageId = languageMap[ext];
+    if (!languageId) {
+      return null;
+    }
 
-        <!-- Editor container -->
-        <div id="editor-container" class="flex-1 overflow-hidden"></div>
-      </div>
-    `;
+    // Use matchBefore to find word boundary at cursor position
+    // This properly handles completions inside template literals, function calls, and member access (console.)
+    const word = context.matchBefore(/[\w.]*$/);
+    if (!word) {
+      return null;
+    }
+
+    // Don't show completions for just a dot
+    if (word.text === '.') {
+      return null;
+    }
+
+    const pos = context.pos;
+    const line = context.state.doc.lineAt(pos);
+    const column = pos - line.from;
+
+    try {
+      const items = await getCompletions(
+        languageId,
+        activeTab.path,
+        context.state.doc.toString(),
+        line.number - 1,
+        column
+      );
+
+      if (items.length === 0) return null;
+
+      return {
+        from: word.from,
+        options: items.map((item) => {
+          const type = completionKindToType(item.kind);
+          return {
+            label: item.label,
+            type: type,
+            detail: item.detail,
+            info: (completion) => {
+              if (item.documentation) {
+                const div = document.createElement('div');
+                // Parse documentation for rich tooltip
+                const sections = item.documentation.split(/\n---\n/);
+                const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
+                const linkMatch = sections[sections.length - 1]?.match(/\[([^\]]+)\]\(([^)]+)\)/);
+                const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
+
+                div.innerHTML = formatHoverContent(item.documentation, {
+                  signature,
+                  tags: item.detail ? [item.detail] : undefined,
+                  link,
+                });
+                return div;
+              }
+              return null;
+            },
+            apply: item.insertText || item.label,
+            filterText: item.filterText || item.label,
+          };
+        }),
+      };
+    } catch (error) {
+      console.error('[Editor] LSP completion error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * LSP hover tooltip for CodeMirror - IntelliJ style
+   */
+  private async _lspHoverTooltip(view: EditorView, pos: number): Promise<HoverTooltip | null> {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return null;
+
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+    const languageId = languageMap[ext];
+    if (!languageId) return null;
+
+    const line = view.state.doc.lineAt(pos);
+    const column = pos - line.from;
+
+    try {
+      const hover = await getHover(
+        languageId,
+        activeTab.path,
+        view.state.doc.toString(),
+        line.number - 1,
+        column
+      );
+
+      if (!hover || !hover.contents) return null;
+
+      // Parse hover contents to extract metadata for rich tooltip
+      const sections = hover.contents.split(/\n---\n/);
+      const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
+      const description = sections.slice(1, -1).join('\n').trim();
+      const lastSection = sections[sections.length - 1]?.trim() || '';
+
+      // Parse link from last section
+      const linkMatch = lastSection.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
+
+      // Detect tags from content or signature
+      const tags: string[] = [];
+      if (signature.includes('Console') || languageId === 'typescript') {
+        if (signature.includes('Console')) tags.push('built-in');
+        tags.push('dom');
+      }
+
+      // Detect availability from content keywords
+      let availability: 'widely-available' | 'experimental' | 'deprecated' | undefined;
+      if (description.toLowerCase().includes('deprecated')) {
+        availability = 'deprecated';
+      } else if (description.toLowerCase().includes('experimental')) {
+        availability = 'experimental';
+      } else if (description.toLowerCase().includes('widely available') || description.toLowerCase().includes('standard')) {
+        availability = 'widely-available';
+      }
+
+      const dom = document.createElement('div');
+      dom.innerHTML = formatHoverContent(hover.contents, {
+        signature,
+        typeInfo: hover.range ? 'property' : undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        link,
+        availability,
+      });
+
+      return {
+        pos,
+        above: true,
+        create: () => ({ dom }),
+      };
+    } catch (error) {
+      console.error('[Editor] LSP hover error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Notify backend of document changes for LSP sync
+   */
+  private _documentVersion = 0;
+  private _openedDocs = new Set<string>();
+
+  private async _notifyDocumentOpened(content: string): Promise<void> {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+    const languageId = languageMap[ext];
+    if (!languageId) return;
+
+    // Only open once per document
+    if (this._openedDocs.has(activeTab.path)) return;
+    this._openedDocs.add(activeTab.path);
+
+    this._documentVersion = 1;
+    const uri = pathToFileUri(activeTab.path);
+    await notifyDocumentOpened(languageId, uri, content, this._documentVersion);
+    console.log('[LSP] Document opened:', activeTab.path);
+  }
+
+  private async _notifyDocumentChanged(content: string): Promise<void> {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+    const languageId = languageMap[ext];
+    if (!languageId) return;
+
+    // Ensure document is opened first
+    await this._notifyDocumentOpened(content);
+
+    this._documentVersion++;
+    const uri = pathToFileUri(activeTab.path);
+    await notifyDocumentChanged(languageId, uri, content, this._documentVersion);
+  }
+
+  /**
+   * Updates or creates the editor view without unnecessary destruction
+   */
+  private _currentTabId: string | null = null;
+
+  private _updateEditor = (): void => {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) {
+      // No active tab - destroy editor view if it exists
+      if (this.editorView) {
+        this.editorView.destroy();
+        this.editorView = null;
+      }
+      return;
+    }
+
+    // Re-query editorContainer since Lit may have re-created the DOM
+    const editorContainer = this.renderRoot.querySelector('#editor-container');
+    if (!editorContainer) return;
+
+    const language = this.getLanguageExtension(activeTab.path);
+    const newLanguageKey = activeTab.path.split('.').pop() || '';
+    const tabChanged = this._currentTabId !== activeTab.id;
+
+    // Detect indent unit from file content (or use language default for empty files)
+    const indentUnitStr = this.detectIndentUnit(activeTab.content, activeTab.path);
+    console.log('[Editor] Detected indent unit:', JSON.stringify(indentUnitStr), 'for file:', activeTab.path);
+
+    // Check if editorView's DOM element is still in the document
+    const editorViewInDom = this.editorView && document.contains(this.editorView.dom);
+
+    if (!this.editorView || !editorViewInDom) {
+      // Editor doesn't exist or its DOM was removed - create new editor
+      if (this.editorView && !editorViewInDom) {
+        this.editorView.destroy();
+      }
+      const state = EditorState.create({
+        doc: activeTab.content,
+        extensions: [...this.getCommonExtensions(indentUnitStr), language]
+      });
+      this.editorView = new EditorView({
+        state,
+        parent: editorContainer
+      });
+      // Notify LSP server that document is opened
+      this._notifyDocumentOpened(activeTab.content);
+      this._isInitialTabLoad = true;
+      this._currentLanguage = newLanguageKey;
+      this._currentTabId = activeTab.id;
+      // Store initial content as "saved" state
+      this._savedContent.set(activeTab.path, activeTab.content);
+    } else {
+      // Editor exists - check if language or tab changed
+      const languageChanged = newLanguageKey !== this._currentLanguage;
+
+      if (tabChanged || languageChanged) {
+        // Get stored cursor position for the new tab, or default to line 1, col 1
+        const storedLine = activeTab.cursorLine ?? 1;
+        const storedCol = activeTab.cursorCol ?? 1;
+
+        // Calculate position from stored line/col
+        const lineInfo = activeTab.content.split('\n');
+        let pos = 0;
+        for (let i = 1; i < storedLine && i <= lineInfo.length; i++) {
+          pos += lineInfo[i - 1].length + 1; // +1 for newline
+        }
+        pos = Math.min(pos + (storedCol - 1), activeTab.content.length);
+
+        // Create state with restored cursor position
+        const state = EditorState.create({
+          doc: activeTab.content,
+          extensions: [...this.getCommonExtensions(indentUnitStr), language],
+          selection: EditorSelection.create([EditorSelection.cursor(pos)])
+        });
+        this.editorView.setState(state);
+        this._currentLanguage = newLanguageKey;
+        this._currentTabId = activeTab.id;
+        this._isInitialTabLoad = true;
+
+        // Dispatch cursor position immediately after tab switch
+        document.dispatchEvent(new CustomEvent('cursor-position', {
+          detail: { line: storedLine, column: storedCol },
+          bubbles: true,
+          composed: true,
+        }));
+      }
+    }
+  }
+
+  private _handleContentChange(content: string) {
+    // Ignore initial tab load - content is already saved
+    if (this._isInitialTabLoad) {
+      this._isInitialTabLoad = false;
+      return;
+    }
+
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    // Compare with saved content to determine if file is truly modified
+    const savedContent = this._savedContent.get(activeTab.path) || '';
+    const isModified = content !== savedContent;
+
+    // Dispatch content-changed event with modified status
+    this.dispatchEvent(new CustomEvent('content-changed', {
+      detail: { path: activeTab.path, content, isModified },
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
-
-    if (changedProperties.has('tabs') || changedProperties.has('activeTabId')) {
-      this._updateEditor();
+    // Only update editor when activeTabId changes, not when tabs content changes
+    // The editor view handles content changes internally via EditorView.updateListener
+    if (changedProperties.has('activeTabId')) {
+      // Wait for DOM to be ready before updating editor
+      requestAnimationFrame(() => {
+        this._updateEditor();
+        this._notifyLanguageChange();
+      });
     }
   }
 
-  private _updateEditor(): void {
-    if (!this.activeTab) return;
+  private _notifyLanguageChange(): void {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
 
-    this.editorView?.destroy();
-    this.editorView = this.createEditorView(this.activeTab.content);
-  }
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
 
-  private _handleOpenFile = (e: CustomEvent): void => {
-    const { path, content } = e.detail;
-    const name = path.split('/').pop() || '';
-
-    const existingTab = this.tabs.find(t => t.path === path);
-    if (existingTab) {
-      this.activeTabId = existingTab.id;
-      this.tabs = this.tabs.map(t =>
-        t.id === existingTab.id ? { ...t, content, lastUsed: Date.now() } : t
-      );
-    } else {
-      const newTab: EditorTab = {
-        id: path,
-        name,
-        path,
-        modified: false,
-        content,
-        lastUsed: Date.now(),
-      };
-      this.tabs = [...this.tabs, newTab];
-      this.activeTabId = path;
+    const languageId = languageMap[ext] || null;
+    if (languageId) {
+      document.dispatchEvent(new CustomEvent('active-language-changed', { detail: { languageId } }));
+      // Trigger auto-install if server is missing
+      this._triggerAutoInstall(languageId);
     }
-  };
+  }
 
-  private _handleClearEditor = (): void => {
-    this.tabs = [];
-    this.activeTabId = '';
+  private _triggerAutoInstall(languageId: string): void {
+    // Dispatch a custom event that status-bar listens for
+    // This is more reliable than direct method calls
+    document.dispatchEvent(new CustomEvent('lsp-auto-install-request', {
+      detail: { languageId },
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    // Listen for save events to update saved content
+    document.addEventListener('file-saved', this._handleFileSaved.bind(this));
+    // Listen for cursor position restore events (e.g., from go-to-definition)
+    document.addEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
     this.editorView?.destroy();
-    this.editorView = null;
-  };
-
-  // Public API for tab management
-  selectTab(tabId: string): void {
-    this.activeTabId = tabId;
-    this.dispatchEvent(new CustomEvent('tab-select', {
-      detail: { tabId, timestamp: Date.now() },
-      bubbles: true,
-      composed: true,
-    }));
+    document.removeEventListener('file-saved', this._handleFileSaved.bind(this));
+    document.removeEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
   }
 
-  closeTab(tabId: string): void {
-    this.dispatchEvent(new CustomEvent('tab-close', {
-      detail: { tabId },
-      bubbles: true,
-      composed: true,
-    }));
+  private _handleFileSaved(event: Event): void {
+    const customEvent = event as CustomEvent<{ path: string; content: string }>;
+    const { path, content } = customEvent.detail;
+    this._savedContent.set(path, content);
   }
 
-  togglePin(tabId: string): void {
-    this.dispatchEvent(new CustomEvent('tab-pin-toggle', {
-      detail: { tabId },
+  private _handleRestoreCursorPosition(event: Event): void {
+    const customEvent = event as CustomEvent<{ line: number; column: number }>;
+    const { line, column } = customEvent.detail;
+
+    if (!this.editorView) return;
+
+    // Calculate position from line/col (1-indexed)
+    const lineInfo = this.editorView.state.doc.line(Math.min(line, this.editorView.state.doc.lines));
+    const pos = lineInfo.from + Math.min(column - 1, lineInfo.length);
+
+    // Move cursor to the definition location
+    this.editorView.dispatch({
+      selection: EditorSelection.create([EditorSelection.cursor(pos)]),
+      scrollIntoView: true,
+    });
+
+    // Update cursor position in active tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (activeTab) {
+      activeTab.cursorLine = line;
+      activeTab.cursorCol = column;
+    }
+
+    // Dispatch cursor position for status bar
+    document.dispatchEvent(new CustomEvent('cursor-position', {
+      detail: { line, column },
       bubbles: true,
       composed: true,
     }));
+
+    console.log('[Editor] Restored cursor to line', line, 'col', column);
+  }
+
+  render() {
+    const hasContent = this.tabs.length > 0;
+
+    return html`
+      <div class="flex flex-col h-full overflow-hidden bg-white">
+        <slot name="tab-bar"></slot>
+        ${hasContent
+          ? html`<div id="editor-container" class="flex-1 overflow-hidden border-t border-[#c7c7c7]"></div>`
+          : html`<div class="flex-1 flex items-center justify-center text-[#8a8a8a] text-sm">Select a file to edit</div>`
+        }
+      </div>
+    `;
   }
 }

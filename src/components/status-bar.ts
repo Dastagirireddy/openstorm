@@ -1,23 +1,185 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../tailwind-element.js';
+import { invoke } from '@tauri-apps/api/core';
+
+export interface LspServerInfo {
+  language_id: string;
+  server_name: string;
+  install_command: string;
+  is_installed: boolean;
+}
 
 @customElement('status-bar')
 export class StatusBar extends TailwindElement() {
   @state() private branch = 'main';
-  @state() private cursorLine = 1;
-  @state() private cursorCol = 1;
+  @state() private cursorLine = 0;
+  @state() private cursorCol = 0;
   @state() private encoding = 'UTF-8';
   @state() private lineEnding = 'LF';
   @state() private spaces = 4;
   @state() private hasErrors = false;
   @state() private hasWarnings = false;
   @state() private statusMessage = 'Ready';
+  @state() private lspStatus: LspServerInfo[] = [];
+  @state() private activeLanguage: string | null = null;
+  @state() private installProgress: { languageId: string; serverName: string; percentage: number; stage: string } | null = null;
   @state() terminalVisible = true;
+  @state() private fileOpen = false;
 
   static properties = {
     terminalVisible: { type: Boolean },
   };
+
+  async connectedCallback(): Promise<void> {
+    super.connectedCallback();
+    await this.checkLspStatus();
+    // Listen for cursor position updates from editor
+    document.addEventListener('cursor-position', (e: Event) => {
+      const customEvent = e as CustomEvent<{ line: number; column: number }>;
+      this.setCursorPosition(customEvent.detail.line, customEvent.detail.column);
+    });
+    // Listen for file open/close events to show/hide cursor position
+    document.addEventListener('open-file-external', () => {
+      this.fileOpen = true;
+    });
+    document.addEventListener('clear-editor', () => {
+      this.fileOpen = false;
+      this.cursorLine = 0;
+      this.cursorCol = 0;
+    });
+    // Re-check when language changes
+    document.addEventListener('active-language-changed', (e: Event) => {
+      const customEvent = e as CustomEvent<{ languageId: string }>;
+      this.setActiveLanguage(customEvent.detail.languageId);
+      this.checkLspStatus();
+    });
+    // Listen for auto-install requests
+    document.addEventListener('lsp-auto-install-request', (e: Event) => {
+      const customEvent = e as CustomEvent<{ languageId: string }>;
+      this.autoInstallLspServer(customEvent.detail.languageId);
+    });
+    // Listen for LSP server missing events (from completion failures)
+    document.addEventListener('lsp-server-missing', (e: Event) => {
+      const customEvent = e as CustomEvent<{ languageId: string; serverName: string }>;
+      this.handleServerMissing(customEvent.detail.languageId, customEvent.detail.serverName);
+    });
+  }
+
+  /**
+   * Handle missing LSP server - prompt user to install
+   */
+  public async handleServerMissing(languageId: string, serverName: string): Promise<void> {
+    const serverInfo = this.lspStatus.find(s => s.language_id === languageId);
+    if (!serverInfo || serverInfo.is_installed) {
+      return; // Already installed or not found in status
+    }
+
+    // Show a subtle notification in status bar
+    this.statusMessage = `${serverName} not installed. Click to install.`;
+    this.dispatchEvent(new CustomEvent('lsp-install-prompt', {
+      detail: { languageId, serverName },
+      bubbles: true,
+    }));
+  }
+
+  public updateInstallProgress(languageId: string, serverName: string, percentage: number, stage: string): void {
+    this.installProgress = { languageId, serverName, percentage, stage };
+    this.requestUpdate();
+  }
+
+  public clearInstallProgress(): void {
+    this.installProgress = null;
+    this.requestUpdate();
+  }
+
+  private async checkLspStatus(): Promise<void> {
+    try {
+      this.lspStatus = await invoke('get_lsp_server_status');
+    } catch (error) {
+      console.error('Failed to get LSP status:', error);
+    }
+  }
+
+  public setActiveLanguage(languageId: string): void {
+    this.activeLanguage = languageId;
+  }
+
+  public async installLspServer(languageId: string, showNotification = true): Promise<void> {
+    try {
+      const serverInfo = this.getActiveServerInfo();
+      const serverName = serverInfo?.server_name || `${languageId}-language-server`;
+
+      if (serverInfo) {
+        (serverInfo as any).is_installing = true;
+        this.requestUpdate();
+      }
+
+      if (showNotification) {
+        this.statusMessage = `Downloading ${serverName}...`;
+      }
+
+      // Listen for progress events from backend (Tauri window events)
+      const { listen } = await import('@tauri-apps/api/event');
+      const unlisten = await listen('lsp-install-progress', (event: any) => {
+        const payload = event.payload as { language_id: string; stage: string; percentage: number };
+        this.updateInstallProgress(payload.language_id, serverName, payload.percentage, payload.stage);
+      });
+
+      const result = await invoke('install_lsp_server', { languageId });
+
+      await unlisten();
+      this.clearInstallProgress();
+
+      if (showNotification) {
+        this.statusMessage = result as string || `${serverName} ready!`;
+        this.dispatchEvent(new CustomEvent('lsp-install-complete', {
+          detail: { languageId, success: true },
+          bubbles: true,
+        }));
+      }
+
+      await this.checkLspStatus();
+    } catch (error) {
+      this.clearInstallProgress();
+      if (showNotification) {
+        this.statusMessage = `Failed to install: ${error}`;
+        this.dispatchEvent(new CustomEvent('lsp-install-complete', {
+          detail: { languageId, success: false, error },
+          bubbles: true,
+        }));
+      }
+      console.error('Failed to install LSP server:', error);
+      await this.checkLspStatus();
+    }
+  }
+
+  /**
+   * Auto-install LSP server when opening a file (silent, no confirmation)
+   */
+  public async autoInstallLspServer(languageId: string): Promise<void> {
+    const serverInfo = this.getActiveServerInfo();
+
+    // Already installed - show nothing, do nothing
+    if (!serverInfo || serverInfo.is_installed) {
+      return;
+    }
+
+    // Skip auto-install for very large servers (clangd is ~500MB)
+    if (serverInfo.server_name === 'clangd') {
+      console.log('[LSP] clangd is large (~500MB), waiting for user confirmation');
+      return;
+    }
+
+    console.log(`[LSP] Auto-installing ${serverInfo.server_name}...`);
+    // Pass false to keep auto-install silent
+    await this.installLspServer(languageId, false);
+  }
+
+  public getActiveServerInfo(): LspServerInfo | null {
+    if (!this.activeLanguage) return null;
+    return this.lspStatus.find(s => s.language_id === this.activeLanguage) || null;
+  }
 
   private renderStatusItem(icon: ReturnType<typeof html>, label: string, hasHover = true): ReturnType<typeof html> {
     return html`
@@ -101,11 +263,59 @@ export class StatusBar extends TailwindElement() {
           ${this.renderIconButton(terminalIcon, 'Toggle Terminal (Ctrl+`)', () => {
             this.dispatchEvent(new CustomEvent('toggle-terminal', { bubbles: true }));
           })}
+
+          <!-- LSP Status Indicator -->
+          ${(() => {
+            const serverInfo = this.getActiveServerInfo();
+            if (!serverInfo) return html``;
+            const isInstalling = this.installProgress !== null || (serverInfo as any).is_installing === true;
+            const statusIcon = isInstalling
+              ? html`<svg class="w-3 h-3 text-indigo-600 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 2v4m0 12v4M2 12h4m12 0h4"/>
+                </svg>`
+              : serverInfo.is_installed
+                ? html`<svg class="w-3 h-3 text-green-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/>
+                  </svg>`
+                : html`<svg class="w-3 h-3 text-yellow-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+                  </svg>`;
+
+            // Show progress bar when installing
+            if (isInstalling && this.installProgress) {
+              return html`
+                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-indigo-50 border border-[#d0d7de] min-w-[200px]">
+                  ${statusIcon}
+                  <div class="flex-1">
+                    <div class="text-xs text-indigo-700 truncate">Downloading ${this.installProgress.serverName}...</div>
+                    <div class="w-full h-1.5 bg-[#eaeef2] rounded-full overflow-hidden">
+                      <div class="h-full bg-indigo-600 transition-all duration-200" style="width: ${this.installProgress.percentage}%"></div>
+                    </div>
+                    <div class="text-[10px] text-[#57606a] mt-0.5">${this.installProgress.stage} (${Math.round(this.installProgress.percentage)}%)</div>
+                  </div>
+                </div>
+              `;
+            }
+
+            return html`
+              <div class="flex items-center gap-2 px-2 py-0.5 rounded ${serverInfo.is_installed ? 'bg-green-50' : 'bg-yellow-50'} border border-[#d0d7de]">
+                ${statusIcon}
+                <span>${serverInfo.is_installed ? serverInfo.server_name : 'Install ' + serverInfo.server_name}</span>
+                ${!serverInfo.is_installed ? html`
+                  <button
+                    class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
+                    @click=${() => this.installLspServer(serverInfo.language_id)}>
+                    Install
+                  </button>
+                ` : ''}
+              </div>
+            `;
+          })()}
         </div>
 
         <!-- Right section -->
         <div class="flex items-center gap-3">
-          ${this.cursorLine > 0
+          ${this.fileOpen
             ? html`<div class="flex items-center gap-1 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors font-mono">
                 <span>Ln ${this.cursorLine}, Col ${this.cursorCol}</span>
               </div>`

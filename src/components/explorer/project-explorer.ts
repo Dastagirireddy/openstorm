@@ -332,8 +332,11 @@ export class ProjectExplorer extends TailwindElement() {
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
 
-    // F2 = Rename
-    if (e.key === 'F2' && this.selectedPath) {
+    // Check if file explorer has focus (or a child element has focus)
+    const explorerHasFocus = this.contains(document.activeElement);
+
+    // F2 = Rename (only when explorer has focus)
+    if (e.key === 'F2' && this.selectedPath && explorerHasFocus) {
       e.preventDefault();
       const node = this.findNodeByPath(this.selectedPath, this.files);
       if (node) {
@@ -342,8 +345,8 @@ export class ProjectExplorer extends TailwindElement() {
       }
     }
 
-    // Delete or Backspace = Delete file/folder
-    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedPath) {
+    // Delete or Backspace = Delete file/folder (only when explorer has focus)
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedPath && explorerHasFocus) {
       e.preventDefault();
       const node = this.findNodeByPath(this.selectedPath, this.files);
       if (node) {

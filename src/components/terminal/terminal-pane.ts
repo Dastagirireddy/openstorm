@@ -116,7 +116,7 @@ const componentStyles = css`
 
   /* Make text selection visible */
   .xterm .xterm-rows ::selection {
-    background-color: #0969da !important;
+    background-color: #4f46e5 !important;
     color: #ffffff !important;
   }
 
@@ -125,7 +125,7 @@ const componentStyles = css`
   }
 
   .xterm-selection div {
-    background-color: #0969da !important;
+    background-color: #4f46e5 !important;
   }
 `;
 
@@ -512,7 +512,7 @@ export class TerminalPane extends TailwindElement(componentStyles) {
               ${this.terminals.map(t => html`
                 <div class="flex items-center gap-1 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2
                   ${this.activeTerminalId === t.id
-                    ? 'bg-white text-[#24292f] border-[#0969da] font-medium'
+                    ? 'bg-white text-[#24292f] border-indigo-500 font-medium'
                     : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb] hover:border-transparent'}"
                   @click=${() => this.switchTerminal(t.id)}
                 >

@@ -70,7 +70,6 @@ export class OpenStormApp extends TailwindElement() {
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
-    this.setupCursorPositionHandler();
     // Terminal will be auto-created when project is opened
   }
 
@@ -95,19 +94,6 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("auto-saved", ((e: CustomEvent) => {
       console.log("Auto-saved:", e.detail.path);
       this.saveStatus = "saved";
-    }) as EventListener);
-  }
-
-  private setupCursorPositionHandler(): void {
-    // Listen for cursor position updates from editor
-    document.addEventListener("cursor-position", ((e: CustomEvent) => {
-      const { line, column } = e.detail;
-      const statusBar = document.querySelector("status-bar") as HTMLElement & {
-        setCursorPosition: (line: number, col: number) => void;
-      };
-      if (statusBar?.setCursorPosition) {
-        statusBar.setCursorPosition(line, column);
-      }
     }) as EventListener);
   }
 
@@ -265,7 +251,17 @@ export class OpenStormApp extends TailwindElement() {
         e.preventDefault();
         this.toggleTerminal();
       }
+      // Alt+Shift+F or Option+Shift+F for format code
+      if ((e.altKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        this.formatActiveFile();
+      }
     });
+  }
+
+  private async formatActiveFile(): Promise<void> {
+    // Dispatch event to editor-pane to format code
+    document.dispatchEvent(new CustomEvent('format-code'));
   }
 
   private async saveActiveFile(): Promise<void> {
@@ -284,6 +280,12 @@ export class OpenStormApp extends TailwindElement() {
       this.tabs = this.tabs.map((t) =>
         t.path === activeTab.path ? { ...t, modified: false } : t,
       );
+      // Notify editor-pane to update saved content
+      document.dispatchEvent(new CustomEvent('file-saved', {
+        detail: { path: activeTab.path, content: activeTab.content },
+        bubbles: true,
+        composed: true,
+      }));
     } catch (error) {
       console.error("Failed to save file:", error);
       this.saveStatus = "error";
@@ -378,18 +380,18 @@ export class OpenStormApp extends TailwindElement() {
   };
 
   private handleContentChanged = (
-    e: CustomEvent<{ path: string; content: string }>,
+    e: CustomEvent<{ path: string; content: string; isModified?: boolean }>,
   ): void => {
-    const { path, content } = e.detail;
+    const { path, content, isModified = true } = e.detail;
     const tabIndex = this.tabs.findIndex((t) => t.path === path);
 
     if (tabIndex !== -1) {
       this.tabs = this.tabs.map((t, i) =>
-        i === tabIndex ? { ...t, content, modified: true } : t,
+        i === tabIndex ? { ...t, content, modified: isModified } : t,
       );
     }
 
-    this.saveStatus = "unsaved";
+    this.saveStatus = isModified ? "unsaved" : "saved";
   };
 
   private handleTabSelect = (e: CustomEvent<{ tabId: string }>): void => {
@@ -431,6 +433,10 @@ export class OpenStormApp extends TailwindElement() {
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("start_watching", { path: this.projectPath });
       console.log("File watcher started for:", this.projectPath);
+
+      // Initialize LSP connection pool
+      await invoke("initialize_lsp_pool", { rootPath: this.projectPath });
+      console.log("LSP connection pool initialized for:", this.projectPath);
     } catch (error) {
       console.error("Failed to start file watcher:", error);
     }
@@ -450,8 +456,9 @@ export class OpenStormApp extends TailwindElement() {
       if (this.tabs.length > 0) {
         const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
         this.activeTabId = this.tabs[newActiveIndex].id;
+        // Use open-file-external to avoid triggering the global open-file handler (which opens the file dialog)
         document.dispatchEvent(
-          new CustomEvent("open-file", {
+          new CustomEvent("open-file-external", {
             detail: {
               path: this.tabs[newActiveIndex].path,
               content: this.tabs[newActiveIndex].content,
