@@ -5,6 +5,8 @@ import { EditorState, EditorSelection } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { Facet } from '@codemirror/state';
 
 // Language Imports
 import { rust } from '@codemirror/lang-rust';
@@ -78,6 +80,72 @@ export class EditorPane extends TailwindElement() {
   private _isInitialTabLoad = true;
   private _currentLanguage: string = '';
   private _savedContent: Map<string, string> = new Map();
+  private _definitionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _lastCheckedPosition: string | null = null;
+  private _lastHasDefinition: boolean = false;
+
+  /**
+   * Detects the indentation unit from file content
+   * Analyzes the first 100 lines to find the most common indentation
+   * Falls back to language-specific defaults for empty files
+   */
+  private detectIndentUnit(content: string, path?: string): string {
+    // For empty files, use language-specific defaults
+    if (!content || !content.trim()) {
+      if (path) {
+        const ext = getFileExtension(path).toLowerCase();
+        // JS/TS typically use 2 spaces
+        if (['ts', 'tsx', 'js', 'jsx', 'mjs'].includes(ext)) {
+          return '  ';
+        }
+        // Go, Rust, Python typically use 4 spaces (or tabs for Go)
+        if (['go', 'rs', 'py'].includes(ext)) {
+          return '    ';
+        }
+      }
+      // Default to 4 spaces
+      return '    ';
+    }
+
+    const lines = content.split('\n').slice(0, 100);
+    const indentCounts = new Map<number, number>();
+
+    for (const line of lines) {
+      if (!line.trim()) continue; // Skip empty lines
+
+      const match = line.match(/^(\t+)/);
+      if (match && match[1].length > 0) {
+        // Tab indentation
+        indentCounts.set(1, (indentCounts.get(1) || 0) + 1);
+        continue;
+      }
+
+      const spaces = line.match(/^( +)/);
+      if (spaces) {
+        const count = spaces[1].length;
+        // Count common indent sizes (2, 4, 8 spaces)
+        if (count >= 2) {
+          const normalized = count >= 8 ? 8 : count >= 4 ? 4 : 2;
+          indentCounts.set(normalized, (indentCounts.get(normalized) || 0) + 1);
+        }
+      }
+    }
+
+    // Find most common indent size
+    let maxCount = 0;
+    let indentSize = 4; // Default to 4 spaces
+
+    for (const [size, count] of indentCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        indentSize = size;
+      }
+    }
+
+    // Return indent unit string
+    if (indentSize === 1) return '\t';
+    return ' '.repeat(indentSize);
+  }
 
   /**
    * Maps file paths to CodeMirror language extensions
@@ -104,11 +172,12 @@ export class EditorPane extends TailwindElement() {
 
   /**
    * Generates the core extension stack for IntelliJ look and feel
+   * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
    */
-  private getCommonExtensions() {
+  private getCommonExtensions(indentUnitStr: string = "    ") {
     return [
       EditorState.tabSize.of(4),
-      indentUnit.of("    "),
+      indentUnit.of(indentUnitStr),
       lineNumbers(),
       highlightActiveLineGutter(),
       ...customFoldGutter(),
@@ -118,6 +187,19 @@ export class EditorPane extends TailwindElement() {
       highlightActiveLine(),
       bracketMatching(),
       indentOnInput(),
+      // indentationMarkers with "fullScope" tracks both tabs and spaces
+      indentationMarkers({
+        highlightActiveBlock: true,
+        markerType: "fullScope",
+        thickness: 1,
+        activeThickness: 1,
+        colors: {
+          light: '#d0d0d0',
+          dark: '#505050',
+          activeLight: '#b0b0b0',
+          activeDark: '#707070',
+        },
+      }),
       syntaxHighlighting(intellijLightHighlight),
       // Keymap order matters - historyKeymap must come before defaultKeymap
       // so undo/redo takes precedence
@@ -175,8 +257,13 @@ export class EditorPane extends TailwindElement() {
           padding: "10px 0",
           direction: "ltr !important",
           caretColor: "#000000",
+          cursor: "text",
         },
-        ".cm-line": { padding: "0 8px" },
+        // Use 2px padding to match library's expected padding for indent markers
+        ".cm-line": {
+          padding: "0 2px",
+          cursor: "text",
+        },
         ".cm-gutters": {
           backgroundColor: IJ_COLORS.gutterBackground,
           color: IJ_COLORS.lineNumbers,
@@ -193,6 +280,10 @@ export class EditorPane extends TailwindElement() {
         ".cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
         "&.cm-focused .cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
         ".cm-cursor": { borderLeft: "2px solid #000000" },
+        // Pointer cursor when hovering over a definition (Cmd+Click target)
+        "&.cm-has-definition .cm-content, &.cm-has-definition .cm-line": {
+          cursor: "pointer !important",
+        },
         // Autocomplete styling - IntelliJ style
         ".cm-tooltip-autocomplete": {
           fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
@@ -247,41 +338,165 @@ export class EditorPane extends TailwindElement() {
         ".cm-tooltip-autocomplete .cm-completionIcon-keyword": {
           color: "#0033b3",
         },
-        // Hover tooltip styling
+        // Hover tooltip - IntelliJ style (exact match)
         ".cm-tooltip": {
-          padding: "10px 14px",
-          maxWidth: "600px",
+          padding: "0",
+          maxWidth: "450px",
           backgroundColor: "#ffffff",
-          border: "1px solid #c7c7c7",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-          borderRadius: "4px",
-          fontSize: "13px",
-          lineHeight: "1.5",
-        },
-        ".cm-tooltip code": {
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+          color: "#1d1d1d",
+          fontFamily: "'Inter', system-ui, sans-serif",
           fontSize: "12px",
-          backgroundColor: "#f5f5f5",
-          padding: "2px 6px",
-          borderRadius: "3px",
-          color: "#00627a",
+          border: "1px solid #c9c9c9",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          borderRadius: "0",
         },
-        ".cm-tooltip pre": {
-          backgroundColor: "#f8f8f8",
-          border: "1px solid #e0e0e0",
-          borderRadius: "4px",
-          padding: "10px",
-          overflow: "auto",
-          fontSize: "12px",
-          margin: "8px 0",
+        ".cm-tooltip .cm-tooltip-hover": {
+          padding: "0",
         },
-        ".cm-tooltip-hover": {
-          fontSize: "13px",
-          lineHeight: "1.6",
+        // Top header with error message
+        ".cm-tooltip .tooltip-top-header": {
+          padding: "4px 8px",
+          display: "flex",
+          justifyContent: "space-between",
+          color: "#1d1d1d",
         },
-        ".cm-tooltip b, .cm-tooltip strong": {
+        ".cm-tooltip .tooltip-top-header .error-msg": {
+          fontSize: "11px",
+          color: "#666666",
+        },
+        ".cm-tooltip .tooltip-top-header .menu-icon": {
+          color: "#888888",
+          cursor: "pointer",
+          fontSize: "14px",
+        },
+        // Quick actions bar
+        ".cm-tooltip .intellij-actions": {
+          display: "flex",
+          gap: "12px",
+          padding: "2px 8px 6px 8px",
+        },
+        ".cm-tooltip .intellij-actions .action-item": {
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+        },
+        ".cm-tooltip .intellij-actions .action-link": {
+          color: "#2470b3",
+          cursor: "pointer",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .intellij-actions .action-shortcut": {
+          color: "#909090",
+          fontSize: "10px",
+        },
+        // Divider
+        ".cm-tooltip .intellij-divider": {
+          border: "none",
+          borderTop: "1px solid #ebebeb",
+          margin: "0",
+        },
+        // Signature
+        ".cm-tooltip .tooltip-signature": {
+          padding: "8px",
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .tooltip-signature code": {
+          color: "#1d1d1d",
+        },
+        ".cm-tooltip .tooltip-signature .keyword": {
+          color: "#871094",
+          fontWeight: "bold",
+        },
+        ".cm-tooltip .tooltip-signature .variable": {
+          color: "#1d1d1d",
+        },
+        ".cm-tooltip .tooltip-signature .type": {
           color: "#0033b3",
-          fontWeight: "600",
+        },
+        // Availability bar
+        ".cm-tooltip .availability-bar": {
+          padding: "6px 8px",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          color: "#595959",
+          fontSize: "11px",
+        },
+        ".cm-tooltip .availability-bar .check-icon": {
+          color: "#4fa54f",
+          fontWeight: "bold",
+          fontSize: "12px",
+        },
+        ".cm-tooltip .availability-bar .avail-text": {
+          flex: "1",
+        },
+        ".cm-tooltip .availability-bar .chevron-icon": {
+          color: "#888888",
+          fontSize: "12px",
+        },
+        // Body content
+        ".cm-tooltip .tooltip-body": {
+          padding: "8px",
+          lineHeight: "1.5",
+          fontSize: "11px",
+          color: "#333333",
+        },
+        ".cm-tooltip .tooltip-body p": {
+          margin: "0 0 6px 0",
+        },
+        ".cm-tooltip .tooltip-body p:last-child": {
+          margin: "0",
+        },
+        ".cm-tooltip .tooltip-body code": {
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: "10px",
+          backgroundColor: "#f5f5f5",
+          padding: "1px 4px",
+          borderRadius: "2px",
+          border: "1px solid #e8e8e8",
+        },
+        ".cm-tooltip .tooltip-body pre": {
+          backgroundColor: "#f9f9f9",
+          border: "1px solid #e8e8e8",
+          borderRadius: "2px",
+          padding: "8px",
+          overflow: "auto",
+          fontSize: "10px",
+          margin: "6px 0",
+          fontFamily: "'JetBrains Mono', monospace",
+        },
+        ".cm-tooltip .tooltip-body .kw": { color: "#871094", fontWeight: "bold" },
+        ".cm-tooltip .tooltip-body .type": { color: "#0033b3" },
+        ".cm-tooltip .tooltip-body .string": { color: "#067d17" },
+        ".cm-tooltip .tooltip-body .comment": { color: "#999999", fontStyle: "italic" },
+        // Footer
+        ".cm-tooltip .tooltip-footer": {
+          padding: "8px",
+          borderTop: "1px solid #ebebeb",
+          display: "flex",
+          alignItems: "center",
+          gap: "6px",
+          fontSize: "10px",
+        },
+        ".cm-tooltip .tooltip-footer .ts-badge": {
+          background: "#3178c6",
+          color: "white",
+          fontSize: "9px",
+          padding: "1px 3px",
+          borderRadius: "2px",
+          fontWeight: "bold",
+        },
+        ".cm-tooltip .tooltip-footer .footer-meta": {
+          color: "#888888",
+        },
+        ".cm-tooltip .tooltip-footer .mdn-link": {
+          color: "#2470b3",
+          textDecoration: "none",
+          marginLeft: "auto",
+        },
+        ".cm-tooltip .tooltip-footer .mdn-link:hover": {
+          textDecoration: "underline",
         },
       }),
 
@@ -314,7 +529,7 @@ export class EditorPane extends TailwindElement() {
         }
       }),
 
-      // Click handler for Ctrl+Click go-to-definition
+      // Click handler and hover feedback for Ctrl+Click go-to-definition
       EditorView.domEventHandlers({
         click: (event, view) => {
           if ((event.ctrlKey || event.metaKey) && view.state.selection.main) {
@@ -323,8 +538,84 @@ export class EditorPane extends TailwindElement() {
           }
           return false;
         },
+        mousemove: (event, view) => {
+          const isCtrlOrMeta = event.ctrlKey || event.metaKey;
+          if (isCtrlOrMeta) {
+            // Show pointer cursor immediately when Cmd is held
+            view.dom.classList.add('cm-has-definition');
+
+            const rect = view.dom.getBoundingClientRect();
+            const pos = view.posAtCoords({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+            if (pos !== null) {
+              const line = view.state.doc.lineAt(pos);
+              const column = pos - line.from;
+              this._checkDefinitionAtPosition(view, line.number - 1, column);
+            }
+          } else {
+            view.dom.classList.remove('cm-has-definition');
+          }
+          return false;
+        },
+        keyup: (event, view) => {
+          if (event.key === 'Control' || event.key === 'Meta') {
+            view.dom.classList.remove('cm-has-definition');
+            if (this._definitionCheckTimeout) {
+              clearTimeout(this._definitionCheckTimeout);
+              this._definitionCheckTimeout = null;
+            }
+          }
+          return false;
+        },
       })
     ];
+  }
+
+  /**
+   * Check if there's a definition at the given position and update cursor style
+   */
+  private _checkDefinitionAtPosition(view: EditorView, line: number, column: number): void {
+    // Clear any pending check
+    if (this._definitionCheckTimeout) {
+      clearTimeout(this._definitionCheckTimeout);
+    }
+
+    this._definitionCheckTimeout = setTimeout(async () => {
+      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+      if (!activeTab) return;
+
+      const ext = getFileExtension(activeTab.path);
+      const languageMap: Record<string, string> = {
+        'rs': 'rust',
+        'go': 'go',
+        'py': 'python',
+        'cpp': 'cpp',
+        'c': 'c',
+        'ts': 'typescript',
+        'tsx': 'typescript',
+        'js': 'javascript',
+        'jsx': 'javascript',
+      };
+      const languageId = languageMap[ext];
+      if (!languageId) return;
+
+      try {
+        const locations = await getDefinition(
+          languageId,
+          activeTab.path,
+          view.state.doc.toString(),
+          line,
+          column
+        );
+
+        if (locations.length > 0) {
+          view.dom.classList.add('cm-has-definition');
+        } else {
+          view.dom.classList.remove('cm-has-definition');
+        }
+      } catch (error) {
+        view.dom.classList.remove('cm-has-definition');
+      }
+    }, 30);
   }
 
   /**
@@ -371,37 +662,26 @@ export class EditorPane extends TailwindElement() {
       const loc = locations[0];
       console.log('[LSP] Going to definition:', loc);
 
-      // If it's the same file, just move cursor
-      if (loc.uri === activeTab.path || loc.uri.startsWith('file://')) {
-        // For now, just show a notification - full navigation would require
-        // opening the target file and positioning the cursor
-        const statusBar = document.querySelector('status-bar') as any;
-        if (statusBar) {
-          statusBar.setStatusMessage(`Jumping to ${loc.uri.split('/').pop()}:${loc.start_line + 1}`);
-        }
+      // Convert file:// URI to local path for comparison
+      const targetPath = loc.uri.replace('file://', '');
+      const isSameFile = targetPath === activeTab.path;
 
-        // Dispatch event to open the target file
-        document.dispatchEvent(new CustomEvent('go-to-location', {
-          detail: {
-            uri: loc.uri,
-            line: loc.start_line,
-            column: loc.start_char,
-          },
-          bubbles: true,
-          composed: true,
-        }));
-      } else {
-        // Different file - dispatch event to open it
-        document.dispatchEvent(new CustomEvent('go-to-location', {
-          detail: {
-            uri: loc.uri,
-            line: loc.start_line,
-            column: loc.start_char,
-          },
-          bubbles: true,
-          composed: true,
-        }));
+      // Show status message
+      const statusBar = document.querySelector('status-bar') as any;
+      if (statusBar) {
+        statusBar.setStatusMessage(`Jumping to ${loc.uri.split('/').pop()}:${loc.start_line + 1}`);
       }
+
+      // Dispatch event to navigate to the definition
+      document.dispatchEvent(new CustomEvent('go-to-location', {
+        detail: {
+          uri: loc.uri,
+          line: loc.start_line,
+          column: loc.start_char,
+        },
+        bubbles: true,
+        composed: true,
+      }));
     } catch (error) {
       console.error('[Editor] LSP definition error:', error);
     }
@@ -471,7 +751,17 @@ export class EditorPane extends TailwindElement() {
             info: (completion) => {
               if (item.documentation) {
                 const div = document.createElement('div');
-                div.innerHTML = formatHoverContent(item.documentation);
+                // Parse documentation for rich tooltip
+                const sections = item.documentation.split(/\n---\n/);
+                const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
+                const linkMatch = sections[sections.length - 1]?.match(/\[([^\]]+)\]\(([^)]+)\)/);
+                const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
+
+                div.innerHTML = formatHoverContent(item.documentation, {
+                  signature,
+                  tags: item.detail ? [item.detail] : undefined,
+                  link,
+                });
                 return div;
               }
               return null;
@@ -488,7 +778,7 @@ export class EditorPane extends TailwindElement() {
   }
 
   /**
-   * LSP hover tooltip for CodeMirror
+   * LSP hover tooltip for CodeMirror - IntelliJ style
    */
   private async _lspHoverTooltip(view: EditorView, pos: number): Promise<HoverTooltip | null> {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
@@ -523,8 +813,41 @@ export class EditorPane extends TailwindElement() {
 
       if (!hover || !hover.contents) return null;
 
+      // Parse hover contents to extract metadata for rich tooltip
+      const sections = hover.contents.split(/\n---\n/);
+      const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
+      const description = sections.slice(1, -1).join('\n').trim();
+      const lastSection = sections[sections.length - 1]?.trim() || '';
+
+      // Parse link from last section
+      const linkMatch = lastSection.match(/\[([^\]]+)\]\(([^)]+)\)/);
+      const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
+
+      // Detect tags from content or signature
+      const tags: string[] = [];
+      if (signature.includes('Console') || languageId === 'typescript') {
+        if (signature.includes('Console')) tags.push('built-in');
+        tags.push('dom');
+      }
+
+      // Detect availability from content keywords
+      let availability: 'widely-available' | 'experimental' | 'deprecated' | undefined;
+      if (description.toLowerCase().includes('deprecated')) {
+        availability = 'deprecated';
+      } else if (description.toLowerCase().includes('experimental')) {
+        availability = 'experimental';
+      } else if (description.toLowerCase().includes('widely available') || description.toLowerCase().includes('standard')) {
+        availability = 'widely-available';
+      }
+
       const dom = document.createElement('div');
-      dom.innerHTML = formatHoverContent(hover.contents);
+      dom.innerHTML = formatHoverContent(hover.contents, {
+        signature,
+        typeInfo: hover.range ? 'property' : undefined,
+        tags: tags.length > 0 ? tags : undefined,
+        link,
+        availability,
+      });
 
       return {
         pos,
@@ -623,6 +946,10 @@ export class EditorPane extends TailwindElement() {
     const newLanguageKey = activeTab.path.split('.').pop() || '';
     const tabChanged = this._currentTabId !== activeTab.id;
 
+    // Detect indent unit from file content (or use language default for empty files)
+    const indentUnitStr = this.detectIndentUnit(activeTab.content, activeTab.path);
+    console.log('[Editor] Detected indent unit:', JSON.stringify(indentUnitStr), 'for file:', activeTab.path);
+
     // Check if editorView's DOM element is still in the document
     const editorViewInDom = this.editorView && document.contains(this.editorView.dom);
 
@@ -633,7 +960,7 @@ export class EditorPane extends TailwindElement() {
       }
       const state = EditorState.create({
         doc: activeTab.content,
-        extensions: [...this.getCommonExtensions(), language]
+        extensions: [...this.getCommonExtensions(indentUnitStr), language]
       });
       this.editorView = new EditorView({
         state,
@@ -666,7 +993,7 @@ export class EditorPane extends TailwindElement() {
         // Create state with restored cursor position
         const state = EditorState.create({
           doc: activeTab.content,
-          extensions: [...this.getCommonExtensions(), language],
+          extensions: [...this.getCommonExtensions(indentUnitStr), language],
           selection: EditorSelection.create([EditorSelection.cursor(pos)])
         });
         this.editorView.setState(state);
@@ -758,12 +1085,15 @@ export class EditorPane extends TailwindElement() {
     super.connectedCallback();
     // Listen for save events to update saved content
     document.addEventListener('file-saved', this._handleFileSaved.bind(this));
+    // Listen for cursor position restore events (e.g., from go-to-definition)
+    document.addEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.editorView?.destroy();
     document.removeEventListener('file-saved', this._handleFileSaved.bind(this));
+    document.removeEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
   }
 
   private _handleFileSaved(event: Event): void {
@@ -772,13 +1102,46 @@ export class EditorPane extends TailwindElement() {
     this._savedContent.set(path, content);
   }
 
+  private _handleRestoreCursorPosition(event: Event): void {
+    const customEvent = event as CustomEvent<{ line: number; column: number }>;
+    const { line, column } = customEvent.detail;
+
+    if (!this.editorView) return;
+
+    // Calculate position from line/col (1-indexed)
+    const lineInfo = this.editorView.state.doc.line(Math.min(line, this.editorView.state.doc.lines));
+    const pos = lineInfo.from + Math.min(column - 1, lineInfo.length);
+
+    // Move cursor to the definition location
+    this.editorView.dispatch({
+      selection: EditorSelection.create([EditorSelection.cursor(pos)]),
+      scrollIntoView: true,
+    });
+
+    // Update cursor position in active tab
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (activeTab) {
+      activeTab.cursorLine = line;
+      activeTab.cursorCol = column;
+    }
+
+    // Dispatch cursor position for status bar
+    document.dispatchEvent(new CustomEvent('cursor-position', {
+      detail: { line, column },
+      bubbles: true,
+      composed: true,
+    }));
+
+    console.log('[Editor] Restored cursor to line', line, 'col', column);
+  }
+
   render() {
     const hasContent = this.tabs.length > 0;
 
     return html`
       <div class="flex flex-col h-full overflow-hidden bg-white">
         <slot name="tab-bar"></slot>
-        ${hasContent 
+        ${hasContent
           ? html`<div id="editor-container" class="flex-1 overflow-hidden border-t border-[#c7c7c7]"></div>`
           : html`<div class="flex-1 flex items-center justify-center text-[#8a8a8a] text-sm">Select a file to edit</div>`
         }

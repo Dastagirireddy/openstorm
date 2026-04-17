@@ -24,6 +24,12 @@ export interface HoverInfo {
     end_line: number;
     end_char: number;
   };
+  // Extended metadata for rich tooltips
+  signature?: string;
+  typeInfo?: string;
+  documentation?: string;
+  tags?: string[];  // e.g., ['built-in', 'dom', 'deprecated']
+  link?: { text: string; url: string };
 }
 
 export interface LocationInfo {
@@ -316,14 +322,188 @@ export function completionKindToType(kind: number): string {
 }
 
 /**
- * Format markdown-like content from LSP hover
+ * Format markdown-like content from LSP hover - IntelliJ style
  */
-export function formatHoverContent(contents: string): string {
-  // Basic markdown to HTML conversion for tooltips
-  return contents
-    .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre class="bg-gray-100 p-2 rounded mt-1"><code>$2</code></pre>')
-    .replace(/`([^`]+)`/g, '<code class="bg-gray-100 px-1 rounded">$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+export function formatHoverContent(contents: string, options?: {
+  signature?: string;
+  typeInfo?: string;
+  tags?: string[];
+  link?: { text: string; url: string };
+  availability?: 'widely-available' | 'experimental' | 'deprecated' | 'non-standard';
+}): string {
+  // 1. Parsing Logic
+  let signature = options?.signature || '';
+  let description = contents;
+  let link = options?.link;
+
+  if (!options) {
+    const sections = contents.split(/\n---\n/);
+    signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
+    description = sections.slice(1, -1).join('\n').trim();
+    const lastSection = sections[sections.length - 1]?.trim() || '';
+    const linkMatch = lastSection.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    if (linkMatch) link = { text: linkMatch[1], url: linkMatch[2] };
+  }
+
+  // 2. Component Building
+
+  // Quick Actions Bar (The "Fix" links at the top)
+  const actionsHtml = `
+    <div class="intellij-actions">
+      <div class="action-item">
+        <span class="action-link">Explain & Fix</span>
+        <span class="action-shortcut">⌥⇧↵</span>
+      </div>
+      <div class="action-item">
+        <span class="action-link">More actions...</span>
+        <span class="action-shortcut">⌥↵</span>
+      </div>
+    </div>`;
+
+  // Signature Section (High-contrast code block)
+  const formattedSignature = signature ? `<div class="tooltip-signature"><code>${formatSignature(signature)}</code></div>` : '';
+
+  // Availability Bar
+  let availabilityHtml = '';
+  if (options?.availability === 'widely-available') {
+    availabilityHtml = `
+      <div class="availability-bar">
+        <span class="check-icon">✓</span>
+        <span class="avail-text">Widely available across major browsers</span>
+        <span class="chevron-icon">⌄</span>
+      </div>`;
+  }
+
+  // Footer/Badges
+  const tags = options?.tags || [];
+  const hasTsBadge = tags.includes('built-in') || tags.includes('dom');
+  const footerHtml = `
+    <div class="tooltip-footer">
+      ${hasTsBadge ? '<span class="ts-badge">TS</span>' : ''}
+      <span class="footer-meta">${options?.typeInfo || 'built-in'}</span>
+      ${link ? `<a href="${link.url}" class="mdn-link">${link.text} ↗</a>` : ''}
+    </div>`;
+
+  // 3. Final Assembly
+  const sigForErrorMsg = signature.split('(')[0].split(' ').pop() || 'symbol';
+  return `
+    <div class="intellij-tooltip">
+      <div class="tooltip-top-header">
+        <span class="error-msg">Definition found for ${sigForErrorMsg}</span>
+        <span class="menu-icon">⋮</span>
+      </div>
+      ${actionsHtml}
+      <hr class="intellij-divider" />
+      ${formattedSignature}
+      <hr class="intellij-divider" />
+      ${availabilityHtml}
+      <div class="tooltip-body">
+        ${formatDescription(description)}
+      </div>
+      ${footerHtml}
+    </div>`;
+}
+
+/**
+ * Format description text with proper syntax highlighting
+ */
+function formatDescription(text: string): string {
+  if (!text) return '';
+
+  // Process code blocks first
+  let html = text
+    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+      const highlighted = highlightCode(code, lang);
+      return `<pre class="code-block"><code>${highlighted}</code></pre>`;
+    })
+    // Inline code with pills
+    .replace(/`([^`]+)`/g, '<code class="code-pill">$1</code>')
+    // Bold/italic
+    .replace(/\*\*([^*]+)\*\*/g, '<strong class="highlight">$1</strong>')
     .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    // Links with labels
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="inline-link">$1<span>↗</span></a>')
+    // List items
+    .replace(/^- (.*)$/gm, '<li>$1</li>');
+
+  // Wrap lists
+  html = html.replace(/(<li>.*<\/li>)/g, '<ul class="styled-list">$1</ul>');
+
+  // Paragraphs
+  html = html
+    .replace(/\n\n+/g, '</p><p>')
     .replace(/\n/g, '<br>');
+
+  if (html && !html.startsWith('<p>')) {
+    html = `<p>${html}</p>`;
+  }
+
+  return html;
+}
+
+/**
+ * Format parameters section with highlighted names
+ */
+function formatParamsSection(params: string): string {
+  const lines = params.split('\n').filter(l => l.trim());
+  if (lines.length === 0) return '';
+
+  let html = '<div class="params-section"><div class="params-title">Parameters</div>';
+  for (const line of lines) {
+    const match = line.match(/^`?(\w+)`?\s*[-:]\s*(.*)$/);
+    if (match) {
+      const paramName = match[1];
+      const paramDesc = match[2] || '';
+      const highlightedDesc = formatDescription(paramDesc).replace(/<\/?p>/g, '');
+      html += `<div class="param-item">
+        <span class="param-name">${paramName}</span>
+        <span class="param-desc">${highlightedDesc}</span>
+      </div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+/**
+ * Apply syntax highlighting to code blocks
+ */
+function highlightCode(code: string, lang: string): string {
+  // Escape HTML
+  code = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  // Simple highlighting rules
+  code = code
+    .replace(/\b(const|let|var|function|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|try|catch|throw|switch|case|break|continue|default|yield|await|static|public|private|protected|readonly|abstract|declare|module|namespace|export|require|typeof|keyof|infer|extract|exclude|partial|readonly|record|pick|omit|nonnullable|non-nullable)\b/g, '<span class="kw">$1</span>')
+    .replace(/\b(string|number|boolean|any|never|unknown|void|null|undefined|true|false|Object|Array|Promise|Map|Set|WeakMap|WeakSet|Symbol|BigInt|Date|RegExp|Error|JSON|Math|Console|Function|Generator|Iterator|Observable|Subject)\b/g, '<span class="type">$1</span>')
+    .replace(/(['"`])(.*?)\1/g, '<span class="string">$1$2$1</span>')
+    .replace(/(\/\/.*$)/gm, '<span class="comment">$1</span>');
+
+  return code;
+}
+
+/**
+ * Format signature with simple syntax highlighting
+ * Handles patterns like: "var console: Console", "function foo(): void", etc.
+ */
+function formatSignature(signature: string): string {
+  if (!signature) return '';
+
+  // Escape HTML first
+  signature = signature
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Highlight keywords (var, let, const, function, async, etc.)
+  signature = signature.replace(/\b(var|let|const|function|async|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false)\b/g, '<span class="keyword">$1</span>');
+
+  // Highlight types (capitalized words after : or implements/extends)
+  signature = signature.replace(/: ([A-Z][a-zA-Z0-9_]*)/g, ': <span class="type">$1</span>');
+  signature = signature.replace(/(extends|implements) ([A-Z][a-zA-Z0-9_]*)/g, '$1 <span class="type">$2</span>');
+
+  // Highlight function names (word followed by parenthesis)
+  signature = signature.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\(/g, '<span class="variable">$1</span>(');
+
+  return signature;
 }
