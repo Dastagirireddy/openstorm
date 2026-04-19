@@ -627,10 +627,10 @@ impl DapConnection {
     }
 
     pub fn poll_events(&mut self) -> Vec<DapEvent> {
-        // Drain buffered events
-        let mut events = Vec::new();
+        // Start with buffered events (older, arrived while waiting for responses)
+        let mut events = std::mem::take(&mut self.event_buffer);
 
-        // Also check channel for new events
+        // Then append new events from channel (newer)
         if let Some(rx) = &self.response_rx {
             if let Ok(rx) = rx.lock() {
                 while let Ok(msg) = rx.try_recv() {
@@ -644,8 +644,6 @@ impl DapConnection {
             }
         }
 
-        // Add buffered events
-        events.append(&mut self.event_buffer);
         events
     }
 

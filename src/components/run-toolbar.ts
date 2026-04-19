@@ -50,6 +50,7 @@ export class RunToolbar extends TailwindElement() {
   @state() private showInstallPrompt = false;
   @state() private isInstalling = false;
   @state() private pendingConfig: RunConfiguration | null = null;
+  @state() private isDebugging = false;
 
   static override styles = css`
     :host {
@@ -297,6 +298,15 @@ export class RunToolbar extends TailwindElement() {
       this.runningProcessId = null;
     });
 
+    // Listen for debug events
+    listen("debug-initialized", () => {
+      this.isDebugging = true;
+    });
+
+    listen("debug-terminated", () => {
+      this.isDebugging = false;
+    });
+
     // Listen for project-opened event
     document.addEventListener("project-opened", ((e: CustomEvent) => {
       const path = e.detail?.path;
@@ -479,34 +489,37 @@ export class RunToolbar extends TailwindElement() {
 
   override render() {
     const selectedConfig = this.configurations.find((c) => c.id === this.selectedConfigId);
+    const showRunDebug = !this.isDebugging;
 
     return html`
-      <button
-        class="action-button run-button"
-        @click=${this.handleRun}
-        ?disabled=${!selectedConfig || this.isRunning}
-        title="Run (Ctrl+F5)">
-        <iconify-icon icon="mdi:play" width="16" color="#4caf50"></iconify-icon>
-      </button>
+      ${showRunDebug ? html`
+        <button
+          class="action-button run-button"
+          @click=${this.handleRun}
+          ?disabled=${!selectedConfig || this.isRunning}
+          title="Run (Ctrl+F5)">
+          <iconify-icon icon="mdi:play" width="16" color="#4caf50"></iconify-icon>
+        </button>
 
-      ${this.isRunning
-        ? html`
-            <button
-              class="action-button stop-button"
-              @click=${this.handleStop}
-              title="Stop (Shift+F5)">
-              <iconify-icon icon="mdi:stop" width="16" color="#f44336"></iconify-icon>
-            </button>
-          `
-        : html`
-            <button
-              class="action-button debug-button"
-              @click=${this.handleDebug}
-              ?disabled=${!selectedConfig}
-              title="Debug (F5)">
-              <iconify-icon icon="mdi:bug" width="16" color="#2196f3"></iconify-icon>
-            </button>
-          `}
+        ${this.isRunning
+          ? html`
+              <button
+                class="action-button stop-button"
+                @click=${this.handleStop}
+                title="Stop (Shift+F5)">
+                <iconify-icon icon="mdi:stop" width="16" color="#f44336"></iconify-icon>
+              </button>
+            `
+          : html`
+              <button
+                class="action-button debug-button"
+                @click=${this.handleDebug}
+                ?disabled=${!selectedConfig}
+                title="Debug (F5)">
+                <iconify-icon icon="mdi:bug" width="16" color="#2196f3"></iconify-icon>
+              </button>
+            `}
+      ` : ''}
 
       <div class="config-select" style="display: flex; align-items: center; gap: 6px;">
         ${selectedConfig
@@ -528,6 +541,15 @@ export class RunToolbar extends TailwindElement() {
             <div class="status-indicator">
               <span class="status-dot running"></span>
               <span>Running</span>
+            </div>
+          `
+        : ""}
+
+      ${this.isDebugging
+        ? html`
+            <div class="status-indicator">
+              <span class="status-dot running" style="background: #2196f3;"></span>
+              <span>Debugging</span>
             </div>
           `
         : ""}

@@ -1374,6 +1374,7 @@ export class EditorPane extends TailwindElement() {
     document.addEventListener('debug-session-started', this._handleDebugSessionStarted.bind(this));
     document.addEventListener('debug-session-ended', this._handleDebugSessionEnded.bind(this));
     document.addEventListener('debug-stopped', ((e: Event) => this._handleDebugStopped(e as CustomEvent).catch(console.error)) as EventListener);
+    document.addEventListener('debug-panel-request-breakpoints', this._handleDebugPanelRequestBreakpoints.bind(this));
 
     // Listen for breakpoint events from panels
     document.addEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
@@ -1440,6 +1441,22 @@ export class EditorPane extends TailwindElement() {
     this.isDebugging = false;
     this.setDebugLine(null);
     console.log('[Editor] Debug session ended');
+  }
+
+  private _handleDebugPanelRequestBreakpoints(): void {
+    // Send all breakpoints to the debug panel
+    const allBreakpoints: Breakpoint[] = [];
+    for (const [path, breakpoints] of this.breakpoints.entries()) {
+      allBreakpoints.push(...breakpoints);
+    }
+    console.log('[Editor] Sending', allBreakpoints.length, 'breakpoints to debug panel');
+    for (const bp of allBreakpoints) {
+      document.dispatchEvent(new CustomEvent('breakpoint-added', {
+        detail: bp,
+        bubbles: true,
+        composed: true,
+      }));
+    }
   }
 
   private async _handleDebugStopped(event?: CustomEvent): Promise<void> {

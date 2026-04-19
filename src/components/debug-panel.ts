@@ -45,6 +45,7 @@ export class DebugPanel extends TailwindElement() {
   @state() private outputs: DebugOutput[] = [];
   @state() private selectedFrameId: number | null = null;
   @state() private expandedVariables = new Set<string>();
+  @state() private debugState: "stopped" | "running" | "terminated" = "stopped";
 
   static styles = css`
     :host {
@@ -104,7 +105,11 @@ export class DebugPanel extends TailwindElement() {
       font-size: 12px;
       color: #6b7280;
       margin-left: 8px;
+      font-weight: 500;
     }
+
+    .status.running { color: #22c55e; }
+    .status.stopped { color: #f59e0b; }
 
     .tab-bar {
       display: flex;
@@ -149,24 +154,23 @@ export class DebugPanel extends TailwindElement() {
     .panel-content {
       flex: 1;
       overflow: auto;
-      padding: 8px;
+      padding: 0;
     }
 
     /* Variables Panel */
     .variables-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
     }
 
     .variable {
       display: flex;
       align-items: flex-start;
       padding: 4px 8px;
-      border-radius: 4px;
       cursor: pointer;
       font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 13px;
+      font-size: 12px;
+      border-bottom: 1px solid #f3f4f6;
     }
 
     .variable:hover {
@@ -216,20 +220,26 @@ export class DebugPanel extends TailwindElement() {
       padding-left: 20px;
     }
 
+    .child-variable {
+      padding: 2px 8px 2px 24px;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      border-bottom: 1px solid #f3f4f6;
+    }
+
     /* Call Stack Panel */
     .stack-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
     }
 
     .stack-frame {
       display: flex;
       flex-direction: column;
       padding: 6px 10px;
-      border-radius: 4px;
       cursor: pointer;
       border-left: 3px solid transparent;
+      border-bottom: 1px solid #f3f4f6;
     }
 
     .stack-frame:hover {
@@ -244,7 +254,7 @@ export class DebugPanel extends TailwindElement() {
     .stack-frame-name {
       color: #ca8a04;
       font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
     }
 
@@ -258,7 +268,6 @@ export class DebugPanel extends TailwindElement() {
     .breakpoints-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
     }
 
     .breakpoint {
@@ -266,7 +275,7 @@ export class DebugPanel extends TailwindElement() {
       align-items: center;
       gap: 8px;
       padding: 6px 10px;
-      border-radius: 4px;
+      border-bottom: 1px solid #f3f4f6;
     }
 
     .breakpoint:hover {
@@ -274,22 +283,27 @@ export class DebugPanel extends TailwindElement() {
     }
 
     .breakpoint-dot {
-      width: 12px;
-      height: 12px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       background: #ef4444;
-      border: 2px solid #b91c1c;
+      flex-shrink: 0;
     }
 
     .breakpoint-dot.disabled {
       background: #d1d5db;
-      border-color: #9ca3af;
+    }
+
+    .breakpoint-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
 
     .breakpoint-location {
       color: #1f2937;
       font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 13px;
+      font-size: 12px;
     }
 
     .breakpoint-path {
@@ -301,12 +315,13 @@ export class DebugPanel extends TailwindElement() {
     .console-output {
       font-family: 'JetBrains Mono', 'Fira Code', monospace;
       font-size: 12px;
-      white-space: pre-wrap;
     }
 
     .console-line {
-      padding: 2px 0;
+      padding: 3px 8px;
       border-bottom: 1px solid #f3f4f6;
+      white-space: pre-wrap;
+      word-break: break-word;
     }
 
     .console-line.stdout {
@@ -315,10 +330,15 @@ export class DebugPanel extends TailwindElement() {
 
     .console-line.stderr {
       color: #dc2626;
+      background: #fef2f2;
     }
 
     .console-line.log {
       color: #2563eb;
+    }
+
+    .console-line.console {
+      color: #6b7280;
     }
 
     /* Empty state */
@@ -328,8 +348,10 @@ export class DebugPanel extends TailwindElement() {
       align-items: center;
       justify-content: center;
       height: 100%;
+      padding: 20px;
       color: #9ca3af;
       gap: 8px;
+      text-align: center;
     }
 
     .empty-state-icon {
@@ -345,15 +367,14 @@ export class DebugPanel extends TailwindElement() {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 10px;
-      font-size: 11px;
+      padding: 6px 10px;
+      font-size: 10px;
       font-weight: 600;
       color: #6b7280;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      background: #f9fafb;
-      border-radius: 4px;
-      margin-bottom: 4px;
+      background: #fafafa;
+      border-bottom: 1px solid #e5e7eb;
     }
 
     .section-actions {
@@ -362,8 +383,8 @@ export class DebugPanel extends TailwindElement() {
     }
 
     .section-action {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -384,27 +405,40 @@ export class DebugPanel extends TailwindElement() {
   connectedCallback() {
     super.connectedCallback();
     this.setupEventListeners();
-    console.log("[DebugPanel] Connected, isDebugging =", this.isDebugging);
   }
 
   private async setupEventListeners() {
     document.addEventListener("debug-initialized", async (e: any) => {
       console.log("[DebugPanel] Debug initialized", e.detail);
       this.isDebugging = true;
+      // Don't overwrite "stopped" state - debug-stopped may arrive before initialized
+      if (this.debugState !== "stopped") {
+        this.debugState = "running";
+      }
       this.requestUpdate();
     });
 
     document.addEventListener("debug-session-started", async (e: any) => {
       console.log("[DebugPanel] Debug session started", e.detail);
       this.isDebugging = true;
+      // Don't overwrite "stopped" state
+      if (this.debugState !== "stopped") {
+        this.debugState = "running";
+      }
       this.requestUpdate();
-      await this.refreshVariables();
-      await this.refreshBreakpoints();
+      // Request breakpoints from editor
+      document.dispatchEvent(
+        new CustomEvent("debug-panel-request-breakpoints", {
+          bubbles: true,
+          composed: true,
+        })
+      );
     });
 
     document.addEventListener("debug-session-ended", (e: any) => {
       console.log("[DebugPanel] Debug session ended", e.detail);
       this.isDebugging = false;
+      this.debugState = "terminated";
       this.stackFrames = [];
       this.variables = [];
       this.selectedFrameId = null;
@@ -413,15 +447,17 @@ export class DebugPanel extends TailwindElement() {
 
     document.addEventListener("debug-stopped", async (e: any) => {
       console.log("[DebugPanel] Debug stopped:", e.detail);
-      this.isDebugging = true; // Ensure buttons are enabled when stopped
+      this.isDebugging = true;
+      this.debugState = "stopped";
       this.requestUpdate();
       await this.refreshStackTrace();
       await this.refreshVariables();
+      await this.syncBreakpoints();
     });
 
     document.addEventListener("debug-continued", (e: any) => {
       console.log("[DebugPanel] Debug continued", e.detail);
-      // Keep isDebugging true, just clear stack/variables
+      this.debugState = "running";
       this.stackFrames = [];
       this.variables = [];
       this.requestUpdate();
@@ -455,59 +491,53 @@ export class DebugPanel extends TailwindElement() {
 
   async refreshStackTrace() {
     try {
-      console.log("[DebugPanel] Fetching stack trace...");
       this.stackFrames = await invoke<StackFrame[]>("get_stack_trace");
-      console.log("[DebugPanel] Got", this.stackFrames.length, "stack frames");
+      if (this.stackFrames.length > 0 && !this.selectedFrameId) {
+        this.selectedFrameId = this.stackFrames[0].id;
+      }
     } catch (error) {
       console.error("Failed to get stack trace:", error);
+      this.stackFrames = [];
     }
   }
 
   async refreshVariables() {
     try {
-      // First get the stack trace to find the top frame
       const stackFrames = await invoke<any[]>("get_stack_trace");
-      if (stackFrames.length === 0) {
-        console.log("[DebugPanel] No stack frames, skipping variables");
+      if (!stackFrames || stackFrames.length === 0) {
         this.variables = [];
         return;
       }
 
-      // Get scopes for the top frame
       const topFrame = stackFrames[0];
-      console.log("[DebugPanel] Fetching scopes for frame", topFrame.id);
-      const scopes = await invoke<any[]>("get_scopes", {
-        frameId: topFrame.id,
-      });
-      console.log("[DebugPanel] Got", scopes.length, "scopes");
+      const scopes = await invoke<any[]>("get_scopes", { frameId: topFrame.id });
 
-      // Get variables from the first scope (usually "Local" or "Arguments")
-      if (scopes.length > 0) {
-        const scope = scopes[0];
-        console.log("[DebugPanel] Fetching variables from scope:", scope.name, "ref:", scope.variablesReference);
-        const vars = await invoke<any[]>("get_variables", {
-          variablesReference: scope.variablesReference,
-        });
-        console.log("[DebugPanel] Got", vars.length, "variables");
-        this.variables = vars.map((v) => ({
-          name: v.name,
-          value: v.value,
-          type: v.variable_type,
-          variablesReference: v.variables_reference || 0,
-          expanded: false,
-        }));
-      } else {
+      if (!scopes || scopes.length === 0) {
         this.variables = [];
+        return;
       }
+
+      const scope = scopes[0];
+      const vars = await invoke<any[]>("get_variables", {
+        variablesReference: scope.variablesReference,
+      });
+
+      this.variables = (vars || []).map((v) => ({
+        name: v.name,
+        value: v.value,
+        type: v.variable_type,
+        variablesReference: v.variables_reference || 0,
+        expanded: false,
+      }));
     } catch (error) {
       console.error("Failed to get variables:", error);
       this.variables = [];
     }
   }
 
-  async refreshBreakpoints() {
-    // Breakpoints are managed locally, just ensure we have the list
-    console.log("[DebugPanel] Breakpoints:", this.breakpoints.length);
+  async syncBreakpoints() {
+    // Breakpoints are managed locally from editor interactions
+    // This ensures we have the latest list
   }
 
   private handleFrameSelect(frame: StackFrame) {
@@ -539,7 +569,7 @@ export class DebugPanel extends TailwindElement() {
       this.variables = this.updateVariableChildren(
         this.variables,
         path,
-        children.map((c) => ({
+        (children || []).map((c) => ({
           name: c.name,
           value: c.value,
           type: c.variable_type,
@@ -625,7 +655,7 @@ export class DebugPanel extends TailwindElement() {
       `;
     }
 
-    if (this.variables.length === 0) {
+    if (!this.variables || this.variables.length === 0) {
       return html`
         <div class="empty-state">
           <iconify-icon class="empty-state-icon" icon="mdi:variable"></iconify-icon>
@@ -669,7 +699,7 @@ export class DebugPanel extends TailwindElement() {
         </div>
       </div>
       <div class="stack-list">
-        ${this.stackFrames.length === 0
+        ${!this.stackFrames || this.stackFrames.length === 0
           ? html`<div class="empty-state">
               <iconify-icon class="empty-state-icon" icon="mdi:call-missed"></iconify-icon>
               <span class="empty-state-text">No stack frames</span>
@@ -691,7 +721,7 @@ export class DebugPanel extends TailwindElement() {
   }
 
   private renderBreakpointsPanel() {
-    if (this.breakpoints.length === 0) {
+    if (!this.breakpoints || this.breakpoints.length === 0) {
       return html`
         <div class="empty-state">
           <iconify-icon class="empty-state-icon" icon="mdi:map-marker-off-outline"></iconify-icon>
@@ -709,7 +739,7 @@ export class DebugPanel extends TailwindElement() {
           (bp) => html`
             <div class="breakpoint">
               <div class="breakpoint-dot ${bp.enabled ? "" : "disabled"}"></div>
-              <div>
+              <div class="breakpoint-info">
                 <div class="breakpoint-location">${this.getFileName(bp.sourcePath)}:${bp.line}</div>
                 <div class="breakpoint-path">${bp.sourcePath}</div>
               </div>
@@ -721,7 +751,7 @@ export class DebugPanel extends TailwindElement() {
   }
 
   private renderConsolePanel() {
-    if (this.outputs.length === 0) {
+    if (!this.outputs || this.outputs.length === 0) {
       return html`
         <div class="empty-state">
           <iconify-icon class="empty-state-icon" icon="mdi:console-outline"></iconify-icon>
@@ -733,7 +763,7 @@ export class DebugPanel extends TailwindElement() {
     return html`
       <div class="console-output">
         ${this.outputs.map(
-          (output, i) => html`
+          (output) => html`
             <div class="console-line ${output.category}">${output.output}</div>
           `,
         )}
@@ -742,13 +772,16 @@ export class DebugPanel extends TailwindElement() {
   }
 
   render() {
+    const statusText = this.debugState === "running" ? "Running" : this.debugState === "stopped" ? "Stopped" : "Terminated";
+    const statusClass = this.debugState === "running" ? "running" : "stopped";
+
     return html`
       <!-- Debug Action Toolbar -->
       <div class="debug-toolbar">
         <button
           class="debug-action continue"
           @click=${() => this.sendAction("continue")}
-          ?disabled=${!this.isDebugging}
+          ?disabled=${this.debugState !== "stopped"}
           title="Continue (F5)">
           <iconify-icon icon="mdi:play" width="16"></iconify-icon>
         </button>
@@ -756,7 +789,7 @@ export class DebugPanel extends TailwindElement() {
         <button
           class="debug-action step"
           @click=${() => this.sendAction("stepover")}
-          ?disabled=${!this.isDebugging}
+          ?disabled=${this.debugState !== "stopped"}
           title="Step Over (F10)">
           <iconify-icon icon="mdi:debug-step-over" width="16"></iconify-icon>
         </button>
@@ -764,7 +797,7 @@ export class DebugPanel extends TailwindElement() {
         <button
           class="debug-action step"
           @click=${() => this.sendAction("stepinto")}
-          ?disabled=${!this.isDebugging}
+          ?disabled=${this.debugState !== "stopped"}
           title="Step Into (F11)">
           <iconify-icon icon="mdi:debug-step-into" width="16"></iconify-icon>
         </button>
@@ -772,7 +805,7 @@ export class DebugPanel extends TailwindElement() {
         <button
           class="debug-action step"
           @click=${() => this.sendAction("stepout")}
-          ?disabled=${!this.isDebugging}
+          ?disabled=${this.debugState !== "stopped"}
           title="Step Out (Shift+F11)">
           <iconify-icon icon="mdi:debug-step-out" width="16"></iconify-icon>
         </button>
@@ -782,7 +815,7 @@ export class DebugPanel extends TailwindElement() {
         <button
           class="debug-action pause"
           @click=${() => this.sendAction("pause")}
-          ?disabled=${!this.isDebugging}
+          ?disabled=${this.debugState !== "running"}
           title="Pause">
           <iconify-icon icon="mdi:pause" width="16"></iconify-icon>
         </button>
@@ -795,7 +828,7 @@ export class DebugPanel extends TailwindElement() {
           <iconify-icon icon="mdi:stop" width="16"></iconify-icon>
         </button>
 
-        <span class="status">${this.isDebugging ? "Debugging" : "Not debugging"}</span>
+        <span class="status ${statusClass}">${statusText}</span>
       </div>
 
       <!-- Tab Bar -->
