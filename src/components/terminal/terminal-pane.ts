@@ -194,6 +194,20 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }
     });
 
+    // Listen for process output (run configurations)
+    listen<{ process_id: number; output_type: string; data: string; timestamp: number }>('process-output', (event) => {
+      const { output_type, data } = event.payload;
+      const activeTerminal = this.terminals.find(t => t.terminalId !== null);
+      if (activeTerminal?.xterm) {
+        // Use darker colors for visibility on white background
+        const color = output_type === 'stderr' ? '\x1b[31m' : '\x1b[30m';
+        activeTerminal.xterm.write(`${color}${data}\x1b[0m\r\n`);
+        requestAnimationFrame(() => {
+          if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
+        });
+      }
+    });
+
     // Reset viewport scroll to top after terminal is opened
     setTimeout(() => {
       const viewport = this.terminalWrapper?.querySelector('.xterm-viewport') as HTMLElement;
