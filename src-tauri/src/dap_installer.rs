@@ -54,7 +54,7 @@ static ADAPTER_REGISTRY: Lazy<Vec<AdapterInfo>> = Lazy::new(|| {
             name: "Go Debugger",
             languages: vec!["go"],
             download_url: None,
-            install_command: Some("go install github.com/go-delve/delve/cmd/dlv@latest"),
+            install_command: Some("go install github.com/go-delve/delve/cmd/dlv@master"),
             binary_name: "dlv",
             binary_args: vec!["dap"],
             size_mb: 15,

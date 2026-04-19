@@ -51,15 +51,21 @@ export class RunToolbar extends TailwindElement() {
   @state() private isInstalling = false;
   @state() private pendingConfig: RunConfiguration | null = null;
   @state() private isDebugging = false;
+  @state() private isDebugStopped = false;
 
   static override styles = css`
     :host {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 4px 8px;
-      background: #f5f5f5;
-      border-bottom: 1px solid #e0e0e0;
+      gap: 4px;
+      padding: 2px 4px;
+      background: transparent;
+    }
+
+    .button-group {
+      display: flex;
+      align-items: center;
+      gap: 2px;
     }
 
     .action-button {
@@ -72,9 +78,16 @@ export class RunToolbar extends TailwindElement() {
       border-radius: 4px;
       background: transparent;
       cursor: pointer;
-      transition: all 0.15s;
+      transition: all 0.12s ease;
       padding: 0;
-      z-index: 10;
+    }
+
+    .action-button:hover {
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    .action-button:active {
+      background: rgba(0, 0, 0, 0.1);
     }
 
     .action-button iconify-icon {
@@ -85,71 +98,67 @@ export class RunToolbar extends TailwindElement() {
       color: #4caf50;
     }
 
-    .run-button:hover {
-      background: rgba(76, 175, 80, 0.1);
+    .run-button:disabled {
+      color: #bdbdbd;
+      cursor: not-allowed;
     }
 
-    .run-button:disabled {
-      color: #999;
-      cursor: not-allowed;
+    .run-button:disabled:hover {
+      background: transparent;
     }
 
     .debug-button {
-      color: #2196f3;
-    }
-
-    .debug-button:hover {
-      background: rgba(33, 150, 243, 0.1);
+      color: #1976d2;
     }
 
     .debug-button:disabled {
-      color: #999;
+      color: #bdbdbd;
       cursor: not-allowed;
+    }
+
+    .debug-button:disabled:hover {
+      background: transparent;
+    }
+
+    .debug-button.continue {
+      color: #4caf50;
     }
 
     .stop-button {
       color: #f44336;
     }
 
-    .stop-button:hover {
-      background: rgba(244, 67, 54, 0.1);
-    }
-
     .config-select {
       display: flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 8px;
-      font-size: 13px;
-      border: 1px solid #ddd;
+      gap: 4px;
+      padding: 2px 6px;
+      font-size: 12px;
+      border: none;
       border-radius: 4px;
-      background: white;
+      background: transparent;
       cursor: pointer;
-      min-width: 180px;
-      max-width: 280px;
-    }
-
-    .config-option {
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      min-width: 100px;
+      max-width: 240px;
+      transition: all 0.12s ease;
+      height: 24px;
     }
 
     .config-select:hover {
-      border-color: #bbb;
+      background: rgba(0, 0, 0, 0.04);
     }
 
     .status-indicator {
       display: flex;
       align-items: center;
-      gap: 4px;
-      font-size: 12px;
-      color: #666;
+      gap: 3px;
+      font-size: 11px;
+      color: #888;
     }
 
     .status-dot {
-      width: 8px;
-      height: 8px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       background: #ccc;
     }
@@ -300,11 +309,29 @@ export class RunToolbar extends TailwindElement() {
 
     // Listen for debug events
     listen("debug-initialized", () => {
+      console.log("[run-toolbar] debug-initialized event received");
       this.isDebugging = true;
+      this.isDebugStopped = false;
+      this.requestUpdate();
+    });
+
+    listen("debug-stopped", () => {
+      console.log("[run-toolbar] debug-stopped event received");
+      this.isDebugStopped = true;
+      this.requestUpdate();
+    });
+
+    listen("debug-continued", () => {
+      console.log("[run-toolbar] debug-continued event received");
+      this.isDebugStopped = false;
+      this.requestUpdate();
     });
 
     listen("debug-terminated", () => {
+      console.log("[run-toolbar] debug-terminated event received");
       this.isDebugging = false;
+      this.isDebugStopped = false;
+      this.requestUpdate();
     });
 
     // Listen for project-opened event
@@ -377,15 +404,12 @@ export class RunToolbar extends TailwindElement() {
       }
 
       console.log("[DEBUG] Starting debug session...");
-      const sessionId = await invoke<number>("start_debug_session", { config });
+      const sessionId = await invoke<number>("start_debug_session", {
+        workspaceRoot: this.projectPath,
+        config
+      });
       console.log("[DEBUG] Debug session started with ID:", sessionId);
-      document.dispatchEvent(
-        new CustomEvent("debug-session-started", {
-          detail: { session_id: sessionId },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      // Don't dispatch debug-session-started here - let the backend emit it
     } catch (error) {
       console.error("[DEBUG] Failed to start debug session:", error);
     }
@@ -427,25 +451,12 @@ export class RunToolbar extends TailwindElement() {
 
         console.log("Starting debug session...");
         try {
-          const sessionId = await invoke<number>("start_debug_session", { config });
+          const sessionId = await invoke<number>("start_debug_session", {
+            workspaceRoot: this.projectPath,
+            config
+          });
           console.log("Debug session started with ID:", sessionId);
-
-          // Switch to debug activity to show debug sidebar
-          document.dispatchEvent(
-            new CustomEvent("activity-change", {
-              detail: { item: "run-debug" },
-              bubbles: true,
-              composed: true,
-            }),
-          );
-
-          document.dispatchEvent(
-            new CustomEvent("debug-session-started", {
-              detail: { session_id: sessionId },
-              bubbles: true,
-              composed: true,
-            }),
-          );
+          // Don't dispatch debug-session-started here - let the backend emit it
         } catch (debugError) {
           console.error("Failed to start debug session:", debugError);
           alert("Failed to start debug session: " + debugError);
@@ -475,6 +486,23 @@ export class RunToolbar extends TailwindElement() {
     }
   };
 
+  private handleContinue = async () => {
+    try {
+      await invoke("debug_action", { action: "continue" });
+      this.isDebugStopped = false;
+    } catch (error) {
+      console.error("Failed to continue debugging:", error);
+    }
+  };
+
+  private handleStopDebug = async () => {
+    try {
+      await invoke("debug_action", { action: "terminate" });
+    } catch (error) {
+      console.error("Failed to stop debugging:", error);
+    }
+  };
+
   private getLanguageIcon(language: string): string {
     const icons: Record<string, string> = {
       rust: "devicon:rust",
@@ -492,36 +520,8 @@ export class RunToolbar extends TailwindElement() {
     const showRunDebug = !this.isDebugging;
 
     return html`
-      ${showRunDebug ? html`
-        <button
-          class="action-button run-button"
-          @click=${this.handleRun}
-          ?disabled=${!selectedConfig || this.isRunning}
-          title="Run (Ctrl+F5)">
-          <iconify-icon icon="mdi:play" width="16" color="#4caf50"></iconify-icon>
-        </button>
-
-        ${this.isRunning
-          ? html`
-              <button
-                class="action-button stop-button"
-                @click=${this.handleStop}
-                title="Stop (Shift+F5)">
-                <iconify-icon icon="mdi:stop" width="16" color="#f44336"></iconify-icon>
-              </button>
-            `
-          : html`
-              <button
-                class="action-button debug-button"
-                @click=${this.handleDebug}
-                ?disabled=${!selectedConfig}
-                title="Debug (F5)">
-                <iconify-icon icon="mdi:bug" width="16" color="#2196f3"></iconify-icon>
-              </button>
-            `}
-      ` : ''}
-
-      <div class="config-select" style="display: flex; align-items: center; gap: 6px;">
+      <!-- Configuration selector (dynamic width) -->
+      <div class="config-select">
         ${selectedConfig
           ? html`
               <iconify-icon
@@ -536,6 +536,58 @@ export class RunToolbar extends TailwindElement() {
           : html`<span style="color: #999;">No configuration</span>`}
       </div>
 
+      ${showRunDebug ? html`
+        <!-- Run button -->
+        <button
+          class="action-button run-button"
+          @click=${this.handleRun}
+          ?disabled=${!selectedConfig || this.isRunning}
+          title="Run (Ctrl+F5)">
+          <iconify-icon icon="mdi:play" width="16"></iconify-icon>
+        </button>
+
+        ${this.isRunning
+          ? html`
+              <!-- Stop button (shown when running) -->
+              <button
+                class="action-button stop-button"
+                @click=${this.handleStop}
+                title="Stop (Shift+F5)">
+                <iconify-icon icon="mdi:stop" width="16"></iconify-icon>
+              </button>
+            `
+          : html`
+              <!-- Debug button (shown when not running) -->
+              <button
+                class="action-button debug-button"
+                @click=${this.handleDebug}
+                ?disabled=${!selectedConfig}
+                title="Debug (F5)">
+                <iconify-icon icon="mdi:bug" width="16"></iconify-icon>
+              </button>
+            `}
+      ` : html`
+        <!-- Debug toolbar (shown when debugging) -->
+        <div class="button-group">
+          <!-- Continue button -->
+          <button
+            class="action-button debug-button ${this.isDebugStopped ? 'continue' : ''}"
+            @click=${this.handleContinue}
+            title="Continue (F5)">
+            <iconify-icon icon="mdi:play" width="16"></iconify-icon>
+          </button>
+
+          <!-- Stop button -->
+          <button
+            class="action-button stop-button"
+            @click=${this.handleStopDebug}
+            title="Stop Debugging (Shift+F5)">
+            <iconify-icon icon="mdi:stop" width="16"></iconify-icon>
+          </button>
+        </div>
+      `}
+
+      <!-- Status indicator -->
       ${this.isRunning
         ? html`
             <div class="status-indicator">
@@ -548,8 +600,8 @@ export class RunToolbar extends TailwindElement() {
       ${this.isDebugging
         ? html`
             <div class="status-indicator">
-              <span class="status-dot running" style="background: #2196f3;"></span>
-              <span>Debugging</span>
+              <span class="status-dot running" style="background: ${this.isDebugStopped ? '#ff9800' : '#1976d2'}; animation: none;"></span>
+              <span>${this.isDebugStopped ? 'Paused' : 'Running'}</span>
             </div>
           `
         : ""}

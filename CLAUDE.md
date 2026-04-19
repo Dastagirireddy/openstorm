@@ -81,3 +81,13 @@ openstorm/
 ├── tsconfig.json
 └── vite.config.ts
 ```
+
+## UI/UX Guidelines
+
+- **No custom CSS** — Use Tailwind CSS 4 exclusively for styling
+- **Brand colors** — Use `indigo` or `purple` as the primary brand colors
+- **Native desktop UI** — Style components to match native desktop applications (macOS/Windows), not web apps:
+  - Compact, dense layouts with smaller spacing
+  - Native-like form controls and buttons
+  - Subtle borders and shadows
+  - System-like typography and spacing

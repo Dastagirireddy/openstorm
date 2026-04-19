@@ -95,29 +95,34 @@ impl ProcessManager {
         let output_tx = self.output_tx.clone();
         let cwd = config.cwd.clone();
 
-        // Stream stdout
+        // Track reader tasks to wait for completion
+        let mut reader_handles = Vec::new();
+
+        // Stream stdout - read all lines until EOF
         if let Some(stdout) = child.stdout.take() {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
             let tx = output_tx.clone();
-            tauri::async_runtime::spawn(async move {
+            let handle = tauri::async_runtime::spawn(async move {
                 while let Ok(Some(line)) = lines.next_line().await {
                     let event = OutputEvent::stdout(process_id_for_stdout, line);
                     let _ = tx.send(event);
                 }
             });
+            reader_handles.push(handle);
         }
 
-        // Stream stderr
+        // Stream stderr - read all lines until EOF
         if let Some(stderr) = child.stderr.take() {
             let reader = BufReader::new(stderr);
             let mut lines = reader.lines();
-            tauri::async_runtime::spawn(async move {
+            let handle = tauri::async_runtime::spawn(async move {
                 while let Ok(Some(line)) = lines.next_line().await {
                     let event = OutputEvent::stderr(process_id_for_stderr, line);
                     let _ = output_tx.send(event);
                 }
             });
+            reader_handles.push(handle);
         }
 
         // Store process
@@ -125,6 +130,41 @@ impl ProcessManager {
             let mut processes = self.processes.write().await;
             processes.insert(process_id, child);
         }
+
+        // Wait for process to complete and emit terminated event
+        let processes_clone = self.processes.clone();
+        let process_info_clone = self.process_info.clone();
+        let app_handle = self.app_handle.lock().unwrap().clone();
+        let process_id_for_wait = process_id;
+        tauri::async_runtime::spawn(async move {
+            // Wait for the process to complete
+            let mut child = {
+                let mut procs = processes_clone.write().await;
+                procs.remove(&process_id_for_wait)
+            };
+
+            if let Some(ref mut child) = child {
+                let _ = child.wait().await;
+            }
+
+            // Wait for all reader tasks to finish (ensures all output is captured)
+            for handle in reader_handles {
+                let _ = handle.await;
+            }
+
+            // Clean up process info
+            {
+                let mut info = process_info_clone.write().await;
+                info.remove(&process_id_for_wait);
+            }
+
+            // Emit terminated event
+            if let Some(app) = app_handle {
+                let _ = app.emit("process-terminated", serde_json::json!({
+                    "process_id": process_id_for_wait,
+                }));
+            }
+        });
 
         // Store process info
         {

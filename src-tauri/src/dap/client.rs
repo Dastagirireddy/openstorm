@@ -1,6 +1,7 @@
 use super::adapter::{DebugAdapter, DapEvent, Breakpoint};
 use super::types::*;
 use crate::dap::adapters::{LldbAdapter, JsDebugAdapter, GoAdapter};
+use crate::dap::watch::WatchManager;
 
 pub type SessionId = u32;
 
@@ -15,6 +16,7 @@ pub struct DapClient {
     adapter: Option<Box<dyn DebugAdapter>>,
     session: Option<DebugSession>,
     next_session_id: u32,
+    watch_manager: WatchManager,
 }
 
 impl DapClient {
@@ -23,6 +25,7 @@ impl DapClient {
             adapter: None,
             session: None,
             next_session_id: 1,
+            watch_manager: WatchManager::new(),
         }
     }
 
@@ -48,12 +51,15 @@ impl DapClient {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
 
+        println!("[DAP] Starting debug adapter process...");
         // Start the debug adapter process
         adapter.start(args)?;
 
+        println!("[DAP] Initializing adapter...");
         // Initialize the adapter
         let _capabilities = adapter.initialize()?;
 
+        println!("[DAP] Launching program...");
         // Launch the program (but don't send configurationDone yet)
         adapter.launch(args)?;
 
@@ -66,6 +72,7 @@ impl DapClient {
             adapter_name: adapter.name().to_string(),
         });
 
+        println!("[DAP] Session {} created successfully", session_id);
         Ok(session_id)
     }
 
@@ -74,16 +81,24 @@ impl DapClient {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
 
-        adapter.finalize_launch()?;
+        println!("[DAP] Finalizing launch...");
+        let result = adapter.finalize_launch();
 
-        if let Some(session) = &mut self.session {
-            session.state = DebugSessionState::Running;
+        if let Err(ref e) = result {
+            println!("[DAP] Failed to finalize launch: {}", e);
+        } else {
+            println!("[DAP] Launch finalized successfully");
+
+            if let Some(session) = &mut self.session {
+                session.state = DebugSessionState::Running;
+                println!("[DAP] Session state set to Running");
+            }
         }
 
-        Ok(())
+        result
     }
 
-    pub fn set_breakpoints(&mut self, source_path: &str, lines: Vec<u32>) -> Result<Vec<Breakpoint>, String> {
+    pub fn set_breakpoints(&mut self, source_path: &str, breakpoints: Vec<SourceBreakpoint>) -> Result<Vec<Breakpoint>, String> {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
 
@@ -93,13 +108,7 @@ impl DapClient {
                 name: None,
                 source_reference: None,
             },
-            breakpoints: lines.iter().map(|&line| SourceBreakpoint {
-                line,
-                column: None,
-                condition: None,
-                hit_condition: None,
-                log_message: None,
-            }).collect(),
+            breakpoints,
             source_modified: None,
         };
 
@@ -259,6 +268,38 @@ impl DapClient {
 
     pub fn get_session_mut(&mut self) -> Option<&mut DebugSession> {
         self.session.as_mut()
+    }
+
+    // Watch expression methods
+    pub fn add_watch_expression(&mut self, expression: String) -> u32 {
+        self.watch_manager.add(expression)
+    }
+
+    pub fn remove_watch_expression(&mut self, id: u32) -> bool {
+        self.watch_manager.remove(id)
+    }
+
+    pub fn get_watch_expressions(&self) -> Vec<crate::dap::watch::WatchExpression> {
+        self.watch_manager.get_all()
+    }
+
+    pub fn refresh_watch_expressions(&mut self, evaluations: Vec<Result<Variable, String>>) {
+        self.watch_manager.refresh_with_values(evaluations);
+    }
+
+    // Exception breakpoint methods
+    pub fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {
+        if let Some(adapter) = &mut self.adapter {
+            adapter.get_exception_breakpoint_filters()
+        } else {
+            vec![]
+        }
+    }
+
+    pub fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String> {
+        let adapter = self.adapter.as_mut()
+            .ok_or_else(|| "No adapter initialized".to_string())?;
+        adapter.set_exception_breakpoints(filter_ids)
     }
 }
 

@@ -1,6 +1,6 @@
-import { html } from 'lit';
+import { html, css } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
-import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, gutter, GutterMarker, Decoration } from '@codemirror/view';
+import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, gutter, GutterMarker, Decoration, gutterLineClass } from '@codemirror/view';
 import { EditorState, EditorSelection, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
 import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
@@ -27,6 +27,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
 import { getFileExtension } from '../../lib/file-icons.js';
 import type { EditorTab } from '../../lib/file-types.js';
+import type { BreakpointCondition } from '../conditional-breakpoint-dialog.js';
 import {
   getCompletions,
   getHover,
@@ -121,14 +122,95 @@ const setBreakpointsEffect = StateEffect.define<number[]>();
  * Gutter marker for breakpoints
  */
 class BreakpointMarker extends GutterMarker {
+  constructor(
+    private readonly isDebugMode: boolean = false,
+    private readonly isCurrentLine: boolean = false
+  ) {
+    super();
+  }
+
   toDOM() {
     const div = document.createElement('div');
-    div.className = 'cm-breakpoint-dot';
+    if (this.isCurrentLine) {
+      div.className = 'cm-breakpoint-dot cm-breakpoint-current';
+    } else if (this.isDebugMode) {
+      div.className = 'cm-breakpoint-dot cm-breakpoint-debug';
+    } else {
+      div.className = 'cm-breakpoint-dot';
+    }
     return div;
   }
 }
 
 const breakpointMarker = new BreakpointMarker();
+const breakpointDebugMarker = new BreakpointMarker(true);
+const breakpointCurrentMarker = new BreakpointMarker(false, true);
+
+/**
+ * Gutter marker for debug line highlighting (when no breakpoint present)
+ * This creates a full-width background highlight in the gutter
+ */
+class DebugLineGutterMarker extends GutterMarker {
+  toDOM() {
+    const div = document.createElement('div');
+    div.className = 'cm-debug-line-gutter-marker';
+    return div;
+  }
+}
+
+const debugLineGutterMarker = new DebugLineGutterMarker();
+
+/**
+ * Inline value display during debugging
+ * Shows variable values as ghost text after the variable name
+ */
+const inlineValueField = StateField.define<Map<number, { line: number; column: number; value: string }>>({
+  create() {
+    return new Map();
+  },
+  update(value, transaction) {
+    for (const effect of transaction.effects) {
+      if (effect.is(setInlineValueEffect)) {
+        const newMap = new Map(value);
+        const key = `${effect.value.line}-${effect.value.column}`;
+        newMap.set(key, effect.value);
+        return newMap;
+      }
+      if (effect.is(clearInlineValueEffect)) {
+        return new Map();
+      }
+    }
+    return value;
+  },
+});
+
+const setInlineValueEffect = StateEffect.define<{ line: number; column: number; value: string }>();
+const clearInlineValueEffect = StateEffect.define();
+
+/**
+ * Inline value decoration
+ */
+function inlineValueDecorations() {
+  return EditorView.decorations.compute(['doc', inlineValueField], (state) => {
+    const inlineValues = state.field(inlineValueField);
+    const decorations: Range<Decoration>[] = [];
+
+    for (const [key, data] of inlineValues.entries()) {
+      const line = state.doc.line(data.line);
+      if (line && data.column < line.length) {
+        const pos = line.from + data.column;
+        decorations.push(
+          Decoration.mark({
+            class: 'cm-inline-value-after',
+            attributes: { 'data-value': data.value },
+          }).range(pos, pos)
+        );
+      }
+    }
+
+    return Decoration.set(decorations);
+  });
+}
 
 /**
  * Gutter extension for breakpoints - must be before lineNumbers() to render first
@@ -136,39 +218,77 @@ const breakpointMarker = new BreakpointMarker();
 function breakpointGutter(onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void) {
   return [
     breakpointField,
+    debugModeField,
+    debugLineField,
+    // Combined gutter that handles both breakpoints and debug line highlighting
     gutter({
       class: 'cm-breakpoint-gutter',
       lineMarker: (view, line) => {
         const breakpoints = view.state.field(breakpointField);
+        const isDebugMode = view.state.field(debugModeField);
+        const currentLine = view.state.field(debugLineField);
         const lineNum = view.state.doc.lineAt(line.from).number;
-        return breakpoints.has(lineNum) ? breakpointMarker : null;
+        const isDebugLine = currentLine === lineNum;
+        const hasBreakpoint = breakpoints.has(lineNum);
+
+        // If on debug line but no breakpoint, return a marker for gutter highlighting
+        if (isDebugLine && !hasBreakpoint) {
+          return debugLineGutterMarker;
+        }
+
+        if (hasBreakpoint) {
+          // If this breakpoint is on the current debug line, use special highlighting
+          if (isDebugLine) {
+            return breakpointCurrentMarker;
+          }
+          return isDebugMode ? breakpointDebugMarker : breakpointMarker;
+        }
+        return null;
       },
       lineMarkerChange: (update) => {
         return update.transactions.some(t => t.effects.some(e =>
-          e.is(addBreakpointEffect) || e.is(removeBreakpointEffect) || e.is(setBreakpointsEffect)
+          e.is(addBreakpointEffect) || e.is(removeBreakpointEffect) || e.is(setBreakpointsEffect) || e.is(setDebugModeEffect) || e.is(setDebugLineEffect)
         ));
       },
       domEventHandlers: {
-        mousedown(view, line) {
+        mousedown(view, line, event) {
           const lineNum = view.state.doc.lineAt(line.from).number;
           const breakpoints = view.state.field(breakpointField);
           const hasBreakpoint = breakpoints.has(lineNum);
 
-          view.dispatch({
-            effects: hasBreakpoint
-              ? removeBreakpointEffect.of(lineNum)
-              : addBreakpointEffect.of(lineNum)
-          });
+          // Left click (button 0) - toggle breakpoint
+          if (event.button === 0) {
+            view.dispatch({
+              effects: hasBreakpoint
+                ? removeBreakpointEffect.of(lineNum)
+                : addBreakpointEffect.of(lineNum)
+            });
 
-          if (onBreakpointClick) onBreakpointClick(lineNum, hasBreakpoint);
-          return true;
+            if (onBreakpointClick) onBreakpointClick(lineNum, hasBreakpoint);
+            return true;
+          }
+          return false;
+        },
+        contextmenu(view, line) {
+          const lineNum = view.state.doc.lineAt(line.from).number;
+          const breakpoints = view.state.field(breakpointField);
+          const hasBreakpoint = breakpoints.has(lineNum);
+
+          // Only show context menu if there's a breakpoint
+          if (hasBreakpoint && onBreakpointClick) {
+            event.preventDefault();
+            // Pass negative line number to indicate "edit" mode vs "toggle" mode
+            onBreakpointClick(-lineNum, true);
+            return true;
+          }
+          return false;
         }
       },
     }),
     EditorView.baseTheme({
       '.cm-breakpoint-gutter': {
-        width: '24px',
-        minWidth: '24px',
+        width: '28px',
+        minWidth: '28px',
         cursor: 'pointer',
       },
       '.cm-breakpoint-gutter .cm-breakpoint-dot': {
@@ -178,13 +298,52 @@ function breakpointGutter(onBreakpointClick?: (lineNum: number, hasBreakpoint: b
         borderRadius: '50%',
         backgroundColor: '#e53935',
         border: '1px solid #b71c1c',
-        margin: '5px auto',
+        margin: '4px auto',
+        transition: 'all 0.2s ease',
+      },
+      '.cm-breakpoint-gutter .cm-breakpoint-dot.cm-breakpoint-debug': {
+        backgroundColor: '#ff5252',
+        border: '2px solid #ffffff',
+        boxShadow: '0 0 0 1px #e53935, 0 0 0 3px rgba(229, 57, 53, 0.3)',
+        transform: 'scale(1.1)',
+      },
+      '.cm-breakpoint-gutter .cm-breakpoint-dot.cm-breakpoint-current': {
+        backgroundColor: '#ffd700',
+        border: '2px solid #ffffff',
+        boxShadow: '0 0 0 1px #ffb300, 0 0 0 3px rgba(255, 193, 7, 0.4)',
+        transform: 'scale(1.2)',
       },
       '.cm-breakpoint-gutter .cm-breakpoint-dot:hover': {
         backgroundColor: '#ff5252',
       },
       '.cm-debug-line': {
-        backgroundColor: '#fff9c4 !important',
+        backgroundColor: 'rgba(255, 249, 196, 0.5) !important',
+      },
+      '.cm-debug-line-gutter-marker': {
+        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
+        width: '100%',
+        height: '100%',
+      },
+      '.cm-debug-line-gutter': {
+        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
+      },
+      '.cm-gutterElement.cm-debug-line-gutter': {
+        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
+        color: '#000000 !important',
+        fontWeight: 'bold',
+      },
+      '.cm-inline-value-after': {
+        display: 'inline-block',
+        color: '#8b5cf6',
+        fontSize: '12px',
+        fontStyle: 'italic',
+        opacity: '0.7',
+        marginLeft: '8px',
+        cursor: 'pointer',
+      },
+      '.cm-inline-value-after::after': {
+        content: 'attr(data-value)',
+        color: '#8b5cf6',
       },
     }),
   ];
@@ -205,11 +364,28 @@ const debugLineField = StateField.define<number | null>({
   },
 });
 
+/**
+ * State field for debug mode
+ */
+const debugModeField = StateField.define<boolean>({
+  create: () => false,
+  update(value, transaction) {
+    for (const e of transaction.effects) {
+      if (e.is(setDebugModeEffect)) {
+        return e.value;
+      }
+    }
+    return value;
+  },
+});
+
 const setDebugLineEffect = StateEffect.define<number | null>();
+const setDebugModeEffect = StateEffect.define<boolean>();
 
 function debugLineHighlight() {
   return [
     debugLineField,
+    debugModeField,
     EditorView.decorations.compute(['doc', debugLineField], (state) => {
       const line = state.field(debugLineField);
       if (line === null) return Decoration.none;
@@ -234,6 +410,10 @@ export class EditorPane extends TailwindElement() {
   // Track breakpoints per file path
   private breakpoints: Map<string, Breakpoint[]> = new Map();
   private nextBreakpointId = 1;
+
+  // Conditional breakpoint dialog
+  private conditionalDialog: HTMLDivElement | null = null;
+  private pendingBreakpointLine: number | null = null;
 
   private editorView: EditorView | null = null;
   private _isInitialTabLoad = true;
@@ -337,16 +517,31 @@ export class EditorPane extends TailwindElement() {
     return [
       EditorState.tabSize.of(4),
       indentUnit.of(indentUnitStr),
+      inlineValueField,
+      inlineValueDecorations(),
       ...breakpointGutter((lineNum, wasThere) => {
         const activeTab = this.tabs.find(t => t.id === this.activeTabId);
         if (!activeTab) return;
+
+        // Negative lineNum indicates right-click (edit mode)
+        if (lineNum < 0) {
+          const actualLine = Math.abs(lineNum);
+          const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
+          const bp = fileBreakpoints.find(b => b.line === actualLine);
+          if (bp) {
+            this.showConditionalDialog(activeTab.path, actualLine, bp);
+          }
+          return;
+        }
 
         if (wasThere) {
           const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
           const bp = fileBreakpoints.find(b => b.line === lineNum);
           if (bp) this._removeBreakpoint(activeTab.path, bp);
         } else {
-          this._addBreakpoint(activeTab.path, lineNum);
+          // Show conditional dialog for new breakpoint
+          this.pendingBreakpointLine = lineNum;
+          this.showConditionalDialog(activeTab.path, lineNum, null, true);
         }
       }),
       lineNumbers(),
@@ -409,6 +604,11 @@ export class EditorPane extends TailwindElement() {
         activateOnTyping: true,
         activateOnTypingDelay: 50,
       }),
+      // Debug hover (shown during debugging when stopped)
+      hoverTooltip(this._debugHoverTooltip.bind(this), {
+        hoverTime: 300,
+      }),
+      // LSP hover (shown when not debugging)
       hoverTooltip(this._lspHoverTooltip.bind(this), {
         hoverTime: 500,
       }),
@@ -453,6 +653,58 @@ export class EditorPane extends TailwindElement() {
         ".cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
         "&.cm-focused .cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
         ".cm-cursor": { borderLeft: "2px solid #000000" },
+        // Debug hover tooltip styling
+        ".debug-hover-tooltip": {
+          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+          fontSize: "12px",
+          maxWidth: "400px",
+          minWidth: "200px",
+          padding: "8px 12px",
+          background: "#ffffff",
+          border: "1px solid #d0d0d0",
+          borderRadius: "6px",
+          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
+          zIndex: "1000",
+        },
+        ".debug-hover-header": {
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "6px",
+          paddingBottom: "6px",
+          borderBottom: "1px solid #e5e7eb",
+        },
+        ".debug-hover-name": {
+          fontWeight: "600",
+          color: "#5b47c9",
+        },
+        ".debug-hover-type": {
+          fontSize: "11px",
+          color: "#8b5cf6",
+          fontStyle: "italic",
+        },
+        ".debug-hover-value": {
+          color: "#0366d6",
+          wordBreak: "break-word",
+          marginBottom: "8px",
+        },
+        ".debug-hover-add-watch": {
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+          padding: "4px 8px",
+          fontSize: "11px",
+          background: "#f3f4f6",
+          border: "none",
+          borderRadius: "4px",
+          cursor: "pointer",
+          color: "#374151",
+          transition: "all 0.15s",
+        },
+        ".debug-hover-add-watch:hover": {
+          background: "#e5e7eb",
+          color: "#5b47c9",
+        },
         // Pointer cursor when hovering over a definition (Cmd+Click target)
         "&.cm-has-definition .cm-content, &.cm-has-definition .cm-line": {
           cursor: "pointer !important",
@@ -863,7 +1115,7 @@ export class EditorPane extends TailwindElement() {
   /**
    * Add a breakpoint at the specified line
    */
-  private async _addBreakpoint(filePath: string, line: number): Promise<void> {
+  private async _addBreakpoint(filePath: string, line: number, condition?: BreakpointCondition): Promise<void> {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab) return;
 
@@ -875,6 +1127,9 @@ export class EditorPane extends TailwindElement() {
       line,
       enabled: true,
       verified: false,
+      condition: condition?.condition,
+      hitCondition: condition?.hitCondition,
+      logMessage: condition?.logMessage,
     };
 
     // Update local state
@@ -893,8 +1148,13 @@ export class EditorPane extends TailwindElement() {
     try {
       const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<Breakpoint>("add_breakpoint", {
-        sourcePath: filePath,
-        line,
+        request: {
+          source_path: filePath,
+          line,
+          condition: condition?.condition,
+          hit_condition: condition?.hitCondition,
+          log_message: condition?.logMessage,
+        }
       });
       console.log("[Editor] Backend breakpoint result:", result);
       // Update with verified status from backend
@@ -933,12 +1193,31 @@ export class EditorPane extends TailwindElement() {
       });
     }
 
+    // Sync to backend
+    import("@tauri-apps/api/core").then(({ invoke }) => {
+      invoke("remove_breakpoint", {
+        sourcePath: filePath,
+        lines: [],
+      }).catch(err => console.error("[Editor] Failed to remove breakpoint from backend:", err));
+    });
+
     // Dispatch event for debug panel
     document.dispatchEvent(new CustomEvent('breakpoint-removed', {
       detail: { id: breakpoint.id },
       bubbles: true,
       composed: true,
     }));
+  }
+
+  /**
+   * Show conditional breakpoint dialog
+   */
+  private async showConditionalDialog(filePath: string, line: number, existingBp: Breakpoint | null, isNew: boolean = false) {
+    // For now, add breakpoint without condition - dialog integration needs proper import
+    if (isNew) {
+      await this._addBreakpoint(filePath, line);
+    }
+    // TODO: Show conditional breakpoint dialog for editing conditions
   }
 
   /**
@@ -966,6 +1245,76 @@ export class EditorPane extends TailwindElement() {
       this.editorView.dispatch({
         effects: setDebugLineEffect.of(line),
       });
+    }
+    // Fetch and display inline values when stopped at a line
+    if (line !== null) {
+      this.fetchInlineValues();
+    }
+  }
+
+  /**
+   * Fetch variable values and display them inline
+   */
+  private async fetchInlineValues() {
+    if (!this.editorView || !this.isDebugging) return;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+
+      // Get scopes to find visible variables
+      let scopes: any[] = [];
+      try {
+        scopes = await invoke<any[]>("get_scopes", {
+          frameId: 0, // Use top frame
+        });
+      } catch (e) {
+        // Some adapters don't support scopes (e.g., Go with Delve)
+        return;
+      }
+
+      // No scopes available yet (debug session may not be fully stopped)
+      if (!scopes || scopes.length === 0) {
+        return;
+      }
+
+      // Get variables from each scope
+      const inlineValues: { line: number; column: number; value: string }[] = [];
+
+      for (const scope of scopes) {
+        const variables = await invoke<any[]>("get_variables", {
+          variablesReference: scope.variables_reference,
+        });
+
+        // For each variable, try to find it in the current line
+        for (const variable of variables.slice(0, 10)) { // Limit to first 10 variables
+          const value = variable.value || String(variable);
+          // Find variable occurrences in visible lines
+          const currentLine = this.currentDebugLine;
+          if (currentLine) {
+            // Display value on the current debug line
+            inlineValues.push({
+              line: currentLine,
+              column: 0,
+              value: `${variable.name} = ${value.substring(0, 50)}`,
+            });
+          }
+        }
+      }
+
+      // Clear existing and set new inline values
+      if (this.editorView) {
+        this.editorView.dispatch({
+          effects: clearInlineValueEffect.of(null),
+        });
+
+        for (const inlineValue of inlineValues) {
+          this.editorView.dispatch({
+            effects: setInlineValueEffect.of(inlineValue),
+          });
+        }
+      }
+    } catch (error) {
+      console.error("[Editor] Failed to fetch inline values:", error);
     }
   }
 
@@ -1055,6 +1404,76 @@ export class EditorPane extends TailwindElement() {
       };
     } catch (error) {
       console.error('[Editor] LSP completion error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Debug hover tooltip - shows variable value on hover during debugging
+   */
+  private async _debugHoverTooltip(view: EditorView, pos: number): Promise<{ pos: number; above: boolean; create: () => { dom: HTMLElement } } | null> {
+    if (!this.isDebugging || this.debugState !== 'stopped') return null;
+
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return null;
+
+    const line = view.state.doc.lineAt(pos);
+    const column = pos - line.from;
+    const word = view.state.wordAt(pos);
+    if (!word) return null;
+
+    const varName = view.state.doc.sliceString(word.from, word.to);
+
+    // Skip keywords and invalid variable names
+    const keywords = ['if', 'else', 'for', 'while', 'return', 'function', 'const', 'let', 'var', 'true', 'false', 'null', 'undefined'];
+    if (keywords.includes(varName) || !/^[a-zA-Z_$][\w$]*$/.test(varName)) return null;
+
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+
+      const result = await invoke<any>("evaluate_expression", {
+        expression: varName,
+        frameId: 0,
+      });
+
+      if (!result) return null;
+
+      const dom = document.createElement('div');
+      dom.className = 'debug-hover-tooltip';
+      dom.innerHTML = `
+        <div class="debug-hover-header">
+          <span class="debug-hover-name">${varName}</span>
+          <span class="debug-hover-type">${result.variable_type || result.type || 'any'}</span>
+        </div>
+        <div class="debug-hover-value">${result.value || String(result)}</div>
+        <button class="debug-hover-add-watch" title="Add to Watch">
+          <iconify-icon icon="mdi:eye-outline" width="12"></iconify-icon>
+          Add to Watch
+        </button>
+      `;
+
+      // Add to watch button click handler
+      const addWatchBtn = dom.querySelector('.debug-hover-add-watch');
+      if (addWatchBtn) {
+        addWatchBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          try {
+            await invoke("add_watch_expression", { expression: varName });
+            // Notify debug panel to refresh
+            document.dispatchEvent(new CustomEvent('watches-refresh'));
+          } catch (err) {
+            console.error("Failed to add watch:", err);
+          }
+        });
+      }
+
+      return {
+        pos: word.from,
+        above: true,
+        create: () => ({ dom }),
+      };
+    } catch (error) {
+      console.error("[Editor] Debug hover error:", error);
       return null;
     }
   }
@@ -1434,12 +1853,24 @@ export class EditorPane extends TailwindElement() {
 
   private _handleDebugSessionStarted(): void {
     this.isDebugging = true;
+    // Set debug mode in editor
+    if (this.editorView) {
+      this.editorView.dispatch({
+        effects: setDebugModeEffect.of(true),
+      });
+    }
     console.log('[Editor] Debug session started');
   }
 
   private _handleDebugSessionEnded(): void {
     this.isDebugging = false;
     this.setDebugLine(null);
+    // Clear debug mode in editor
+    if (this.editorView) {
+      this.editorView.dispatch({
+        effects: setDebugModeEffect.of(false),
+      });
+    }
     console.log('[Editor] Debug session ended');
   }
 
@@ -1462,48 +1893,30 @@ export class EditorPane extends TailwindElement() {
   private async _handleDebugStopped(event?: CustomEvent): Promise<void> {
     console.log('[Editor] Debug stopped', event?.detail);
 
-    // Get the stopped location from the event or fetch it
-    const threadId = event?.detail?.threadId;
-    const stoppedLine = event?.detail?.line;
-    const stoppedSourcePath = event?.detail?.source?.path;
+    // Ensure debug mode is set
+    if (this.editorView) {
+      this.editorView.dispatch({
+        effects: setDebugModeEffect.of(true),
+      });
+    }
 
-    // If we have the stopped location, highlight it
-    if (stoppedLine && stoppedSourcePath) {
-      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-      const targetPath = stoppedSourcePath.replace('file://', '');
+    // Fetch the current stack frame to find the stopped location
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const stackFrames = await invoke<any[]>("get_stack_trace");
+      if (stackFrames.length > 0) {
+        const topFrame = stackFrames[0];
+        const targetPath = topFrame.source?.path || topFrame.source?.name;
 
-      // If stopped in a different file, open it first
-      if (!activeTab || activeTab.path !== targetPath) {
-        // Open the file where execution stopped
-        document.dispatchEvent(new CustomEvent('go-to-location', {
-          detail: {
-            uri: stoppedSourcePath.startsWith('file://') ? stoppedSourcePath : `file://${stoppedSourcePath}`,
-            line: stoppedLine - 1,
-            column: 0,
-          },
-          bubbles: true,
-          composed: true,
-        }));
-      }
-
-      // Wait a tick for the editor to switch files, then highlight the line
-      setTimeout(() => {
-        this.setDebugLine(stoppedLine);
-      }, 50);
-    } else {
-      // Fetch the current stack frame to find the stopped location
-      try {
-        const { invoke } = await import("@tauri-apps/api/core");
-        const stackFrames = await invoke<any[]>("get_stack_trace");
-        if (stackFrames.length > 0) {
-          const topFrame = stackFrames[0];
+        if (targetPath) {
           const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-          const targetPath = topFrame.source?.path || topFrame.source?.name;
+          const normalizedTargetPath = targetPath.replace('file://', '');
 
-          if (targetPath && (!activeTab || activeTab.path !== targetPath)) {
+          // If stopped in a different file, open it first
+          if (!activeTab || activeTab.path !== normalizedTargetPath) {
             document.dispatchEvent(new CustomEvent('go-to-location', {
               detail: {
-                uri: `file://${targetPath}`,
+                uri: targetPath.startsWith('file://') ? targetPath : `file://${targetPath}`,
                 line: topFrame.line - 1,
                 column: topFrame.column - 1,
               },
@@ -1512,13 +1925,15 @@ export class EditorPane extends TailwindElement() {
             }));
           }
 
+          // Wait for file to open (if needed), then highlight the line
           setTimeout(() => {
             this.setDebugLine(topFrame.line);
-          }, 50);
+            console.log('[Editor] Set debug line to:', topFrame.line, 'in file:', normalizedTargetPath);
+          }, 100);
         }
-      } catch (error) {
-        console.error('[Editor] Failed to get stack trace:', error);
       }
+    } catch (error) {
+      console.error('[Editor] Failed to get stack trace:', error);
     }
   }
 

@@ -213,4 +213,37 @@ impl DebugAdapter for JsDebugAdapter {
     fn poll_events(&mut self) -> Vec<crate::dap::adapter::DapEvent> {
         self.connection.poll_events()
     }
+
+    fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {
+        // JavaScript/V8 debugger supports exception breakpoints
+        vec![
+            crate::dap::ExceptionBreakpointFilter {
+                filter_id: "all".to_string(),
+                label: "All Exceptions".to_string(),
+                description: Some("Break on all thrown exceptions".to_string()),
+                default: Some(false),
+                condition: None,
+            },
+            crate::dap::ExceptionBreakpointFilter {
+                filter_id: "uncaught".to_string(),
+                label: "Uncaught Exceptions".to_string(),
+                description: Some("Break on uncaught exceptions only".to_string()),
+                default: Some(true),
+                condition: None,
+            },
+        ]
+    }
+
+    fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String> {
+        let filters: Vec<serde_json::Value> = filter_ids.iter().map(|id| {
+            serde_json::json!({
+                "filterId": id,
+            })
+        }).collect();
+
+        let _response = self.connection.send_request("setExceptionBreakpoints", Some(serde_json::json!({
+            "filters": filters
+        })))?;
+        Ok(())
+    }
 }

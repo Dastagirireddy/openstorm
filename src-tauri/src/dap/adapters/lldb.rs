@@ -270,6 +270,32 @@ impl DebugAdapter for LldbAdapter {
         Ok(())
     }
 
+    fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {
+        // LLDB supports panic breakpoints for Rust
+        vec![
+            crate::dap::ExceptionBreakpointFilter {
+                filter_id: "panic".to_string(),
+                label: "Rust Panic".to_string(),
+                description: Some("Break when panic! is called".to_string()),
+                default: Some(false),
+                condition: None,
+            },
+        ]
+    }
+
+    fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String> {
+        let filters: Vec<serde_json::Value> = filter_ids.iter().map(|id| {
+            serde_json::json!({
+                "filterId": id,
+            })
+        }).collect();
+
+        let _response = self.connection.send_request("setExceptionBreakpoints", Some(serde_json::json!({
+            "filters": filters
+        })))?;
+        Ok(())
+    }
+
     fn poll_events(&mut self) -> Vec<DapEvent> {
         self.connection.poll_events()
     }

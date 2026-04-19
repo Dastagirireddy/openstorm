@@ -201,7 +201,20 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       if (activeTerminal?.xterm) {
         // Use darker colors for visibility on white background
         const color = output_type === 'stderr' ? '\x1b[31m' : '\x1b[30m';
-        activeTerminal.xterm.write(`${color}${data}\x1b[0m\r\n`);
+        // Only add newline if data doesn't already end with one
+        const needsNewline = !data.endsWith('\n') && !data.endsWith('\r');
+        activeTerminal.xterm.write(`${color}${data}\x1b[0m${needsNewline ? '\r\n' : ''}`);
+        requestAnimationFrame(() => {
+          if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
+        });
+      }
+    });
+
+    // Listen for process termination
+    listen<{ process_id: number }>('process-terminated', (event) => {
+      const activeTerminal = this.terminals.find(t => t.terminalId !== null);
+      if (activeTerminal?.xterm) {
+        activeTerminal.xterm.write('\r\n\x1b[32m[Process exited]\x1b[0m\r\n');
         requestAnimationFrame(() => {
           if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
         });
@@ -216,9 +229,13 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }
     }, 100);
 
-    // Handle Window/Pane Resizes
+    // Handle Window/Pane Resizes - debounce to avoid infinite loop
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     this.resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => this.fitActiveTerminal());
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        this.fitActiveTerminal();
+      }, 50);
     });
 
     // Handle right-click context menu

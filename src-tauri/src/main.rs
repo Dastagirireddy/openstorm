@@ -45,6 +45,19 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                         "initialized" => "debug-initialized",
                         "stopped" => {
                             println!("[DAP] STOPPED event received! Reason: {:?}", event.body.as_ref().and_then(|b| b.get("reason")));
+                            // Auto-refresh watch expressions when stopped
+                            let watches = client.get_watch_expressions();
+                            if !watches.is_empty() {
+                                let mut evaluations = Vec::new();
+                                for watch in &watches {
+                                    let result = client.evaluate(&watch.expression, None);
+                                    evaluations.push(result);
+                                }
+                                client.refresh_watch_expressions(evaluations);
+                                let refreshed_watches: Vec<commands::WatchExpressionResult> =
+                                    client.get_watch_expressions().into_iter().map(|w| w.into()).collect();
+                                let _ = app_handle.emit("watches-refreshed", refreshed_watches);
+                            }
                             "debug-stopped"
                         },
                         "continued" => "debug-continued",
@@ -64,6 +77,42 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                     } else {
                         println!("[DAP] Emitted event to frontend: {}", event_name);
                     }
+                }
+
+                // Note: Session state changes are already emitted via DAP events from poll_events()
+                // No need to check session.state here as it would cause duplicate event emissions
+            }
+        });
+    });
+}
+
+/// Listen for process output events and emit them to the frontend
+fn spawn_process_output_listener(app_handle: tauri::AppHandle) {
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async move {
+            // Get process manager and subscribe to output events
+            let process_manager = app_handle.state::<process::ProcessManager>();
+            let mut rx = process_manager.get_output_receiver();
+
+            while let Ok(event) = rx.recv().await {
+                let output_type = match event.output_type {
+                    process::output::OutputType::Stdout => "stdout",
+                    process::output::OutputType::Stderr => "stderr",
+                    process::output::OutputType::Stdin => "stdin",
+                    process::output::OutputType::Error => "error",
+                    process::output::OutputType::Info => "info",
+                };
+
+                let emit_result = app_handle.emit("process-output", serde_json::json!({
+                    "process_id": event.process_id,
+                    "output_type": output_type,
+                    "data": event.data,
+                    "timestamp": event.timestamp,
+                }));
+
+                if let Err(e) = emit_result {
+                    println!("[Process] Failed to emit output event: {}", e);
                 }
             }
         });
@@ -98,6 +147,9 @@ fn main() {
             // Start DAP event polling loop
             spawn_dap_event_poller(handle.clone());
 
+            // Start process output listener
+            spawn_process_output_listener(handle.clone());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -128,6 +180,12 @@ fn main() {
             commands::set_breakpoints_for_file,
             commands::get_debug_adapter_info,
             commands::install_debug_adapter,
+            commands::add_watch_expression,
+            commands::remove_watch_expression,
+            commands::get_watch_expressions,
+            commands::refresh_watch_expressions,
+            commands::get_exception_breakpoint_filters,
+            commands::set_exception_breakpoints,
             file_watcher::start_watching,
             terminal::terminal_create,
             terminal::terminal_write,

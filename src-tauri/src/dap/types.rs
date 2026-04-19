@@ -156,11 +156,43 @@ pub struct EvaluateArgs {
     pub context: Option<String>,
 }
 
+/// Exception Breakpoint Filter
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExceptionBreakpointFilter {
+    pub filter_id: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub condition: Option<bool>,
+}
+
+/// Exception Breakpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExceptionBreakpoint {
+    pub filter_id: String,
+    pub condition: Option<String>,
+}
+
+/// Thread State
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThreadState {
+    Running,
+    Stopped,
+    Exited,
+    Unknown,
+}
+
 /// Thread
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Thread {
     pub id: i64,
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<ThreadState>,
 }
 
 /// Stack Frame

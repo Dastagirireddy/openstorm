@@ -29,6 +29,8 @@ pub trait DebugAdapter: Send + Sync {
     fn threads(&mut self) -> Result<Vec<Thread>, String>;
     fn terminate(&mut self) -> Result<(), String>;
     fn poll_events(&mut self) -> Vec<DapEvent>;
+    fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter>;
+    fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -767,6 +769,33 @@ impl DapConnection {
             body.get("scopes").ok_or("No scopes in body")?.clone()
         ).map_err(|e| format!("Failed to parse scopes: {}", e))?;
         Ok(scopes)
+    }
+
+    pub fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {
+        // Send capabilities request to get exception breakpoint filters
+        let response = self.send_request("exceptionInfo", None);
+        match response {
+            Ok(_) => {
+                // For now, return common exception filters based on adapter type
+                // Adapters should provide their own implementation
+                vec![]
+            }
+            Err(_) => vec![],
+        }
+    }
+
+    pub fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String> {
+        let filters: Vec<serde_json::Value> = filter_ids.iter().map(|id| {
+            serde_json::json!({
+                "filterId": id,
+                "condition": None::<String>
+            })
+        }).collect();
+
+        let _response = self.send_request("setExceptionBreakpoints", Some(serde_json::json!({
+            "filters": filters
+        })))?;
+        Ok(())
     }
 }
 

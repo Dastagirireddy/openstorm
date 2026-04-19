@@ -98,8 +98,8 @@ export class OpenStormApp extends TailwindElement() {
     listen("debug-initialized", () => {
       console.log("[DAP] debug-initialized event received");
       this.isDebugging = true;
-      this.requestUpdate();
       console.log("[DAP] isDebugging set to:", this.isDebugging);
+      this.requestUpdate();
       document.dispatchEvent(
         new CustomEvent("debug-session-started", {
           detail: {},
@@ -111,7 +111,8 @@ export class OpenStormApp extends TailwindElement() {
 
     listen("debug-stopped", (event: any) => {
       console.log("[DAP] debug-stopped event received:", event.payload);
-      this.isDebugging = true;
+      // isDebugging should already be true from debug-initialized
+      // Just update the UI to show debug panel
       this.requestUpdate();
       document.dispatchEvent(
         new CustomEvent("debug-stopped", {
@@ -124,7 +125,8 @@ export class OpenStormApp extends TailwindElement() {
 
     listen("debug-continued", () => {
       console.log("[DAP] debug-continued event received");
-      this.isDebugging = true;
+      // isDebugging should already be true from debug-initialized
+      // Just update the UI to show debug panel
       this.requestUpdate();
       document.dispatchEvent(
         new CustomEvent("debug-continued", {
