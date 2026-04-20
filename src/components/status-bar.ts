@@ -28,6 +28,7 @@ export class StatusBar extends TailwindElement() {
   @state() private installFailed: Map<string, string> = new Map(); // languageId -> error message
   @state() terminalVisible = true;
   @state() private fileOpen = false;
+  @state() private terminalHasOutput = false;
 
   static properties = {
     terminalVisible: { type: Boolean },
@@ -65,6 +66,10 @@ export class StatusBar extends TailwindElement() {
     document.addEventListener('lsp-server-missing', (e: Event) => {
       const customEvent = e as CustomEvent<{ languageId: string; serverName: string }>;
       this.handleServerMissing(customEvent.detail.languageId, customEvent.detail.serverName);
+    });
+    // Listen for terminal/app console output events
+    document.addEventListener('app-console-output', () => {
+      this.terminalHasOutput = true;
     });
   }
 
@@ -301,12 +306,16 @@ export class StatusBar extends TailwindElement() {
 
           <!-- Terminal toggle button -->
           <button
-            class="p-1 hover:bg-[#eaeef2] hover:text-[#0969da] rounded transition-colors"
+            class="p-1 hover:bg-[#eaeef2] hover:text-[#0969da] rounded transition-colors relative"
             title="Toggle Terminal (Ctrl+\`)"
             @click=${() => {
+              this.terminalHasOutput = false;
               this.dispatchEvent(new CustomEvent('toggle-terminal', { bubbles: true }));
             }}>
             <os-icon name="terminal" size="14"></os-icon>
+            ${this.terminalHasOutput && !this.terminalVisible
+              ? html`<span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>`
+              : ''}
           </button>
 
           <!-- LSP Status Indicator -->

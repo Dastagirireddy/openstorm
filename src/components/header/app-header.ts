@@ -3,6 +3,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../icon.js';
 import '../file-icon.js';
+import '../run-toolbar.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/breadcrumb.js';
 
 export interface HeaderAction {
@@ -105,18 +106,7 @@ export class AppHeader extends TailwindElement() {
           ${!this.isSingleFileMode
             ? html`
                 <div class="flex items-center gap-2 shrink-0">
-                  <!-- Run section -->
-                  ${this.renderSection({
-                    id: 'run',
-                    actions: [
-                      { id: 'config', icon: 'chevron-down', title: 'Run configurations', label: 'Current File' },
-                      { id: 'run', icon: 'play', title: 'Run' },
-                      { id: 'debug', icon: 'bug', title: 'Debug' },
-                      { id: 'coverage', icon: 'gauge', title: 'Run with Coverage' },
-                      { id: 'profile', icon: 'clock', title: 'Profile' },
-                      { id: 'stop', icon: 'square', title: 'Stop' },
-                    ],
-                  })}
+                  <run-toolbar id="run-toolbar"></run-toolbar>
 
                   <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
 

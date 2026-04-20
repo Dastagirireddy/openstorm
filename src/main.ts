@@ -44,6 +44,9 @@ import "./components/rename-dialog.js";
 import "./components/delete-dialog.js";
 import "./components/welcome-screen.js";
 import "./components/template-picker.js";
+import "./components/run-toolbar.js";
+import "./components/debug-toolbar.js";
+import "./components/debug-panel.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -63,6 +66,9 @@ export class OpenStormApp extends TailwindElement() {
   @state() private terminalResizeStartY = 0;
   @state() private terminalResizeStartHeight = 0;
   @state() private activeFilePath = '';
+  @state() private debugSidebarVisible = false;
+  @state() private isDebugging = false;
+  @state() private debugPanelHeight = 250;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -87,6 +93,71 @@ export class OpenStormApp extends TailwindElement() {
         }),
       );
     }).catch(console.error);
+
+    // Listen for DAP debug events from backend
+    listen("debug-initialized", () => {
+      console.log("[DAP] debug-initialized event received");
+      this.isDebugging = true;
+      console.log("[DAP] isDebugging set to:", this.isDebugging);
+      this.requestUpdate();
+      document.dispatchEvent(
+        new CustomEvent("debug-session-started", {
+          detail: {},
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
+
+    listen("debug-stopped", (event: any) => {
+      console.log("[DAP] debug-stopped event received:", event.payload);
+      // isDebugging should already be true from debug-initialized
+      // Just update the UI to show debug panel
+      this.requestUpdate();
+      document.dispatchEvent(
+        new CustomEvent("debug-stopped", {
+          detail: event.payload,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
+
+    listen("debug-continued", () => {
+      console.log("[DAP] debug-continued event received");
+      // isDebugging should already be true from debug-initialized
+      // Just update the UI to show debug panel
+      this.requestUpdate();
+      document.dispatchEvent(
+        new CustomEvent("debug-continued", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
+
+    listen("debug-terminated", () => {
+      console.log("[DAP] debug-terminated event received");
+      this.isDebugging = false;
+      this.requestUpdate();
+      document.dispatchEvent(
+        new CustomEvent("debug-session-ended", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
+
+    listen("debug-output", (event: any) => {
+      console.log("[DAP] debug-output event received:", event.payload);
+      document.dispatchEvent(
+        new CustomEvent("debug-output", {
+          detail: event.payload,
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
   }
 
   private async setupAutoSaveHandler(): Promise<void> {
@@ -96,6 +167,7 @@ export class OpenStormApp extends TailwindElement() {
       this.saveStatus = "saved";
     }) as EventListener);
   }
+
 
   private setupOpenFolderHandler(): void {
     document.addEventListener("open-folder", this.handleOpenFolder);
@@ -398,9 +470,13 @@ export class OpenStormApp extends TailwindElement() {
   };
 
   private toggleActivityBar(): void {
-    this.activeActivity =
-      this.activeActivity === "explorer" ? ("" as ActivityItem) : "explorer";
+    const wasExplorer = this.activeActivity === "explorer";
+    this.activeActivity = wasExplorer ? ("" as ActivityItem) : "explorer";
   }
+
+  private handleActivityChange = (e: CustomEvent<{ item: ActivityItem }>): void => {
+    this.activeActivity = e.detail.item;
+  };
 
   private handleFileSelect = async (
     e: CustomEvent<{ path: string }>,
@@ -509,6 +585,15 @@ export class OpenStormApp extends TailwindElement() {
       // Initialize LSP connection pool
       await invoke("initialize_lsp_pool", { rootPath: this.projectPath });
       console.log("LSP connection pool initialized for:", this.projectPath);
+
+      // Dispatch project-opened event for run-toolbar to detect configurations
+      document.dispatchEvent(
+        new CustomEvent("project-opened", {
+          detail: { path: this.projectPath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
     } catch (error) {
       console.error("Failed to start file watcher:", error);
     }
@@ -590,7 +675,8 @@ export class OpenStormApp extends TailwindElement() {
 
     // In single-file mode, hide explorer and terminal by default
     const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
-    const showTerminal = !isSingleFileMode && this.terminalVisible;
+    const showTerminal = !isSingleFileMode && this.terminalVisible && !this.isDebugging;
+    const showDebugPanel = this.isDebugging;
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden bg-white">
@@ -612,9 +698,7 @@ export class OpenStormApp extends TailwindElement() {
                 <activity-bar
                   class="shrink-0"
                   .activeItem=${this.activeActivity}
-                  @item-change=${(e: CustomEvent<{ item: ActivityItem }>) => {
-                    this.activeActivity = e.detail.item;
-                  }}
+                  @item-change=${this.handleActivityChange}
                 >
                 </activity-bar>
               `
@@ -746,10 +830,34 @@ export class OpenStormApp extends TailwindElement() {
                 `
               : ''}
 
+            <!-- Debug Panel (replaces terminal when debugging) -->
+            ${showDebugPanel
+              ? html`
+                  <!-- Debug panel container -->
+                  <div
+                    class="shrink-0 border-t border-[#e5e7eb]"
+                    style="height: ${this.debugPanelHeight}px;">
+                    <debug-panel></debug-panel>
+                  </div>
+                `
+              : ''}
+
+            <!-- App Console Panel (persistent output from Run and Debug) -->
+            ${this.appConsoleVisible
+              ? html`
+                  <!-- App console container -->
+                  <div
+                    class="shrink-0 border-t border-[#d0d7de]"
+                    style="height: ${this.appConsoleHeight}px;">
+                    <app-console-panel></app-console-panel>
+                  </div>
+                `
+              : ''}
+
             <!-- Status Bar (fixed at bottom) -->
             <status-bar
               class="shrink-0"
-              .terminalVisible=${showTerminal}
+              .terminalVisible=${showTerminal || showDebugPanel || this.appConsoleVisible}
               @toggle-terminal=${() => this.toggleTerminal()}>
             </status-bar>
           </div>

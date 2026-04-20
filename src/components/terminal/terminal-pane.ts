@@ -18,6 +18,14 @@ interface TerminalInstance {
   userScrolledUp: boolean;
 }
 
+interface ConsoleOutput {
+  id: number;
+  source: "run" | "debug";
+  output_type: "stdout" | "stderr" | "info";
+  data: string;
+  timestamp: number;
+}
+
 const componentStyles = css`
   :host {
     display: flex;
@@ -145,6 +153,18 @@ export class TerminalPane extends TailwindElement(componentStyles) {
   @state() private showCloseConfirm = false;
   @state() private terminalToClose: string | null = null;
 
+  // App Console state
+  @state() private activeBottomTab: "terminal" | "app-console" = "terminal";
+  @state() private consoleOutputs: ConsoleOutput[] = [];
+  @state() private consoleFilter: "all" | "stdout" | "stderr" | "info" = "all";
+  @state() private consoleAutoScroll = true;
+  @state() private consoleHasNewOutput = false;
+  @state() private shouldScrollToBottom = false;
+  @state() private consoleSearchQuery = "";
+  @state() private consoleSearchVisible = false;
+
+  private consoleOutputCounter = 0;
+
   private resizeObserver: ResizeObserver | null = null;
   private terminalCounter = 0;
   private globalOutputUnlisten: (() => void) | null = null;
@@ -194,6 +214,49 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }
     });
 
+    // Listen for process output (run configurations) - App Console only
+    listen<{ process_id: number; output_type: string; data: string; timestamp: number }>('process-output', (event) => {
+      const { output_type, data } = event.payload;
+      // Only add to App Console (not terminal - keep them separate like IntelliJ)
+      this.addConsoleOutput({
+        source: 'run',
+        output_type: output_type as 'stdout' | 'stderr' | 'info',
+        data,
+        timestamp: event.payload.timestamp || Date.now(),
+      });
+    });
+
+    // Listen for process termination
+    listen<{ process_id: number }>('process-terminated', (event) => {
+      const activeTerminal = this.terminals.find(t => t.terminalId !== null);
+      if (activeTerminal?.xterm) {
+        activeTerminal.xterm.write('\r\n\x1b[32m[Process exited]\x1b[0m\r\n');
+        requestAnimationFrame(() => {
+          if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
+        });
+      }
+      // Also add to App Console
+      this.addConsoleOutput({
+        source: 'run',
+        output_type: 'info',
+        data: '\n[Process exited]\n',
+        timestamp: Date.now(),
+      });
+    });
+
+    // Listen for debug output (DAP) - also add to App Console
+    listen<{ category: string; output: string }>('debug-output', (event) => {
+      const category = event.payload.category || 'log';
+      if (category !== 'telemetry') {
+        this.addConsoleOutput({
+          source: 'debug',
+          output_type: category === 'stderr' ? 'stderr' : category === 'stdout' ? 'stdout' : 'info',
+          data: event.payload.output,
+          timestamp: Date.now(),
+        });
+      }
+    });
+
     // Reset viewport scroll to top after terminal is opened
     setTimeout(() => {
       const viewport = this.terminalWrapper?.querySelector('.xterm-viewport') as HTMLElement;
@@ -202,9 +265,13 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }
     }, 100);
 
-    // Handle Window/Pane Resizes
+    // Handle Window/Pane Resizes - debounce to avoid infinite loop
+    let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     this.resizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => this.fitActiveTerminal());
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        this.fitActiveTerminal();
+      }, 50);
     });
 
     // Handle right-click context menu
@@ -238,6 +305,16 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       console.log('[TerminalPane] terminalCreated=true, calling addTerminal');
       this.hasInitializedTerminal = true;
       this.addTerminal();
+    }
+    // Scroll after render if flagged
+    if (this.shouldScrollToBottom && this.activeBottomTab === 'app-console') {
+      this.shouldScrollToBottom = false;
+      requestAnimationFrame(() => {
+        const container = this.renderRoot.querySelector('.console-output');
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
     }
   }
 
@@ -378,6 +455,15 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     requestAnimationFrame(() => this.fitActiveTerminal());
   }
 
+  private switchToTerminalTab(): void {
+    this.activeBottomTab = 'terminal';
+    this.consoleHasNewOutput = false;
+    // Fit terminal when switching to terminal tab (after DOM becomes visible)
+    setTimeout(() => {
+      this.fitActiveTerminal();
+    }, 50);
+  }
+
   private requestCloseTerminal(id: string): void {
     // Check if terminal has recent activity (heuristic for running process)
     const instance = this.terminals.find(t => t.id === id);
@@ -442,6 +528,43 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     }
   }
 
+  private addConsoleOutput(output: Omit<ConsoleOutput, 'id'>): void {
+    this.consoleOutputCounter++;
+    this.consoleOutputs = [
+      ...this.consoleOutputs,
+      {
+        ...output,
+        id: this.consoleOutputCounter,
+      },
+    ];
+
+    // Limit output lines to prevent memory issues
+    if (this.consoleOutputs.length > 1000) {
+      this.consoleOutputs = this.consoleOutputs.slice(-500);
+    }
+
+    // Mark that there's new output for notification purposes
+    this.consoleHasNewOutput = true;
+
+    // Notify status bar about new output
+    document.dispatchEvent(
+      new CustomEvent('app-console-output', {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+    // Auto-scroll if enabled - flag it for willUpdate to handle after render
+    if (this.consoleAutoScroll) {
+      this.shouldScrollToBottom = true;
+    }
+  }
+
+  private clearConsole(): void {
+    this.consoleOutputs = [];
+    this.consoleHasNewOutput = false;
+  }
+
   private async splitHorizontal(): Promise<void> {
     // Create a new terminal instance sharing the same cwd
     const sourceInstance = this.terminals.find(t => t.id === this.contextMenuTerminalId);
@@ -502,39 +625,190 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     await this.splitHorizontal();
   }
 
+  private getFilteredOutputs(): ConsoleOutput[] {
+    let outputs = this.consoleOutputs;
+
+    // Filter by type
+    if (this.consoleFilter !== 'all') {
+      outputs = outputs.filter(o => o.output_type === this.consoleFilter);
+    }
+
+    // Filter by search query
+    if (this.consoleSearchQuery) {
+      outputs = outputs.filter(o =>
+        o.data.toLowerCase().includes(this.consoleSearchQuery.toLowerCase())
+      );
+    }
+
+    return outputs;
+  }
+
+  private highlightSearch(text: string): ReturnType<typeof html> {
+    if (!this.consoleSearchQuery) return html`${text}`;
+
+    const regex = new RegExp(`(${this.escapeRegex(this.consoleSearchQuery)})`, 'gi');
+    const parts = text.split(regex);
+
+    return html`${parts.map(part =>
+      part.toLowerCase() === this.consoleSearchQuery.toLowerCase()
+        ? html`<mark class="bg-yellow-200 text-black rounded px-0.5">${part}</mark>`
+        : part
+    )}`;
+  }
+
+  private escapeRegex(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
   render() {
+    const filteredOutputs = this.getFilteredOutputs();
+
     return html`
       <div class="flex flex-col h-full w-full bg-white border-t border-[#d0d7de]">
-        <div class="flex items-center justify-between h-[36px] px-2 bg-[#f6f8fa] shrink-0">
-          <div class="flex items-center gap-1 h-full">
-            <span class="text-[12px] font-semibold px-2 text-[#24292f]">TERMINAL</span>
-            <div class="flex items-center gap-1 ml-2 h-full">
-              ${this.terminals.map(t => html`
-                <div class="flex items-center gap-1 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2
-                  ${this.activeTerminalId === t.id
-                    ? 'bg-white text-[#24292f] border-indigo-500 font-medium'
-                    : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb] hover:border-transparent'}"
-                  @click=${() => this.switchTerminal(t.id)}
+        <!-- Unified tab bar: Terminal instances + App Console -->
+        <div class="flex items-center justify-between h-[36px] px-2 bg-[#f6f8fa] shrink-0 border-b border-[#d0d7de]">
+          <div class="flex items-center gap-0.5 h-full">
+            <!-- Terminal instance tabs -->
+            ${this.terminals.map(t => html`
+              <div class="flex items-center gap-1 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2
+                ${this.activeTerminalId === t.id && this.activeBottomTab === 'terminal'
+                  ? 'bg-white text-[#24292f] border-indigo-500 font-medium'
+                  : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb] hover:border-transparent'}"
+                @click=${() => { this.switchToTerminalTab(); this.switchTerminal(t.id); }}>
+                <span>${t.name}</span>
+                <button @click=${(e: MouseEvent) => { e.stopPropagation(); this.requestCloseTerminal(t.id); }}
+                  class="ml-1 p-0.5 rounded hover:bg-[rgba(0,0,0,0.1)] opacity-0 hover:opacity-100"
+                  title="Close terminal"
                 >
-                  <span>${t.name}</span>
-                  <button @click=${(e: MouseEvent) => { e.stopPropagation(); this.requestCloseTerminal(t.id); }}
-                    class="ml-1 p-0.5 rounded hover:bg-[rgba(0,0,0,0.1)] opacity-0 hover:opacity-100"
-                    title="Close terminal"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-              `)}
-            </div>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            `)}
+            <!-- App Console tab -->
+            <button
+              class="px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2 relative ${this.activeBottomTab === 'app-console' ? 'bg-white text-[#24292f] border-indigo-500 font-medium' : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb]'}"
+              @click=${() => { this.activeBottomTab = 'app-console'; this.consoleHasNewOutput = false; }}>
+              App Console
+              ${this.consoleHasNewOutput && this.activeBottomTab !== 'app-console'
+                ? html`<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>`
+                : ''}
+            </button>
           </div>
-          <button @click=${() => this.addTerminal()} class="p-1 hover:bg-[#d0d7de] rounded">＋</button>
+          ${this.activeBottomTab === 'terminal'
+            ? html`<button @click=${() => this.addTerminal()} class="p-1 hover:bg-[#d0d7de] rounded" title="New terminal">＋</button>`
+            : ''}
         </div>
 
-        <div id="terminal-container">
-          <div id="terminal-wrapper"></div>
+        <!-- Content area (both panels stay in DOM, just toggle visibility) -->
+        <div class="flex-1 min-h-0 relative w-full h-full overflow-hidden">
+          <!-- Terminal panel -->
+          <div id="terminal-container" class="absolute inset-0 w-full h-full ${this.activeBottomTab !== 'terminal' ? 'hidden' : ''}">
+            <div id="terminal-wrapper" class="absolute inset-0 w-full h-full"></div>
+          </div>
+
+          <!-- App Console panel -->
+          <div class="absolute inset-0 w-full h-full flex flex-col ${this.activeBottomTab === 'terminal' ? 'hidden' : ''}">
+            <!-- Console toolbar -->
+            <div class="flex items-center gap-1 px-2 py-1 bg-[#fafbfc] border-b border-[#d0d7de]">
+              <span class="text-[10px] font-semibold uppercase tracking-wide text-[#57606a] mr-1">Filter:</span>
+              <button
+                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200' : ''}"
+                @click=${() => { this.consoleFilter = 'all'; this.requestUpdate(); }}>
+                All
+              </button>
+              <button
+                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' : ''}"
+                @click=${() => { this.consoleFilter = 'stdout'; this.requestUpdate(); }}>
+                Stdout
+              </button>
+              <button
+                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200' : ''}"
+                @click=${() => { this.consoleFilter = 'stderr'; this.requestUpdate(); }}>
+                Stderr
+              </button>
+              <button
+                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200' : ''}"
+                @click=${() => { this.consoleFilter = 'info'; this.requestUpdate(); }}>
+                Info
+              </button>
+              <div class="w-px h-4 bg-[#d0d7de] mx-1"></div>
+              <button
+                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
+                @click=${() => { this.consoleSearchVisible = !this.consoleSearchVisible; this.requestUpdate(); }}
+                title="Search (Ctrl+F)">
+                <iconify-icon icon="mdi:magnify" width="14"></iconify-icon>
+              </button>
+              <button
+                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
+                @click=${() => { this.consoleAutoScroll = !this.consoleAutoScroll; this.requestUpdate(); }}
+                title="Toggle auto-scroll">
+                <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14"></iconify-icon>
+              </button>
+              <button
+                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-red-50 hover:text-red-600"
+                @click=${() => this.clearConsole()}
+                title="Clear console">
+                <iconify-icon icon="mdi:delete-outline" width="14"></iconify-icon>
+              </button>
+            </div>
+
+            <!-- Search bar -->
+            ${this.consoleSearchVisible ? html`
+              <div class="flex items-center gap-1 px-2 py-1 bg-white border-b border-[#d0d7de]">
+                <iconify-icon icon="mdi:magnify" width="14" class="text-[#57606a]"></iconify-icon>
+                <input
+                  type="text"
+                  class="flex-1 px-1 py-0.5 text-[11px] border-none bg-transparent outline-none text-[#24292f]"
+                  placeholder="Search console output..."
+                  .value=${this.consoleSearchQuery}
+                  @input=${(e: Event) => { this.consoleSearchQuery = (e.target as HTMLInputElement).value; this.requestUpdate(); }}
+                  @keydown=${(e: KeyboardEvent) => {
+                    if (e.key === 'Escape') {
+                      this.consoleSearchVisible = false;
+                      this.consoleSearchQuery = '';
+                      this.requestUpdate();
+                    }
+                  }}
+                />
+                ${this.consoleSearchQuery ? html`
+                  <button
+                    class="p-0.5 rounded hover:bg-[#e5e7eb]"
+                    @click=${() => { this.consoleSearchQuery = ''; this.requestUpdate(); }}
+                    title="Clear search">
+                    <iconify-icon icon="mdi:close" width="12"></iconify-icon>
+                  </button>
+                ` : ''}
+              </div>
+            ` : ''}
+
+            <!-- Console output -->
+            <div
+              class="console-output font-mono text-xs flex-1 overflow-auto bg-white"
+              style="height: calc(100% - 40px);">
+              ${filteredOutputs.length === 0
+                ? html`
+                    <div class="flex flex-col items-center justify-center h-full text-[#57606a] gap-2">
+                      <iconify-icon class="text-3xl opacity-50" icon="mdi:console-outline"></iconify-icon>
+                      <span class="text-xs">No output</span>
+                    </div>
+                  `
+                : filteredOutputs.map((output) => {
+                    const bgClass = output.output_type === 'stderr' ? 'bg-red-50' : output.output_type === 'info' ? 'bg-blue-50' : '';
+                    const textClass = output.output_type === 'stderr' ? 'text-red-700' : output.output_type === 'stdout' ? 'text-green-700' : output.output_type === 'info' ? 'text-blue-700' : 'text-gray-900';
+                    const prefix = output.output_type === 'stdout' ? '▶' : output.output_type === 'stderr' ? '✖' : '●';
+
+                    return html`
+                      <div class="px-3 py-0.5 border-b border-[#f0f0f0] whitespace-pre-wrap break-words flex items-start gap-2 ${bgClass} ${textClass}">
+                        <span class="text-[#9ca3af] font-bold flex-shrink-0 select-none">${prefix}</span>
+                        <span class="flex-1">${this.highlightSearch(output.data)}</span>
+                      </div>
+                    `;
+                  })}
+            </div>
+          </div>
         </div>
 
         <!-- Close Confirmation Dialog -->
