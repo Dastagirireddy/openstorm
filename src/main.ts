@@ -168,6 +168,7 @@ export class OpenStormApp extends TailwindElement() {
     }) as EventListener);
   }
 
+
   private setupOpenFolderHandler(): void {
     document.addEventListener("open-folder", this.handleOpenFolder);
     document.addEventListener("open-file", this.handleOpenSingleFile);
@@ -841,10 +842,22 @@ export class OpenStormApp extends TailwindElement() {
                 `
               : ''}
 
+            <!-- App Console Panel (persistent output from Run and Debug) -->
+            ${this.appConsoleVisible
+              ? html`
+                  <!-- App console container -->
+                  <div
+                    class="shrink-0 border-t border-[#d0d7de]"
+                    style="height: ${this.appConsoleHeight}px;">
+                    <app-console-panel></app-console-panel>
+                  </div>
+                `
+              : ''}
+
             <!-- Status Bar (fixed at bottom) -->
             <status-bar
               class="shrink-0"
-              .terminalVisible=${showTerminal || showDebugPanel}
+              .terminalVisible=${showTerminal || showDebugPanel || this.appConsoleVisible}
               @toggle-terminal=${() => this.toggleTerminal()}>
             </status-bar>
           </div>
