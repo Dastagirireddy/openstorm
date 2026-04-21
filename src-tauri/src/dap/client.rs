@@ -217,11 +217,18 @@ impl DapClient {
     pub fn poll_events(&mut self) -> Vec<DapEvent> {
         if let Some(adapter) = &mut self.adapter {
             let events = adapter.poll_events();
+            if !events.is_empty() {
+                println!("[DAP client] poll_events: got {} events from adapter", events.len());
+            }
             for event in &events {
                 self.update_state_from_event(event);
             }
             events
         } else {
+            // Only log once to avoid spam
+            if !self.session.is_none() {
+                println!("[DAP client] poll_events: no adapter but session exists");
+            }
             Vec::new()
         }
     }
@@ -255,10 +262,24 @@ impl DapClient {
     }
 
     pub fn terminate_session(&mut self) -> Result<(), String> {
-        if let Some(adapter) = &mut self.adapter {
-            adapter.terminate()?;
+        println!("[DAP client] terminate_session called");
+        println!("[DAP client] Session before terminate: {:?}", self.session.as_ref().map(|s| &s.state));
+
+        // Set state to Terminated FIRST, before trying to terminate adapter
+        // This ensures the poller can detect the state even if adapter.terminate() hangs
+        if let Some(session) = &mut self.session {
+            session.state = DebugSessionState::Terminated;
+            println!("[DAP client] Session state set to Terminated");
         }
-        self.session = None;
+
+        // Try to terminate adapter, but don't block if it hangs
+        if let Some(adapter) = &mut self.adapter {
+            println!("[DAP client] Calling adapter.terminate()");
+            let _ = adapter.terminate(); // Ignore errors, we're terminating anyway
+            println!("[DAP client] adapter.terminate() completed");
+        }
+
+        println!("[DAP client] Session after terminate: {:?}", self.session.as_ref().map(|s| &s.state));
         Ok(())
     }
 
@@ -268,6 +289,11 @@ impl DapClient {
 
     pub fn get_session_mut(&mut self) -> Option<&mut DebugSession> {
         self.session.as_mut()
+    }
+
+    pub fn clear_session(&mut self) {
+        self.session = None;
+        self.adapter = None;
     }
 
     // Watch expression methods

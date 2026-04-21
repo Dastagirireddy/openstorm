@@ -1281,8 +1281,14 @@ export class EditorPane extends TailwindElement() {
       const inlineValues: { line: number; column: number; value: string }[] = [];
 
       for (const scope of scopes) {
+        // Check again if still debugging (session might have ended)
+        if (!this.isDebugging) return;
+
+        const variablesReference = scope.variables_reference;
+        if (!variablesReference || variablesReference === 0) continue;
+
         const variables = await invoke<any[]>("get_variables", {
-          variablesReference: scope.variables_reference,
+          variablesReference,
         });
 
         // For each variable, try to find it in the current line
@@ -1782,6 +1788,41 @@ export class EditorPane extends TailwindElement() {
     }));
   }
 
+  private async _handleLspServerReady(event: Event): Promise<void> {
+    const customEvent = event as CustomEvent<{ languageId: string }>;
+    const { languageId } = customEvent.detail;
+
+    // Re-open current document to initialize LSP with newly installed server
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    const ext = getFileExtension(activeTab.path);
+    const languageMap: Record<string, string> = {
+      'rs': 'rust',
+      'go': 'go',
+      'py': 'python',
+      'cpp': 'cpp',
+      'c': 'c',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'js': 'javascript',
+      'jsx': 'javascript',
+    };
+
+    const currentLanguageId = languageMap[ext];
+    if (currentLanguageId !== languageId) return;
+
+    console.log(`[LSP] Server ready for ${languageId}, re-notifying document open`);
+    // Re-send document open notification to initialize LSP
+    const { notifyDocumentOpened } = await import('../../lib/lsp-client.js');
+    await notifyDocumentOpened(
+      languageId,
+      activeTab.path,
+      activeTab.content || '',
+      1,
+    );
+  }
+
   connectedCallback(): void {
     super.connectedCallback();
     // Listen for save events to update saved content
@@ -1798,6 +1839,8 @@ export class EditorPane extends TailwindElement() {
     // Listen for breakpoint events from panels
     document.addEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
     document.addEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
+    // Listen for LSP server ready event (after install)
+    document.addEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
   }
 
   disconnectedCallback(): void {
@@ -1810,6 +1853,7 @@ export class EditorPane extends TailwindElement() {
     // Note: debug-stopped listener is wrapped, so we can't easily remove it - minor memory leak but acceptable
     document.removeEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
     document.removeEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
+    document.removeEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
   }
 
   private _handleFileSaved(event: Event): void {

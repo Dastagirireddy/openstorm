@@ -630,28 +630,51 @@ impl DapConnection {
 
     pub fn poll_events(&mut self) -> Vec<DapEvent> {
         // Start with buffered events (older, arrived while waiting for responses)
+        let buffer_len = self.event_buffer.len();
         let mut events = std::mem::take(&mut self.event_buffer);
+        if buffer_len > 0 {
+            println!("[DAP] poll_events: took {} events from buffer", buffer_len);
+        }
 
         // Then append new events from channel (newer)
         if let Some(rx) = &self.response_rx {
-            if let Ok(rx) = rx.lock() {
-                while let Ok(msg) = rx.try_recv() {
-                    match msg {
-                        DapMessage::Event(e) => events.push(e),
-                        DapMessage::Response(r) => {
-                            println!("[DAP] Buffered unexpected response: {}", r.command);
+            match rx.lock() {
+                Ok(rx_guard) => {
+                    let mut collected = 0;
+                    while let Ok(msg) = rx_guard.try_recv() {
+                        collected += 1;
+                        match msg {
+                            DapMessage::Event(e) => {
+                                println!("[DAP] poll_events: collected event: {}", e.event);
+                                events.push(e);
+                            },
+                            DapMessage::Response(r) => {
+                                println!("[DAP] Buffered unexpected response: {}", r.command);
+                            }
                         }
                     }
+                    if collected > 0 {
+                        println!("[DAP] poll_events: collected {} events from channel", collected);
+                    }
+                },
+                Err(e) => {
+                    println!("[DAP] poll_events: failed to lock rx: {}", e);
                 }
             }
+        } else {
+            println!("[DAP] poll_events: no response_rx available");
         }
 
+        if !events.is_empty() {
+            println!("[DAP] poll_events: returning {} events", events.len());
+        }
         events
     }
 
     pub fn terminate(&mut self) -> Result<(), String> {
         if let Some(mut process) = self.process.take() {
             let _ = process.kill();
+            let _ = process.wait(); // Wait for process to fully exit
         }
         Ok(())
     }

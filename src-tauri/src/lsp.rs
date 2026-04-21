@@ -100,6 +100,7 @@ pub struct LspClient {
     request_id: u32,
     initialized: bool,
     root_path: String,
+    open_documents: std::collections::HashSet<String>,
 }
 
 impl LspClient {
@@ -116,6 +117,21 @@ impl LspClient {
         let stdin = child.stdin.take().ok_or("Failed to open stdin")?;
         let stdout = BufReader::new(child.stdout.take().ok_or("Failed to open stdout")?);
 
+        // Drain stderr in a background thread to prevent blocking
+        let mut stderr = child.stderr.take().ok_or("Failed to open stderr")?;
+        std::thread::spawn(move || {
+            use std::io::BufRead;
+            let mut reader = BufReader::new(stderr);
+            let mut line = String::new();
+            while reader.read_line(&mut line).is_ok() {
+                let trimmed = line.trim();
+                if !trimmed.is_empty() {
+                    eprintln!("[LSP stderr] {}", trimmed);
+                }
+                line.clear();
+            }
+        });
+
         Ok(LspClient {
             process: child,
             stdin,
@@ -124,6 +140,7 @@ impl LspClient {
             request_id: 0,
             initialized: false,
             root_path: String::new(),
+            open_documents: std::collections::HashSet::new(),
         })
     }
 
@@ -207,29 +224,14 @@ impl LspClient {
 
         let response: JsonRpcResponse<Vec<TextEdit>> = self.send_request("textDocument/formatting", format_options)?;
 
-        eprintln!("[LSP] Raw response - error: {:?}, has_result: {}",
-            response.error, response.result.is_some());
-
         if let Some(error) = response.error {
             return Err(format!("LSP formatting error: {}", error.message));
         }
 
         let edits = response.result.unwrap_or_default();
-        eprintln!("[LSP] Content preview (first 100 chars): {}",
-            content.chars().take(100).collect::<String>());
-
-        eprintln!("[LSP] Received {} edits", edits.len());
-        for (i, edit) in edits.iter().enumerate() {
-            eprintln!("[LSP] Edit {}: range=[{}:{} - {}:{}], new_text={:?}",
-                i,
-                edit.range.start.line, edit.range.start.character,
-                edit.range.end.line, edit.range.end.character,
-                edit.new_text);
-        }
 
         // Apply text edits to original content
         let formatted = apply_text_edits(content, &edits);
-        eprintln!("[LSP] Formatted content length: {} -> {}", content.len(), formatted.len());
         Ok(formatted)
     }
 
@@ -238,8 +240,6 @@ impl LspClient {
         if !self.initialized {
             return Err("LSP server not initialized".to_string());
         }
-
-        println!("[LSP Client] get_completions called: uri={}, line={}, col={}", uri, line, column);
 
         // Open the document first (only if not already open)
         self.did_open(uri, content, language_id)?;
@@ -256,7 +256,6 @@ impl LspClient {
             context: None,
         };
 
-        println!("[LSP Client] Sending completion request");
         let response: Result<JsonRpcResponse<CompletionResponse>, String> = self.send_request("textDocument/completion", params);
         let response = match response {
             Ok(r) => r,
@@ -266,12 +265,6 @@ impl LspClient {
         if let Some(error) = response.error {
             return Err(format!("LSP completion error: {}", error.message));
         }
-
-        println!("[LSP Client] Got completion response: {} items", match &response.result {
-            Some(CompletionResponse::Array(items)) => items.len(),
-            Some(CompletionResponse::List(list)) => list.items.len(),
-            None => 0,
-        });
 
         match response.result {
             Some(CompletionResponse::Array(items)) => Ok(items),
@@ -317,8 +310,6 @@ impl LspClient {
             return Err("LSP server not initialized".to_string());
         }
 
-        eprintln!("[LSP] get_definition: uri={}, line={}, col={}, language={}", uri, line, column, language_id);
-
         self.did_open(uri, content, language_id)?;
 
         let params = GotoDefinitionParams {
@@ -332,42 +323,24 @@ impl LspClient {
             partial_result_params: Default::default(),
         };
 
-        eprintln!("[LSP] Sending definition request for position {}:{} ", line, column);
         let response: Result<JsonRpcResponse<GotoDefinitionResponse>, String> = self.send_request("textDocument/definition", params);
         let response = match response {
             Ok(r) => r,
-            Err(e) => {
-                eprintln!("[LSP] Definition request error: {}", e);
-                return Err(e);
-            }
+            Err(e) => return Err(e),
         };
 
         if let Some(error) = response.error {
-            eprintln!("[LSP] Definition error response: {}", error.message);
             return Err(format!("LSP definition error: {}", error.message));
         }
 
-        eprintln!("[LSP] Definition response has result: {}", response.result.is_some());
         match response.result {
-            Some(GotoDefinitionResponse::Scalar(location)) => {
-                eprintln!("[LSP] Found definition (scalar): {:?}", location.uri);
-                Ok(vec![location])
-            },
-            Some(GotoDefinitionResponse::Array(locations)) => {
-                eprintln!("[LSP] Found {} definition(s)", locations.len());
-                Ok(locations)
-            },
-            Some(GotoDefinitionResponse::Link(links)) => {
-                eprintln!("[LSP] Found {} definition link(s)", links.len());
-                Ok(links.into_iter().map(|link| Location {
-                    uri: link.target_uri,
-                    range: link.target_selection_range,
-                }).collect())
-            }
-            None => {
-                eprintln!("[LSP] No definition found");
-                Ok(Vec::new())
-            }
+            Some(GotoDefinitionResponse::Scalar(location)) => Ok(vec![location]),
+            Some(GotoDefinitionResponse::Array(locations)) => Ok(locations),
+            Some(GotoDefinitionResponse::Link(links)) => Ok(links.into_iter().map(|link| Location {
+                uri: link.target_uri,
+                range: link.target_selection_range,
+            }).collect()),
+            None => Ok(Vec::new()),
         }
     }
 
@@ -410,6 +383,7 @@ impl LspClient {
             },
         };
 
+        self.open_documents.remove(uri);
         self.send_notification("textDocument/didClose", params)
     }
 
@@ -427,9 +401,12 @@ impl LspClient {
 
     /// Send a textDocument/didOpen notification
     fn did_open(&mut self, uri: &str, content: &str, language_id: &str) -> Result<(), String> {
-        println!("[LSP Client] did_open called with uri: {}", uri);
+        // Skip if document is already open
+        if self.open_documents.contains(uri) {
+            return Ok(());
+        }
+
         let parsed_uri = url::Url::parse(uri).map_err(|e| format!("Invalid URI: {}", e))?;
-        println!("[LSP Client] did_open parsed uri: {}", parsed_uri.as_str());
         let params = DidOpenTextDocumentParams {
             text_document: TextDocumentItem {
                 uri: parsed_uri.as_str().parse().unwrap(),
@@ -439,8 +416,9 @@ impl LspClient {
             },
         };
 
-        println!("[LSP Client] Sending didOpen notification");
-        self.send_notification("textDocument/didOpen", params)
+        self.send_notification("textDocument/didOpen", params)?;
+        self.open_documents.insert(uri.to_string());
+        Ok(())
     }
 
     /// Send an LSP request and receive response
@@ -556,7 +534,6 @@ impl LspClient {
             // Check if this is a notification (no ID or id is null/0)
             // Notifications don't have an ID that matches our request
             if response.id == 0 || response.id != expected_id {
-                eprintln!("[LSP] Skipping notification/unexpected response (id={}, expected={})", response.id, expected_id);
                 continue; // Keep reading until we get the matching response
             }
 
@@ -679,26 +656,12 @@ impl LspConnectionPool {
         if !self.connections.contains_key(language_id) {
             let (server, args) = get_server_for_language(language_id)
                 .ok_or_else(|| {
-                    eprintln!("[LSP Pool] No LSP server found for {}. Please install the language server.", language_id);
                     format!("No LSP server configured for language: {}. Install the language server for intellisense features.", language_id)
                 })?;
 
-            eprintln!("[LSP Pool] Starting {} server ({})...", language_id, server);
             let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
-            let mut client = match LspClient::new(&server, &args_ref) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("[LSP Pool] Failed to start {} server: {}", language_id, e);
-                    return Err(format!("Failed to start LSP server for {}: {}", language_id, e));
-                }
-            };
-            match client.initialize(&self.root_path) {
-                Ok(_) => eprintln!("[LSP Pool] {} server initialized successfully", language_id),
-                Err(e) => {
-                    eprintln!("[LSP Pool] Failed to initialize {} server: {}", language_id, e);
-                    return Err(format!("Failed to initialize LSP server for {}: {}", language_id, e));
-                }
-            }
+            let mut client = LspClient::new(&server, &args_ref)?;
+            client.initialize(&self.root_path)?;
 
             self.connections.insert(language_id.to_string(), client);
         }
@@ -754,15 +717,10 @@ pub fn format_with_lsp(
     let (server, args) = get_server_for_language(language_id)
         .ok_or_else(|| format!("No LSP server configured for language: {}", language_id))?;
 
-    eprintln!("[LSP] Starting {} server...", language_id);
     let args_ref: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
     let mut client = LspClient::new(&server, &args_ref)?;
-    eprintln!("[LSP] Initializing...");
     client.initialize(root_path)?;
-    eprintln!("[LSP] Formatting document...");
-    let result = client.format_document(uri, content, language_id, options);
-    eprintln!("[LSP] Done");
-    result
+    client.format_document(uri, content, language_id, options)
 }
 
 /// LSP Server info
@@ -782,7 +740,14 @@ fn get_server_for_language(language_id: &str) -> Option<(String, Vec<String>)> {
         if crate::lsp_installer::is_server_installed_cached(&config) {
             let path = crate::lsp_installer::get_binary_path(&config);
             eprintln!("[LSP] Found cached {} server at {:?}", language_id, path);
-            return Some((path.to_string_lossy().to_string(), vec![]));
+            // Use appropriate args based on language
+            let args = match language_id {
+                "rust" => vec![], // rust-analyzer runs in LSP mode by default
+                "typescript" | "javascript" => vec!["--stdio".to_string()],
+                "python" => vec![], // pyright uses --stdio by default when run directly
+                _ => vec![],
+            };
+            return Some((path.to_string_lossy().to_string(), args));
         } else {
             eprintln!("[LSP] {} server not installed in cache", language_id);
         }
@@ -790,7 +755,7 @@ fn get_server_for_language(language_id: &str) -> Option<(String, Vec<String>)> {
 
     // Fall back to system PATH
     let result = match language_id {
-        "rust" => Some(("rust-analyzer".to_string(), vec![])),
+        "rust" => Some(("rust-analyzer".to_string(), vec![])), // rust-analyzer runs in LSP mode by default
         "go" => Some(("gopls".to_string(), vec![])),
         "python" => Some(("pyright".to_string(), vec!["--stdio".to_string()])),
         "cpp" | "c" => Some(("clangd".to_string(), vec![])),
@@ -799,9 +764,7 @@ fn get_server_for_language(language_id: &str) -> Option<(String, Vec<String>)> {
     };
 
     if let Some((ref binary, _)) = result {
-        // Check if binary exists in PATH
         use std::env;
-        use std::ffi::OsStr;
 
         let path = env::var_os("PATH").unwrap_or_default();
         let binary_exists = env::split_paths(&path).any(|dir| {
@@ -809,10 +772,7 @@ fn get_server_for_language(language_id: &str) -> Option<(String, Vec<String>)> {
             full_path.exists() || full_path.with_extension("exe").exists()
         });
 
-        if binary_exists {
-            eprintln!("[LSP] Found {} in system PATH", binary);
-        } else {
-            eprintln!("[LSP] {} NOT found in PATH - install LSP server for intellisense", binary);
+        if !binary_exists {
             return None;
         }
     }
@@ -880,19 +840,10 @@ pub async fn install_lsp_server(
     app_handle: tauri::AppHandle,
 ) -> Result<String, String> {
     use tauri::Emitter;
-    eprintln!("[LSP Installer] Installing {} server...", language_id);
 
-    // Clone for use in closure
     let language_id_clone = language_id.clone();
 
-    // Install with progress events emitted to frontend
     let result = crate::lsp_installer::install_server(&language_id, move |progress| {
-        eprintln!(
-            "[LSP Installer] {}: {:.1}%",
-            progress.stage, progress.percentage
-        );
-
-        // Emit event to frontend
         let _ = app_handle.emit("lsp-install-progress", &ProgressEvent {
             language_id: language_id_clone.clone(),
             stage: progress.stage.clone(),
@@ -900,11 +851,6 @@ pub async fn install_lsp_server(
         });
     })
     .await;
-
-    match &result {
-        Ok(msg) => eprintln!("[LSP Installer] {}", msg),
-        Err(e) => eprintln!("[LSP Installer] Error: {}", e),
-    }
 
     result
 }
@@ -1204,7 +1150,6 @@ pub fn get_definition(
 /// Tauri command: Initialize LSP connection pool for a project
 #[tauri::command]
 pub fn initialize_lsp_pool(root_path: String) -> Result<(), String> {
-    eprintln!("[LSP] Initializing connection pool for: {}", root_path);
     init_connection_pool(root_path);
     Ok(())
 }
@@ -1220,7 +1165,6 @@ pub fn notify_document_opened(
     let pool = get_pool().ok_or("Connection pool not initialized")?;
     let mut pool_guard = pool.lock().map_err(|e| format!("Lock error: {}", e))?;
     let client = pool_guard.get_or_create(&language_id)?;
-    println!("[LSP] notify_document_opened: language_id={}, uri={}", language_id, uri);
     client.did_open(&uri, &content, &language_id)
 }
 

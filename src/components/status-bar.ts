@@ -4,6 +4,21 @@ import { TailwindElement } from '../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
 import './icon.js';
 
+/**
+ * Get display name for LSP server
+ */
+function getServerDisplayName(languageId: string): string {
+  const serverNames: Record<string, string> = {
+    rust: 'rust-analyzer',
+    go: 'gopls',
+    python: 'pyright',
+    cpp: 'clangd',
+    typescript: 'typescript-language-server',
+    javascript: 'typescript-language-server',
+  };
+  return serverNames[languageId] || `${languageId}-language-server`;
+}
+
 export interface LspServerInfo {
   language_id: string;
   server_name: string;
@@ -88,12 +103,13 @@ export class StatusBar extends TailwindElement() {
       return;
     }
 
-    // Show a subtle notification in status bar
-    this.statusMessage = `${serverName} not installed. Click to install.`;
-    this.dispatchEvent(new CustomEvent('lsp-install-prompt', {
-      detail: { languageId, serverName },
-      bubbles: true,
-    }));
+    // Show a subtle notification in status bar with clearer messaging
+    const displayName = getServerDisplayName(languageId);
+    this.statusMessage = `${displayName} not installed. Installing...`;
+    console.log(`[LSP] ${displayName} server not available, starting auto-install`);
+
+    // Trigger auto-install
+    this.autoInstallLspServer(languageId);
   }
 
   public updateInstallProgress(languageId: string, serverName: string, percentage: number, stage: string): void {
@@ -148,6 +164,15 @@ export class StatusBar extends TailwindElement() {
 
       // Re-check status to update the indicator
       await this.checkLspStatus();
+
+      // Re-initialize LSP pool to pick up newly installed server
+      console.log(`[LSP] Re-initializing LSP pool for ${languageId} after install`);
+      // Dispatch event to re-open current file with new LSP connection
+      this.dispatchEvent(new CustomEvent('lsp-server-ready', {
+        detail: { languageId },
+        bubbles: true,
+        composed: true,
+      }));
 
       if (showNotification) {
         this.statusMessage = `${serverName} ready`;
@@ -207,6 +232,43 @@ export class StatusBar extends TailwindElement() {
    */
   public getInstallError(languageId: string): string | null {
     return this.installFailed.get(languageId) || null;
+  }
+
+  /**
+   * Get user-friendly error message for LSP install failures
+   */
+  public getUserFriendlyError(errorMessage: string | null, languageId: string): string {
+    if (!errorMessage) return 'Install failed';
+
+    const error = errorMessage.toLowerCase();
+
+    // Check for specific missing tool errors
+    if (error.includes('rust-analyzer') || error.includes('not found') || error.includes('no such file')) {
+      return `${getServerDisplayName(languageId)} not installed - click Retry to install`;
+    }
+    if (error.includes('npm') || error.includes('node')) {
+      return 'Node.js required - please install Node.js first';
+    }
+    if (error.includes('go ') || error.includes('gopls')) {
+      return 'Go not installed - please install Go from go.dev';
+    }
+    if (error.includes('python') || error.includes('pip')) {
+      return 'Python not installed - please install Python first';
+    }
+    if (error.includes('clang') || error.includes('llvm')) {
+      return 'LLVM/clang not installed - install Xcode or LLVM';
+    }
+    if (error.includes('xcode')) {
+      return 'Xcode tools required - run: xcode-select --install';
+    }
+    if (error.includes('permission') || error.includes('access')) {
+      return 'Permission denied - check file permissions';
+    }
+    if (error.includes('network') || error.includes('download') || error.includes('fetch')) {
+      return 'Download failed - check internet connection';
+    }
+
+    return 'Install failed - click Retry to try again';
   }
 
   /**
@@ -339,11 +401,7 @@ export class StatusBar extends TailwindElement() {
 
             // Failed state
             if (hasFailed) {
-              const displayError = errorMessage?.includes('not installed')
-                ? 'Go not installed'
-                : errorMessage?.includes('npm')
-                  ? 'Node.js not installed'
-                  : 'Install failed';
+              const displayError = this.getUserFriendlyError(errorMessage, serverInfo.language_id);
 
               return html`
                 <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-red-50 border border-[#d0d7de]">
@@ -377,11 +435,11 @@ export class StatusBar extends TailwindElement() {
             return html`
               <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-yellow-50 border border-[#d0d7de]">
                 <os-icon name="circle-dot" size="12" color="#ca8a04"></os-icon>
-                <span class="text-yellow-700">${serverInfo.server_name} not installed</span>
+                <span class="text-yellow-700">${serverInfo.server_name} not installed - click to install</span>
                 <button
                   class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
                   @click=${() => this.installLspServer(serverInfo.language_id)}>
-                  Install
+                  Install Now
                 </button>
               </div>
             `;

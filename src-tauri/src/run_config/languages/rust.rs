@@ -18,15 +18,28 @@ impl RustDetector {
         let mut targets = Vec::new();
         let mut in_bin_section = false;
         let mut current_name = None;
+        let mut package_name = None;
+        let mut in_package_section = false;
 
         for line in content.lines() {
             let line = line.trim();
-            if line == "[[bin]]" {
-                in_bin_section = true;
+            if line == "[package]" {
+                in_package_section = true;
                 continue;
             }
-            if line.starts_with('[') && line != "[[bin]]" {
+            if line == "[[bin]]" {
+                in_bin_section = true;
+                in_package_section = false;
+                continue;
+            }
+            if line.starts_with('[') && line != "[[bin]]" && line != "[package]" {
                 in_bin_section = false;
+                in_package_section = false;
+            }
+            if in_package_section && line.starts_with("name =") {
+                if let Some(name) = line.split('=').nth(1) {
+                    package_name = Some(name.trim().trim_matches('"').to_string());
+                }
             }
             if in_bin_section && line.starts_with("name =") {
                 if let Some(name) = line.split('=').nth(1) {
@@ -44,8 +57,9 @@ impl RustDetector {
             targets.push(name);
         }
 
+        // If no explicit [[bin]] targets, use package name (Cargo default)
         if targets.is_empty() {
-            targets.push("main".to_string());
+            targets.push(package_name.unwrap_or_else(|| "main".to_string()));
         }
 
         targets
@@ -82,6 +96,9 @@ impl LanguageDetector for RustDetector {
 
         let targets = Self::find_binary_targets(workspace_root);
         for (i, target) in targets.iter().enumerate() {
+            // For debugging, we need the actual binary path, not cargo run args
+            // The binary will be at target/debug/<target> after build
+            let debug_binary_path = workspace_root.join("target").join("debug").join(target);
             configs.push(RunConfiguration {
                 id: format!("rust-run-{}", i),
                 name: format!("Run {}", target),
@@ -94,7 +111,7 @@ impl LanguageDetector for RustDetector {
                 debug_adapter: Some(crate::run_config::configuration::DebugAdapterConfig {
                     adapter_type: "lldb".to_string(),
                     executable: Some("rust-lldb".to_string()),
-                    args: vec![],
+                    args: vec![debug_binary_path.to_string_lossy().to_string()],
                     env: std::collections::HashMap::new(),
                 }),
             });

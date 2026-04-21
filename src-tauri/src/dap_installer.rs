@@ -30,6 +30,16 @@ static ADAPTER_REGISTRY: Lazy<Vec<AdapterInfo>> = Lazy::new(|| {
             size_mb: 0,
         },
         AdapterInfo {
+            id: "delve",
+            name: "Go Debugger",
+            languages: vec!["go"],
+            download_url: None,
+            install_command: Some("go install github.com/go-delve/delve/cmd/dlv@latest"),
+            binary_name: "dlv",
+            binary_args: vec!["dap"],
+            size_mb: 15,
+        },
+        AdapterInfo {
             id: "js-debug",
             name: "JavaScript Debugger",
             languages: vec!["javascript", "typescript"],
@@ -48,16 +58,6 @@ static ADAPTER_REGISTRY: Lazy<Vec<AdapterInfo>> = Lazy::new(|| {
             binary_name: "python",
             binary_args: vec!["-m", "debugpy.adapter"],
             size_mb: 5,
-        },
-        AdapterInfo {
-            id: "delve",
-            name: "Go Debugger",
-            languages: vec!["go"],
-            download_url: None,
-            install_command: Some("go install github.com/go-delve/delve/cmd/dlv@master"),
-            binary_name: "dlv",
-            binary_args: vec!["dap"],
-            size_mb: 15,
         },
     ]
 });
@@ -136,17 +136,32 @@ impl DebugAdapterInstaller {
     pub fn find_binary(name: &str) -> Option<String> {
         #[cfg(unix)]
         {
+            // First try standard which
             let output = Command::new("which")
                 .arg(name)
                 .output()
                 .ok()?;
 
             if output.status.success() {
-                String::from_utf8(output.stdout).ok()
-                    .map(|s| s.trim().to_string())
-            } else {
-                None
+                return String::from_utf8(output.stdout).ok()
+                    .map(|s| s.trim().to_string());
             }
+
+            // For lldb-dap, also check Xcode toolchain paths
+            if name == "lldb-dap" {
+                let xcode_paths = [
+                    "/Library/Developer/CommandLineTools/usr/bin",
+                    "/Applications/Xcode.app/Contents/Developer/usr/bin",
+                ];
+                for path in xcode_paths {
+                    let full_path = std::path::Path::new(path).join(name);
+                    if full_path.exists() {
+                        return Some(full_path.to_string_lossy().to_string());
+                    }
+                }
+            }
+
+            None
         }
 
         #[cfg(windows)]
@@ -177,14 +192,73 @@ impl DebugAdapterInstaller {
     }
 
     fn install_lldb(&self, adapter: &AdapterInfo) -> Result<AdapterInstallResult, String> {
-        // lldb-dap needs to be installed via system package manager
-        let install_cmd = adapter.install_command
-            .ok_or("lldb-dap must be installed manually")?;
+        println!("[DAP] Checking for LLDB debugger...");
 
-        Err(format!(
-            "LLDB debugger not found. Please install it by running:\n  {}",
-            install_cmd
-        ))
+        // First check if lldb-dap is already available (including Xcode paths)
+        if let Some(path) = Self::find_binary("lldb-dap") {
+            println!("[DAP] LLDB debugger found at: {}", path);
+            return Ok(AdapterInstallResult {
+                success: true,
+                adapter_id: adapter.id.to_string(),
+                message: "LLDB debugger is available".to_string(),
+                binary_path: Some(path),
+            });
+        }
+
+        // Run xcode-select --install
+        // Note: This triggers a system dialog - the user must accept it
+        println!("[DAP] Running xcode-select --install...");
+        let output = Command::new("xcode-select")
+            .arg("--install")
+            .output()
+            .map_err(|e| format!("Failed to run xcode-select: {}", e))?;
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Check if command line tools are already installed
+        if stderr.contains("already installed") || stdout.contains("already installed") {
+            // Tools are installed but lldb-dap not found - might be a PATH issue
+            // Check the Xcode path directly
+            let xcode_lldb_dap = std::path::Path::new("/Library/Developer/CommandLineTools/usr/bin/lldb-dap");
+            if xcode_lldb_dap.exists() {
+                println!("[DAP] LLDB debugger found at Xcode path (not in PATH)");
+                return Ok(AdapterInstallResult {
+                    success: true,
+                    adapter_id: adapter.id.to_string(),
+                    message: "LLDB debugger found but not in PATH. OpenStorm will use it directly.".to_string(),
+                    binary_path: Some(xcode_lldb_dap.to_string_lossy().to_string()),
+                });
+            }
+            return Err(
+                "Xcode command line tools are installed, but lldb-dap was not found.
+Please ensure Xcode command line tools are properly installed."
+                    .to_string(),
+            );
+        }
+
+        if !output.status.success() {
+            return Err(format!("xcode-select failed: {}", stderr));
+        }
+
+        // Installation dialog was shown - check if binary is now available
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        if let Some(path) = Self::find_binary("lldb-dap") {
+            return Ok(AdapterInstallResult {
+                success: true,
+                adapter_id: adapter.id.to_string(),
+                message: "LLDB debugger installed successfully".to_string(),
+                binary_path: Some(path),
+            });
+        }
+
+        // User needs to complete the installation dialog
+        Ok(AdapterInstallResult {
+            success: true,
+            adapter_id: adapter.id.to_string(),
+            message: "Xcode command line tools installation started. Please complete the installation in the system dialog.".to_string(),
+            binary_path: None,
+        })
     }
 
     async fn install_js_debug(&self, adapter: &AdapterInfo) -> Result<AdapterInstallResult, String> {

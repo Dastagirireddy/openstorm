@@ -107,12 +107,58 @@ pub fn is_server_installed_cached(config: &LspServerConfig) -> bool {
         return true;
     }
 
+    // Check if file is still gzip compressed (extraction failure recovery)
+    if is_gzip_file(&binary_path) {
+        if let Err(_) = repair_gzip_binary(&binary_path) {
+            return false;
+        }
+    }
+
     // Try to run --version to verify it works for other native binaries
     Command::new(&binary_path)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// Check if a file is gzip compressed by reading magic bytes
+fn is_gzip_file(path: &Path) -> bool {
+    use std::io::Read;
+    if let Ok(mut file) = File::open(path) {
+        let mut buf = [0u8; 2];
+        if file.read_exact(&mut buf).is_ok() {
+            // GZIP magic bytes: 0x1F 0x8B
+            return buf[0] == 0x1F && buf[1] == 0x8B;
+        }
+    }
+    false
+}
+
+/// Repair a gzip-compressed binary by decompressing it in place
+fn repair_gzip_binary(path: &Path) -> Result<(), String> {
+    use flate2::read::GzDecoder;
+    use std::io::{Read, Write};
+
+    // Read and decompress
+    let file = File::open(path).map_err(|e| format!("Failed to open: {}", e))?;
+    let mut decoder = GzDecoder::new(file);
+    let mut decompressed = Vec::new();
+    decoder.read_to_end(&mut decompressed).map_err(|e| format!("Failed to decompress: {}", e))?;
+
+    // Write back decompressed content
+    let mut outfile = File::create(path).map_err(|e| format!("Failed to create: {}", e))?;
+    outfile.write_all(&decompressed).map_err(|e| format!("Failed to write: {}", e))?;
+
+    // Set executable permissions
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o755))
+            .map_err(|e| format!("Failed to set permissions: {}", e))?;
+    }
+
+    Ok(())
 }
 
 /// Check if a server is installed (by name in PATH)
@@ -232,9 +278,7 @@ async fn install_via_go_tool(
         .output();
 
     match go_check {
-        Ok(output) if output.status.success() => {
-            eprintln!("[LSP Installer] Go is installed: {}", String::from_utf8_lossy(&output.stdout).trim());
-        }
+        Ok(output) if output.status.success() => {}
         Ok(output) => {
             return Err(format!("Go is installed but returned error: {}", String::from_utf8_lossy(&output.stderr)));
         }
@@ -246,18 +290,12 @@ async fn install_via_go_tool(
     fs::create_dir_all(cache_dir)
         .map_err(|e| format!("Failed to create cache dir: {}", e))?;
 
-    // gopls package path
     let package = "golang.org/x/tools/gopls@latest";
-
-    eprintln!("[LSP Installer] Running: go install {}", package);
 
     let output = Command::new("go")
         .args(["install", package])
         .output()
         .map_err(|e| format!("Failed to run go install: {}", e))?;
-
-    eprintln!("[LSP Installer] go install stdout: {}", String::from_utf8_lossy(&output.stdout));
-    eprintln!("[LSP Installer] go install stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     if !output.status.success() {
         return Err(format!(
@@ -273,7 +311,6 @@ async fn install_via_go_tool(
         percentage: 50.0,
     });
 
-    // Get GOBIN or GOPATH to find where the binary was installed
     let gobin_output = Command::new("go")
         .args(["env", "GOBIN"])
         .output()
@@ -284,7 +321,6 @@ async fn install_via_go_tool(
     let source_binary = if !gobin.is_empty() {
         PathBuf::from(gobin).join(&config.binary_name)
     } else {
-        // Fallback to GOPATH/bin
         let gopath_output = Command::new("go")
             .args(["env", "GOPATH"])
             .output()
@@ -296,8 +332,6 @@ async fn install_via_go_tool(
     if !source_binary.exists() {
         return Err(format!("gopls binary not found at {:?}", source_binary));
     }
-
-    eprintln!("[LSP Installer] Found binary at: {:?}", source_binary);
 
     // Copy binary to our cache directory
     let dest_binary = cache_dir.join(&config.binary_name);
@@ -345,18 +379,13 @@ async fn install_npm_package(
     let npm_dir_str = npm_dir.to_string_lossy().to_string();
     let mut args = vec!["install", package, "--prefix", npm_dir_str.as_str()];
     if package == "typescript-language-server" {
-        // typescript-language-server requires typescript as a peer dependency
         args.push("typescript");
     }
-    eprintln!("[LSP Installer] Running: npm {} args: {:?}", args[0], args);
 
     let output = Command::new("npm")
         .args(&args)
         .output()
         .map_err(|e| format!("Failed to run npm: {}", e))?;
-
-    eprintln!("[LSP Installer] npm stdout: {}", String::from_utf8_lossy(&output.stdout));
-    eprintln!("[LSP Installer] npm stderr: {}", String::from_utf8_lossy(&output.stderr));
 
     if !output.status.success() {
         return Err(format!(
@@ -372,10 +401,8 @@ async fn install_npm_package(
         percentage: 50.0,
     });
 
-    // Find and copy the binary
     let source_binary = match package {
         "typescript-language-server" => {
-            // Try multiple possible paths
             let path1 = npm_dir.join("node_modules/typescript-language-server/lib/cli.mjs");
             let path2 = npm_dir.join("node_modules/typescript-language-server/lib/cli.js");
             let path3 = npm_dir.join("node_modules/typescript-language-server/bin/typescript-language-server");
@@ -395,8 +422,6 @@ async fn install_npm_package(
         }
         _ => return Err(format!("Unknown npm package: {}", package)),
     };
-
-    eprintln!("[LSP Installer] Found binary at: {:?}", source_binary);
 
     // Create a wrapper script for the binary
     let dest_binary = cache_dir.join(binary_name);
@@ -445,10 +470,6 @@ node "{}" %*
         fs::set_permissions(&dest_binary, fs::Permissions::from_mode(0o755))
             .map_err(|e| format!("Failed to set permissions: {}", e))?;
     }
-
-    // Keep node_modules in cache directory - don't clean up temp dir
-    // The binary wrapper references files in this directory
-    eprintln!("[LSP Installer] Keeping node_modules at: {:?}", npm_dir);
 
     on_progress(InstallProgress {
         stage: "Installation complete!".to_string(),
@@ -615,8 +636,11 @@ async fn extract_archive(
 ) -> Result<PathBuf, String> {
     let file_name = archive.file_name().unwrap_or_default().to_string_lossy();
 
-    if file_name.ends_with(".gz") || file_name.ends_with(".tar.gz") {
+    if file_name.ends_with(".tar.gz") {
         extract_tar_gz(archive, dest_dir, binary_name, config).await
+    } else if file_name.ends_with(".gz") {
+        // Plain gzip file (e.g., rust-analyzer) - just decompress
+        extract_gzip(archive, dest_dir, binary_name).await
     } else if file_name.ends_with(".zip") {
         extract_zip(archive, dest_dir, binary_name, config).await
     } else {
@@ -626,6 +650,22 @@ async fn extract_archive(
             .map_err(|e| format!("Failed to copy binary: {}", e))?;
         Ok(dest)
     }
+}
+
+/// Extract a gzip-compressed file (plain .gz, not tar.gz)
+async fn extract_gzip(
+    archive: &Path,
+    dest_dir: &Path,
+    binary_name: &str,
+) -> Result<PathBuf, String> {
+    eprintln!("[LSP Installer] Extracting gzip: {:?} -> {}/{}", archive, dest_dir.display(), binary_name);
+    let file = File::open(archive).map_err(|e| format!("Failed to open gzip file: {}", e))?;
+    let mut decoder = flate2::read::GzDecoder::new(file);
+    let dest = dest_dir.join(binary_name);
+    let mut outfile = File::create(&dest).map_err(|e| format!("Failed to create output file: {}", e))?;
+    std::io::copy(&mut decoder, &mut outfile)
+        .map_err(|e| format!("Failed to decompress: {}", e))?;
+    Ok(dest)
 }
 
 /// Extract a tar.gz archive
