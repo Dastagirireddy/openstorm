@@ -5,5 +5,5 @@ const tailwindSheet = unsafeCSS(tailwindStyles);
 
 export const TailwindElement = (componentStyles: CSSResultGroup | undefined = undefined) =>
   class extends LitElement {
-    static styles = componentStyles ? [tailwindSheet, unsafeCSS(componentStyles)] : [tailwindSheet];
+    static styles = componentStyles ? [tailwindSheet, componentStyles] : [tailwindSheet];
   };

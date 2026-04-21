@@ -2,14 +2,76 @@
 
 @source "**/*.{ts,html}";
 
+/* Theme Variables - IntelliJ Classic Light Theme */
+:root {
+  --app-bg: #ffffff;
+  --app-foreground: #1a1a1a;
+  --app-disabled-foreground: #8a8a8a;
+  --app-border: #e5e7eb;
+  --app-focus-border: #6366f1;
+  --app-hover-background: #f3f4f6;
+  --app-selection-background: #e8e0f5;
+  --app-input-background: #ffffff;
+  --app-input-foreground: #1a1a1a;
+  --app-input-border: #d0d0d0;
+  --app-input-placeholder: #9ca3af;
+  --app-button-background: #6366f1;
+  --app-button-foreground: #ffffff;
+  --app-button-hover: #4f46e5;
+  --app-toolbar-hover: #e8e8e8;
+  --app-toolbar-active: #d0d0d0;
+  --app-tab-active: #ffffff;
+  --app-tab-inactive: #f3f4f6;
+  --app-tab-border: #e5e7eb;
+  --app-tab-active-border: #6366f1;
+  --app-scrollbar: #c1c1c1;
+  --app-scrollbar-hover: #a8a8a8;
+  /* Debug panel specific */
+  --app-continue-color: #22c55e;
+  --app-step-color: #0078d4;
+  --app-stop-color: #f44336;
+  --app-pause-color: #d97706;
+  --app-status-running: #16825d;
+  --app-status-stopped: #d97706;
+  --app-tab-variables: #8b5cf6;
+  --app-tab-watch: #06b6d4;
+  --app-tab-callstack: #d97706;
+  --app-tab-threads: #ea580c;
+  --app-tab-breakpoints: #f44336;
+  --app-tab-console: #16825d;
+  --app-running-state: #22c55e;
+  --app-stopped-state: #d97706;
+  --app-exited-state: #6b7280;
+  --app-unknown-state: #9ca3af;
+  --app-error-background: #fef2f2;
+  --app-pinned-background: #fefce8;
+  --app-toast-background: #3c3c3c;
+  /* Syntax colors (IntelliJ Classic Light) */
+  --app-keyword: #0033b3;
+  --app-type: #00627a;
+  --app-string: #067d17;
+  --app-number: #1750eb;
+  --app-boolean: #0033b3;
+  --app-null: #808080;
+  /* Console colors */
+  --app-console-info: #3c3c3c;
+  --app-console-warning: #cca700;
+  --app-console-error: #f44336;
+  --app-console-success: #16825d;
+  /* Breakpoint colors */
+  --app-breakpoint: #f44336;
+  --app-breakpoint-disabled: #9ca3af;
+  --app-breakpoint-conditional: #ffd700;
+}
+
 /* Global resets */
 html, body {
   height: 100%;
   width: 100%;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  background: #ffffff;
-  color: #1a1a1a;
+  background: var(--app-bg, #ffffff);
+  color: var(--app-foreground, #1a1a1a);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

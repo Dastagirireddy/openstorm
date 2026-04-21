@@ -109,10 +109,13 @@ export async function getCompletions(
   } catch (error) {
     const errorMsg = String(error);
     // If LSP server is not installed, trigger auto-install
-    if (errorMsg.includes('No LSP server') || errorMsg.includes('Failed to start') || errorMsg.includes('Failed to initialize')) {
+    if (errorMsg.includes('No LSP server') ||
+        errorMsg.includes('Failed to start') ||
+        errorMsg.includes('Failed to initialize') ||
+        errorMsg.includes('Missing Content-Length')) {
       console.log('[LSP] Server not available, triggering auto-install...');
       document.dispatchEvent(new CustomEvent('lsp-server-missing', {
-        detail: { languageId, serverName: `${languageId}-language-server` },
+        detail: { languageId, serverName: getServerDisplayName(languageId) },
         bubbles: true,
         composed: true,
       }));
@@ -121,6 +124,21 @@ export async function getCompletions(
     }
     return [];
   }
+}
+
+/**
+ * Get display name for LSP server
+ */
+function getServerDisplayName(languageId: string): string {
+  const serverNames: Record<string, string> = {
+    rust: 'rust-analyzer',
+    go: 'gopls',
+    python: 'pyright',
+    cpp: 'clangd',
+    typescript: 'typescript-language-server',
+    javascript: 'typescript-language-server',
+  };
+  return serverNames[languageId] || `${languageId}-language-server`;
 }
 
 /**
