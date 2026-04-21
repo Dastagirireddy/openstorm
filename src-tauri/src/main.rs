@@ -16,22 +16,55 @@ use tokio::sync::Mutex;
 
 /// Poll DAP events and emit them to the frontend
 fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
+    println!("[DAP event_poller] Starting event poller thread...");
     std::thread::spawn(move || {
         // Create a runtime for this thread
         let rt = tokio::runtime::Runtime::new().unwrap();
+        println!("[DAP event_poller] Runtime created, starting loop...");
         rt.block_on(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
                 // Get the DAP client from app state
+                println!("[DAP event_poller] Polling...");
                 let dap_client = app_handle.state::<Mutex<dap::DapClient>>();
 
                 let mut client = match dap_client.try_lock() {
                     Ok(c) => c,
-                    Err(_) => continue,
+                    Err(e) => {
+                        println!("[DAP event_poller] Failed to lock client: {}", e);
+                        continue;
+                    }
                 };
 
                 let events = client.poll_events();
+                if !events.is_empty() {
+                    println!("[DAP event_poller] Got {} events from poll_events()", events.len());
+                }
+
+                // Check if session exists and log its state
+                if let Some(session) = client.get_session() {
+                    println!("[DAP event_poller] Session {} state: {:?}", session.id, session.state);
+                } else {
+                    println!("[DAP event_poller] No active session");
+                }
+
+                // Check if session is in Terminated state (set by terminate_session)
+                // This handles cases where the adapter doesn't send a 'terminated' event
+                let session_terminated = client.get_session()
+                    .map(|s| matches!(s.state, dap::DebugSessionState::Terminated))
+                    .unwrap_or(false);
+
+                if session_terminated {
+                    println!("[DAP event_poller] Session is terminated, clearing and emitting event");
+                    client.clear_session();
+                    match app_handle.emit("debug-session-ended", ()) {
+                        Ok(_) => println!("[DAP event_poller] Successfully emitted debug-session-ended"),
+                        Err(e) => println!("[DAP event_poller] Failed to emit debug-session-ended: {}", e),
+                    }
+                    continue; // Skip event processing for this iteration
+                }
+
                 for event in events {
                     // Log all events for debugging
                     if event.event == "output" {
@@ -61,7 +94,20 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                             "debug-stopped"
                         },
                         "continued" => "debug-continued",
-                        "terminated" => "debug-terminated",
+                        "terminated" => {
+                            // Clear session state before emitting event to frontend
+                            client.clear_session();
+                            let _ = app_handle.emit("debug-session-ended", ());
+                            println!("[DAP] Emitted debug-session-ended for terminated, session cleared");
+                            "debug-terminated"
+                        },
+                        "exited" => {
+                            // Clear session state before emitting event to frontend
+                            client.clear_session();
+                            let _ = app_handle.emit("debug-session-ended", ());
+                            println!("[DAP] Emitted debug-session-ended for exited, session cleared");
+                            "debug-exited"
+                        },
                         "output" => "debug-output",
                         _ => &event.event,
                     };

@@ -122,6 +122,7 @@ export class DebugPanel extends TailwindElement() {
     });
 
     document.addEventListener("debug-session-ended", (e: any) => {
+      console.log("[debug-panel] debug-session-ended event received!");
       this.isDebugging = false;
       this.debugState = "terminated";
       this.stackFrames = [];
@@ -193,9 +194,18 @@ export class DebugPanel extends TailwindElement() {
   }
 
   async refreshStackTrace() {
+    // Don't refresh if not debugging
+    if (!this.isDebugging || this.debugState === "terminated") return;
+
     this.isLoadingStack = true;
     try {
       const frames = await invoke<StackFrame[]>("get_stack_trace");
+
+      // Check again if still debugging after async call
+      if (!this.isDebugging || this.debugState === "terminated") {
+        this.isLoadingStack = false;
+        return;
+      }
 
       const framesWithArgs = await Promise.all(
         frames.slice(0, 5).map(async (frame) => {
@@ -225,7 +235,7 @@ export class DebugPanel extends TailwindElement() {
         })
       );
 
-      this.stackFrames = [...framesWithArgs, ...frames.slice(5).map(f => ({ ...frame, arguments: [] }))];
+      this.stackFrames = [...framesWithArgs, ...frames.slice(5).map(f => ({ ...f, arguments: [] }))];
 
       if (this.stackFrames.length > 0 && !this.selectedFrameId) {
         this.selectedFrameId = this.stackFrames[0].id;
@@ -1286,7 +1296,7 @@ export class DebugPanel extends TailwindElement() {
   }
 
   render() {
-    const statusText = this.debugState === "running" ? "Running" : this.debugState === "stopped" ? "Stopped" : "Terminated";
+    const statusText = this.debugState === "running" ? "Running" : this.debugState === "stopped" ? "Paused" : "Terminated";
     const statusClass = this.debugState === "running" ? "text-green-700" : this.debugState === "stopped" ? "text-amber-700" : "text-gray-500";
 
     return html`
@@ -1431,11 +1441,17 @@ export class DebugPanel extends TailwindElement() {
   }
 
   private async sendAction(action: string) {
-    if (!this.isDebugging) return;
+    console.log("[debug-panel] sendAction called:", action, "isDebugging:", this.isDebugging, "debugState:", this.debugState);
+    if (!this.isDebugging) {
+      console.warn("[debug-panel] Not debugging, skipping action:", action);
+      return;
+    }
     try {
-      await invoke("debug_action", { action });
+      console.log("[debug-panel] Invoking debug_action:", action);
+      const result = await invoke("debug_action", { action });
+      console.log("[debug-panel] debug_action completed:", action, "result:", result);
     } catch (error) {
-      console.error("Failed to send debug action:", error);
+      console.error("[debug-panel] Failed to send debug action:", error);
     }
   }
 }

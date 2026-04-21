@@ -334,6 +334,14 @@ export class RunToolbar extends TailwindElement() {
       this.requestUpdate();
     });
 
+    // Also listen for debug-session-ended (alternative event name)
+    listen("debug-session-ended", () => {
+      console.log("[run-toolbar] debug-session-ended event received");
+      this.isDebugging = false;
+      this.isDebugStopped = false;
+      this.requestUpdate();
+    });
+
     // Listen for project-opened event
     document.addEventListener("project-opened", ((e: CustomEvent) => {
       const path = e.detail?.path;

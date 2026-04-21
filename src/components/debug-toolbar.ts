@@ -163,6 +163,15 @@ export class DebugToolbar extends TailwindElement() {
       font-size: 12px;
     }
 
+    .install-command {
+      background: #e8e8e8;
+      padding: 2px 6px;
+      border-radius: 3px;
+      color: #333;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
     .install-dialog-actions {
       display: flex;
       justify-content: flex-end;
@@ -231,18 +240,25 @@ export class DebugToolbar extends TailwindElement() {
   }
 
   private async setupEventListeners() {
+    console.log("[debug-toolbar] Setting up event listeners");
     document.addEventListener("debug-session-started", ((e: CustomEvent) => {
+      console.log("[debug-toolbar] debug-session-started event received!");
       this.isDebugging = true;
       this.sessionId = e.detail?.session_id ?? null;
       this.showDebugToolbar(true);
+      this.requestUpdate();
     }) as EventListener);
 
     document.addEventListener("debug-session-ended", (() => {
+      console.log("[debug-toolbar] debug-session-ended event received!");
+      console.log("[debug-toolbar] isDebugging before:", this.isDebugging);
       this.isDebugging = false;
       this.sessionId = null;
       this.stackFrames = [];
       this.variables = [];
       this.showDebugToolbar(false);
+      this.requestUpdate();
+      console.log("[debug-toolbar] state updated, isDebugging:", this.isDebugging);
     }) as EventListener);
 
     document.addEventListener("debug-stopped", async () => {
@@ -300,10 +316,18 @@ export class DebugToolbar extends TailwindElement() {
     this.isInstalling = true;
     try {
       const language = this.adapterInfo.languages[0] || "rust";
-      await invoke("install_debug_adapter", { language });
+      const result = await invoke<any>("install_debug_adapter", { language });
 
       // Refresh adapter info
       await this.checkAdapterAvailability(language);
+
+      // Handle LLDB installation that requires user to complete Xcode dialog
+      if (result && !result.binaryPath && result.message?.includes("complete the installation")) {
+        // Installation dialog shown, but user needs to complete it manually
+        this.showInstallPrompt = false;
+        alert(result.message);
+        return;
+      }
 
       if (this.adapterInfo?.isInstalled && (this as any)._pendingConfig) {
         // Start debug session after successful installation
@@ -325,10 +349,16 @@ export class DebugToolbar extends TailwindElement() {
   }
 
   private async sendAction(action: string) {
-    if (!this.isDebugging) return;
+    console.log("[debug-toolbar] sendAction called:", action, "isDebugging:", this.isDebugging);
+    if (!this.isDebugging) {
+      console.warn("[debug-toolbar] Not debugging, skipping action:", action);
+      return;
+    }
 
     try {
+      console.log("[debug-toolbar] Invoking debug_action:", action);
       await invoke("debug_action", { action });
+      console.log("[debug-toolbar] debug_action completed:", action);
     } catch (error) {
       console.error("Failed to send debug action:", error);
     }
@@ -428,8 +458,10 @@ export class DebugToolbar extends TailwindElement() {
               ${this.adapterInfo.sizeMb > 0 ? html`
                 <p>Download size: ~${this.adapterInfo.sizeMb} MB</p>
               ` : ""}
-              ${this.adapterInfo.installCommand ? html`
-                <p>Or install manually: <code style="background: #3c3c3c; padding: 2px 6px; border-radius: 3px;">${this.adapterInfo.installCommand}</code></p>
+              ${this.adapterInfo.id === "lldb" ? html`
+                <p>Click "Install" to trigger the Xcode command line tools installation. A system dialog will appear — please click "Get" and then "Install" to complete the setup.</p>
+              ` : this.adapterInfo.installCommand ? html`
+                <p>Or install manually: <code class="install-command">${this.adapterInfo.installCommand}</code></p>
               ` : ""}
               ${this.isInstalling ? html`
                 <div class="install-progress">

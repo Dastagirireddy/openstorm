@@ -148,6 +148,35 @@ export class OpenStormApp extends TailwindElement() {
       );
     }).catch(console.error);
 
+    // Also listen for direct debug-session-ended events from backend
+    listen("debug-session-ended", (event) => {
+      console.log("[main.ts] debug-session-ended event received from backend!", event);
+      console.log("[main.ts] isDebugging before:", this.isDebugging);
+      this.isDebugging = false;
+      this.requestUpdate();
+      console.log("[main.ts] isDebugging after:", this.isDebugging);
+      document.dispatchEvent(
+        new CustomEvent("debug-session-ended", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      console.log("[main.ts] DOM event dispatched");
+    }).catch(console.error);
+
+    // Handle debug-exited event (when process exits)
+    listen("debug-exited", () => {
+      console.log("[main.ts] debug-exited event received");
+      this.isDebugging = false;
+      this.requestUpdate();
+      document.dispatchEvent(
+        new CustomEvent("debug-session-ended", {
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }).catch(console.error);
+
     listen("debug-output", (event: any) => {
       console.log("[DAP] debug-output event received:", event.payload);
       document.dispatchEvent(

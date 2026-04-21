@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -340,6 +340,28 @@ pub async fn start_debug_session(
     println!("[DAP] Creating adapter...");
     client.create_adapter(&adapter_type)?;
 
+    // For Rust, build the binary before debugging
+    if config.language == Language::Rust {
+        println!("[DAP] Building Rust binary before debug...");
+        let build_output = std::process::Command::new("cargo")
+            .arg("build")
+            .current_dir(config.cwd.as_ref().map(|p| p.as_path()).unwrap_or_else(|| Path::new(".")))
+            .output();
+
+        match build_output {
+            Ok(output) => {
+                if !output.status.success() {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    return Err(format!("Build failed: {}", stderr));
+                }
+                println!("[DAP] Build successful");
+            }
+            Err(e) => {
+                return Err(format!("Failed to run cargo build: {}", e));
+            }
+        }
+    }
+
     let launch_args = LaunchRequestArgs {
         name: config.name.clone(),
         debug_type: adapter_type,
@@ -420,7 +442,7 @@ fn flush_pending_breakpoints(client: &mut DapClient) {
     PENDING_BREAKPOINTS.lock().unwrap().clear();
 }
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum DebugAction {
     Continue,
@@ -433,10 +455,11 @@ pub enum DebugAction {
 
 #[tauri::command]
 pub async fn debug_action(
-    _app_handle: tauri::AppHandle,
+    app_handle: tauri::AppHandle,
     dap_client: tauri::State<'_, tokio::sync::Mutex<DapClient>>,
     action: DebugAction,
 ) -> Result<(), String> {
+    println!("[DAP] debug_action called: {:?}", action);
     let mut client = dap_client.lock().await;
 
     let result = match action {
@@ -445,7 +468,25 @@ pub async fn debug_action(
         DebugAction::StepInto => client.step_into(),
         DebugAction::StepOut => client.step_out(),
         DebugAction::Pause => client.pause(),
-        DebugAction::Terminate => client.terminate_session(),
+        DebugAction::Terminate => {
+            println!("[DAP] Terminating debug session...");
+            let session_before = client.get_session().map(|s| format!("{:?}", s.state));
+            println!("[DAP] Session state before terminate: {:?}", session_before);
+            let result = client.terminate_session();
+            let session_after = client.get_session().map(|s| format!("{:?}", s.state));
+            println!("[DAP] Session state after terminate: {:?}", session_after);
+            println!("[DAP] Terminate result: {:?}", result.is_ok());
+
+            // Emit event immediately to ensure frontend receives it
+            // The poller will also emit if it detects the terminated state (redundancy is OK)
+            println!("[DAP] Emitting debug-session-ended event immediately");
+            match app_handle.emit("debug-session-ended", ()) {
+                Ok(_) => println!("[DAP] Successfully emitted debug-session-ended"),
+                Err(e) => println!("[DAP] Failed to emit debug-session-ended: {}", e),
+            }
+
+            result
+        }
     };
 
     result
