@@ -63,8 +63,7 @@ fn get_bundled_templates_dir(_app_handle: &AppHandle) -> PathBuf {
 
 /// Get the user templates directory
 fn get_user_templates_dir() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_default();
-    PathBuf::from(home).join(".openstorm").join("templates")
+    crate::config::get_paths().template_dir.clone()
 }
 
 /// Load a single template from a directory

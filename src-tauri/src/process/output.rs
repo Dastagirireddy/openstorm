@@ -44,27 +44,4 @@ impl OutputEvent {
         }
     }
 
-    pub fn error(process_id: u32, data: String) -> Self {
-        Self {
-            process_id,
-            output_type: OutputType::Error,
-            data,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        }
-    }
-
-    pub fn info(process_id: u32, data: String) -> Self {
-        Self {
-            process_id,
-            output_type: OutputType::Info,
-            data,
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        }
-    }
 }

@@ -15,7 +15,6 @@ use std::path::Path;
 
 pub trait LanguageDetector: Send + Sync {
     fn detect(&self, workspace_root: &Path) -> Vec<RunConfiguration>;
-    fn language(&self) -> Language;
 }
 
 pub fn get_detector_for_language(language: &Language) -> Box<dyn LanguageDetector> {
@@ -35,17 +34,4 @@ impl LanguageDetector for UnknownDetector {
     fn detect(&self, _workspace_root: &Path) -> Vec<RunConfiguration> {
         Vec::new()
     }
-    fn language(&self) -> Language {
-        Language::Unknown
-    }
-}
-
-pub fn detect_language_from_path(path: &Path) -> Option<Language> {
-    path.extension()
-        .and_then(|ext| ext.to_str())
-        .and_then(Language::from_file_extension)
-}
-
-pub fn detect_language_from_project_file(file_name: &str) -> Option<Language> {
-    Language::from_project_file(file_name)
 }

@@ -1,11 +1,11 @@
 use super::adapter::{DebugAdapter, DapEvent, Breakpoint};
 use super::types::*;
-use crate::dap::adapters::{LldbAdapter, JsDebugAdapter, GoAdapter};
 use crate::dap::watch::WatchManager;
 
 pub type SessionId = u32;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct DebugSession {
     pub id: SessionId,
     pub state: DebugSessionState,
@@ -30,20 +30,16 @@ impl DapClient {
     }
 
     pub fn create_adapter(&mut self, adapter_type: &str) -> Result<(), String> {
-        match adapter_type {
-            "lldb" | "rust" => {
-                self.adapter = Some(Box::new(LldbAdapter::new()));
+        // Try to create adapter from registry
+        let adapter = super::adapter_registry::create_adapter(adapter_type)
+            .or_else(|| super::adapter_registry::create_adapter_for_language(adapter_type));
+
+        match adapter {
+            Some(adapter) => {
+                self.adapter = Some(adapter);
                 Ok(())
             }
-            "js-debug" | "javascript" | "typescript" => {
-                self.adapter = Some(Box::new(JsDebugAdapter::new()));
-                Ok(())
-            }
-            "delve" | "go" => {
-                self.adapter = Some(Box::new(GoAdapter::new()));
-                Ok(())
-            }
-            _ => Err(format!("Unknown adapter type: {}", adapter_type)),
+            None => Err(format!("Unknown adapter type: {}", adapter_type)),
         }
     }
 
@@ -285,10 +281,6 @@ impl DapClient {
 
     pub fn get_session(&self) -> Option<&DebugSession> {
         self.session.as_ref()
-    }
-
-    pub fn get_session_mut(&mut self) -> Option<&mut DebugSession> {
-        self.session.as_mut()
     }
 
     pub fn clear_session(&mut self) {

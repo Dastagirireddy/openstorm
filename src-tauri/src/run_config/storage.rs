@@ -82,8 +82,4 @@ impl ConfigurationStorage {
         configs.retain(|c| c.id != config_id);
         self.save_configurations(&configs)
     }
-
-    pub fn config_file_path(&self) -> PathBuf {
-        self.config_file()
-    }
 }
