@@ -15,8 +15,7 @@ impl JsDebugAdapter {
 
     fn find_js_debug() -> Option<String> {
         // Check cache directory for js-debug
-        let home = dirs::home_dir()?;
-        let cache_dir = home.join(".openstorm").join("adapters");
+        let cache_dir = crate::config::get_paths().adapter_dir.clone();
         let debug_server = cache_dir.join("js-debug").join("src").join("dapDebugServer.js");
 
         if debug_server.exists() {
@@ -27,9 +26,10 @@ impl JsDebugAdapter {
     }
 
     fn kill_existing_debug_servers() {
-        // Use lsof to find processes listening on port 8123 (macOS syntax)
+        // Use lsof to find processes listening on js-debug port (macOS syntax)
+        let port = crate::config::get_ports().js_debug_port;
         let output = std::process::Command::new("lsof")
-            .args(["-ti", ":8123"])
+            .args(["-ti", &format!(":{}", port)])
             .output();
 
         if let Ok(output) = output {

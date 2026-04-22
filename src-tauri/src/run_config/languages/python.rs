@@ -157,8 +157,4 @@ impl LanguageDetector for PythonDetector {
 
         configs
     }
-
-    fn language(&self) -> Language {
-        Language::Python
-    }
 }

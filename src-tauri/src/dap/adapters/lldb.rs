@@ -16,26 +16,18 @@ impl LldbAdapter {
     }
 
     fn find_lldb_dap() -> Option<String> {
-        // Check common locations for lldb-dap
-        let paths = [
-            "lldb-dap",
-            "lldb",
-            "/usr/bin/lldb-dap",
-            "/usr/local/bin/lldb-dap",
-        ];
+        let config = crate::config::get_adapters();
+        let lldb_config = &config.lldb;
 
-        for path in &paths {
+        // Check search paths
+        for path in &lldb_config.search_paths {
             if Path::new(path).exists() {
                 return Some(path.to_string());
             }
         }
 
         // Check Xcode CommandLineTools path (macOS)
-        let xcode_paths = [
-            "/Library/Developer/CommandLineTools/usr/bin/lldb-dap",
-            "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb-dap",
-        ];
-        for path in &xcode_paths {
+        for path in &lldb_config.xcode_paths {
             if Path::new(path).exists() {
                 println!("[DAP] Found lldb-dap at Xcode path: {}", path);
                 return Some(path.to_string());
@@ -45,7 +37,7 @@ impl LldbAdapter {
         // Try to find via which/where
         #[cfg(unix)]
         {
-            if let Ok(output) = std::process::Command::new("which").arg("lldb-dap").output() {
+            if let Ok(output) = std::process::Command::new("which").arg(lldb_config.binary_name).output() {
                 if output.status.success() {
                     return String::from_utf8(output.stdout).ok().map(|s| s.trim().to_string());
                 }
@@ -65,8 +57,10 @@ impl DebugAdapter for LldbAdapter {
         let adapter_path = Self::find_lldb_dap()
             .ok_or("lldb-dap not found. Please install Xcode or lldb.")?;
 
-        println!("[DAP] Starting lldb-dap at: {} with args: --adapter", adapter_path);
-        self.connection.start_stdio_process(&adapter_path, &vec!["--adapter".to_string()])?;
+        let lldb_config = crate::config::get_adapters().lldb.clone();
+        println!("[DAP] Starting lldb-dap at: {} with args: {:?}", adapter_path, lldb_config.args);
+        let args: Vec<String> = lldb_config.args.iter().map(|s| s.to_string()).collect();
+        self.connection.start_stdio_process(&adapter_path, &args)?;
         Ok(())
     }
 

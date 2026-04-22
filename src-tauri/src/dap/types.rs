@@ -1,14 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-/// DAP Protocol Message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ProtocolMessage {
-    pub seq: u32,
-    #[serde(rename = "type")]
-    pub message_type: String,
-}
-
 /// DAP Request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Request {
@@ -33,39 +25,6 @@ pub struct Response {
     pub message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<serde_json::Value>,
-}
-
-/// DAP Event
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Event {
-    pub seq: u32,
-    #[serde(rename = "type")]
-    pub message_type: String,
-    pub event: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub body: Option<serde_json::Value>,
-}
-
-/// Initialize Request Arguments
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InitializeRequestArgs {
-    #[serde(rename = "clientID")]
-    pub client_id: Option<String>,
-    #[serde(rename = "clientName")]
-    pub client_name: Option<String>,
-    pub adapter_id: String,
-    pub lines_start_at_1: bool,
-    pub columns_start_at_1: bool,
-    #[serde(rename = "pathFormat")]
-    pub path_format: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_variable_type: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_variable_paging: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_run_in_terminal_request: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub supports_memory_references: Option<bool>,
 }
 
 /// Launch Request Arguments
@@ -125,37 +84,6 @@ pub struct SourceBreakpoint {
     pub log_message: Option<String>,
 }
 
-/// Stack Trace Arguments
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StackTraceArgs {
-    pub thread_id: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_frame: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub levels: Option<u32>,
-}
-
-/// Variables Arguments
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VariablesArgs {
-    pub variables_reference: i64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub filter: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start: Option<u32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub count: Option<u32>,
-}
-
-/// Evaluate Arguments
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EvaluateArgs {
-    pub expression: String,
-    pub frame_id: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-}
-
 /// Exception Breakpoint Filter
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExceptionBreakpointFilter {
@@ -167,13 +95,6 @@ pub struct ExceptionBreakpointFilter {
     pub default: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub condition: Option<bool>,
-}
-
-/// Exception Breakpoint
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ExceptionBreakpoint {
-    pub filter_id: String,
-    pub condition: Option<String>,
 }
 
 /// Thread State
@@ -294,7 +215,6 @@ pub struct Capabilities {
 #[derive(Debug, Clone, PartialEq)]
 pub enum DebugSessionState {
     Initializing,
-    Initialized,
     Running,
     Stopped(StoppedReason),
     Terminated,

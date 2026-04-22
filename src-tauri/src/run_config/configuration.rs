@@ -15,29 +15,6 @@ pub enum Language {
 }
 
 impl Language {
-    pub fn from_file_extension(ext: &str) -> Option<Self> {
-        match ext.to_lowercase().as_str() {
-            "rs" => Some(Language::Rust),
-            "js" | "mjs" | "cjs" => Some(Language::JavaScript),
-            "ts" | "tsx" | "mts" | "cts" => Some(Language::TypeScript),
-            "py" | "pyw" => Some(Language::Python),
-            "go" => Some(Language::Go),
-            "c" | "cpp" | "cc" | "cxx" | "h" | "hpp" => Some(Language::Cpp),
-            _ => None,
-        }
-    }
-
-    pub fn project_markers(&self) -> &'static [&'static str] {
-        match self {
-            Language::Rust => &["Cargo.toml"],
-            Language::JavaScript | Language::TypeScript => &["package.json"],
-            Language::Python => &["pyproject.toml", "setup.py", "requirements.txt"],
-            Language::Go => &["go.mod", "go.sum"],
-            Language::Cpp => &["CMakeLists.txt", "Makefile", "configure"],
-            Language::Unknown => &[],
-        }
-    }
-
     pub fn from_project_file(file_name: &str) -> Option<Self> {
         match file_name {
             "Cargo.toml" => Some(Language::Rust),
@@ -80,6 +57,7 @@ pub struct RunConfiguration {
 }
 
 impl RunConfiguration {
+    #[allow(dead_code)]
     pub fn new(id: String, name: String, language: Language, command: String) -> Self {
         Self {
             id,

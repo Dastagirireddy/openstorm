@@ -1,6 +1,6 @@
 use crate::run_config::configuration::{Language, RunConfiguration};
 use crate::run_config::languages::get_detector_for_language;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub struct RunConfigurationDetector {
     workspace_root: PathBuf,
@@ -43,21 +43,5 @@ impl RunConfigurationDetector {
         all_configs.retain(|c| seen.insert(c.name.clone()));
 
         all_configs
-    }
-
-    pub fn detect_for_language(&self, language: &Language) -> Vec<RunConfiguration> {
-        let detector = get_detector_for_language(language);
-        detector.detect(&self.workspace_root)
-    }
-
-    pub fn detect_from_file(&self, file_path: &Path) -> Option<RunConfiguration> {
-        let language = crate::run_config::languages::detect_language_from_path(file_path)?;
-        let detector = get_detector_for_language(&language);
-        let configs = detector.detect(&self.workspace_root);
-        configs.into_iter().next()
-    }
-
-    pub fn workspace_root(&self) -> &Path {
-        &self.workspace_root
     }
 }

@@ -14,6 +14,7 @@ impl CppDetector {
         workspace_root.join("Makefile").exists()
     }
 
+    #[allow(dead_code)]
     fn has_configure(workspace_root: &Path) -> bool {
         workspace_root.join("configure").exists()
     }
@@ -129,9 +130,5 @@ impl LanguageDetector for CppDetector {
         }
 
         configs
-    }
-
-    fn language(&self) -> Language {
-        Language::Cpp
     }
 }

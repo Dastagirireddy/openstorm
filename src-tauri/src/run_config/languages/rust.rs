@@ -148,8 +148,4 @@ impl LanguageDetector for RustDetector {
 
         configs
     }
-
-    fn language(&self) -> Language {
-        Language::Rust
-    }
 }

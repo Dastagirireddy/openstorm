@@ -221,49 +221,9 @@ impl ProcessManager {
         }
     }
 
-    pub async fn terminate_all(&self) -> Result<(), String> {
-        let process_ids: Vec<ProcessId> = {
-            let processes = self.processes.read().await;
-            processes.keys().copied().collect()
-        };
-
-        for id in process_ids {
-            let _ = self.terminate(id).await;
-        }
-
-        Ok(())
-    }
-
-    pub async fn is_running(&self, process_id: ProcessId) -> bool {
-        let processes = self.processes.read().await;
-        processes.contains_key(&process_id)
-    }
-
-    pub async fn get_process_info(&self, process_id: ProcessId) -> Option<ProcessInfo> {
-        let process_info = self.process_info.read().await;
-        process_info.get(&process_id).cloned()
-    }
-
     pub async fn list_processes(&self) -> Vec<ProcessInfo> {
         let process_info = self.process_info.read().await;
         process_info.values().cloned().collect()
-    }
-
-    pub async fn send_input(&self, process_id: ProcessId, input: &str) -> Result<(), String> {
-        let mut processes = self.processes.write().await;
-
-        if let Some(child) = processes.get_mut(&process_id) {
-            if let Some(stdin) = &mut child.stdin {
-                use tokio::io::AsyncWriteExt;
-                stdin.write_all(input.as_bytes()).await
-                    .map_err(|e| format!("Failed to write to stdin: {}", e))?;
-                Ok(())
-            } else {
-                Err("Process has no stdin".to_string())
-            }
-        } else {
-            Err(format!("Process {} not found", process_id))
-        }
     }
 }
 

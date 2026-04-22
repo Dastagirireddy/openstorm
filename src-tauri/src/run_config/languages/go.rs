@@ -112,8 +112,4 @@ impl LanguageDetector for GoDetector {
 
         configs
     }
-
-    fn language(&self) -> Language {
-        Language::Go
-    }
 }

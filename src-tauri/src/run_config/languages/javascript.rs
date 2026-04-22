@@ -191,8 +191,4 @@ impl LanguageDetector for JavaScriptDetector {
 
         configs
     }
-
-    fn language(&self) -> Language {
-        Language::JavaScript
-    }
 }
