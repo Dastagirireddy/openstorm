@@ -2,6 +2,7 @@ import { html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { TailwindElement } from '../../tailwind-element.js';
+import { dispatch, dispatchFrom } from '../../lib/events.js';
 import type { FileNode } from '../../lib/file-types.js';
 import type { FileTemplate } from '../file-type-picker.js';
 import type { ContextMenuItem } from '../context-menu.js';
@@ -147,13 +148,7 @@ export class ProjectExplorer extends TailwindElement() {
         break;
       case 'open':
         if (!node.is_dir) {
-          this.dispatchEvent(
-            new CustomEvent('file-selected', {
-              detail: { path: node.path, name: node.name },
-              bubbles: true,
-              composed: true,
-            }),
-          );
+          dispatchFrom(this, 'file-selected', { path: node.path, name: node.name });
         }
         break;
       case 'rename':
@@ -202,13 +197,7 @@ export class ProjectExplorer extends TailwindElement() {
 
       this.showCreateDialog = false;
 
-      this.dispatchEvent(
-        new CustomEvent("file-created", {
-          detail: { path: fullPath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("file-created", { path: fullPath });
     } catch (error) {
       console.error(`Failed to create file:`, error);
     }
@@ -244,13 +233,7 @@ export class ProjectExplorer extends TailwindElement() {
 
       this.showFolderDialog = false;
 
-      this.dispatchEvent(
-        new CustomEvent("folder-created", {
-          detail: { path: fullPath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("folder-created", { path: fullPath });
     } catch (error) {
       console.error(`Failed to create folder:`, error);
     }
@@ -278,13 +261,7 @@ export class ProjectExplorer extends TailwindElement() {
     this.showRenameDialog = false;
     this.renameNode = null;
 
-    this.dispatchEvent(
-      new CustomEvent("file-renamed", {
-        detail: { oldPath, newPath },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dispatch("file-renamed", { oldPath, newPath });
   };
 
   private handleRenameCancel = (): void => {
@@ -314,13 +291,7 @@ export class ProjectExplorer extends TailwindElement() {
     this.showDeleteDialog = false;
     this.deleteNode = null;
 
-    this.dispatchEvent(
-      new CustomEvent("file-deleted", {
-        detail: { path },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dispatch("file-deleted", { path });
   };
 
   private handleDeleteCancel = (): void => {
@@ -778,11 +749,7 @@ export class ProjectExplorer extends TailwindElement() {
   private selectFile(node: FileNode): void {
     this.selectedPath = node.path;
     if (!node.is_dir) {
-      this.dispatchEvent(new CustomEvent('file-selected', {
-        detail: { path: node.path, name: node.name },
-        bubbles: true,
-        composed: true,
-      }));
+      dispatchFrom(this, 'file-selected', { path: node.path, name: node.name });
     }
     this.requestUpdate();
   }

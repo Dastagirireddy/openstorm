@@ -1,80 +1,84 @@
 /**
  * File icon color mappings by extension
  * Centralized source for consistent file icon colors across components
+ *
+ * Colors are now defined as CSS variable names for theme support.
+ * Use getCssVariable() to retrieve actual color values at runtime.
  */
 export const FILE_ICON_COLORS: Record<string, string> = {
   // Rust
-  rs: '#dea584',
+  rs: 'var(--file-rs)',
   // Go
-  go: '#00add8',
+  go: 'var(--file-go)',
   // TypeScript/JavaScript
-  ts: '#3178c6',
-  tsx: '#3178c6',
-  js: '#f7df1e',
-  jsx: '#f7df1e',
-  mjs: '#f7df1e',
-  cjs: '#f7df1e',
-  json: '#f7df1e',
+  ts: 'var(--file-ts)',
+  tsx: 'var(--file-tsx)',
+  js: 'var(--file-js)',
+  jsx: 'var(--file-jsx)',
+  mjs: 'var(--file-js)',
+  cjs: 'var(--file-js)',
+  json: 'var(--file-json)',
   // YAML/TOML
-  yaml: '#cb171e',
-  yml: '#cb171e',
-  toml: '#9c4221',
+  yaml: 'var(--file-yaml)',
+  yml: 'var(--file-yaml)',
+  toml: 'var(--file-toml)',
   // Styles
-  css: '#42a5f5',
-  scss: '#c6538c',
-  sass: '#c6538c',
-  less: '#1d365d',
+  css: 'var(--file-css)',
+  scss: 'var(--file-scss)',
+  sass: 'var(--file-scss)',
+  less: 'var(--file-less)',
   // Web
-  html: '#e34c26',
-  htm: '#e34c26',
-  xml: '#f1662a',
-  sql: '#4479a1',
+  html: 'var(--file-html)',
+  htm: 'var(--file-html)',
+  xml: 'var(--file-xml)',
+  sql: 'var(--file-sql)',
   // Python
-  py: '#3776ab',
-  ipynb: '#3776ab',
+  py: 'var(--file-py)',
+  ipynb: 'var(--file-py)',
   // JVM
-  java: '#f89820',
-  kt: '#7f52ff',
-  kts: '#7f52ff',
-  scala: '#dc322f',
-  swift: '#f05138',
+  java: 'var(--file-java)',
+  kt: 'var(--file-kt)',
+  kts: 'var(--file-kt)',
+  scala: 'var(--file-scss)',
+  swift: 'var(--file-swift)',
   // C/C++
-  c: '#519aba',
-  cpp: '#519aba',
-  cc: '#519aba',
-  cxx: '#519aba',
-  h: '#519aba',
-  hpp: '#519aba',
-  hxx: '#519aba',
+  c: 'var(--file-c)',
+  cpp: 'var(--file-cpp)',
+  cc: 'var(--file-cpp)',
+  cxx: 'var(--file-cpp)',
+  h: 'var(--file-cpp)',
+  hpp: 'var(--file-cpp)',
+  hxx: 'var(--file-cpp)',
   // Other languages
-  cs: '#239120',
-  php: '#777bb4',
-  rb: '#cc342d',
-  erb: '#cc342d',
-  sh: '#4eaa25',
-  bash: '#4eaa25',
-  zsh: '#4eaa25',
+  cs: 'var(--file-cs)',
+  php: 'var(--file-php)',
+  rb: 'var(--file-rb)',
+  erb: 'var(--file-rb)',
+  sh: 'var(--file-sh)',
+  bash: 'var(--file-sh)',
+  zsh: 'var(--file-sh)',
   // Docs
-  md: '#519aba',
-  markdown: '#519aba',
-  txt: '#5a5a5a',
-  log: '#5a5a5a',
+  md: 'var(--file-md)',
+  markdown: 'var(--file-md)',
+  txt: 'var(--file-txt)',
+  log: 'var(--file-txt)',
   // Config
-  env: '#5a5a5a',
-  gitignore: '#f44d27',
-  gitattributes: '#f44d27',
-  dockerfile: '#2496ed',
-  makefile: '#5a5a5a',
-  cmake: '#5a5a5a',
-  lock: '#f7df1e',
+  env: 'var(--file-txt)',
+  gitignore: 'var(--file-gitignore)',
+  gitattributes: 'var(--file-gitignore)',
+  dockerfile: 'var(--file-dockerfile)',
+  makefile: 'var(--file-txt)',
+  cmake: 'var(--file-txt)',
+  lock: 'var(--file-json)',
 };
 
 /**
  * Get color for a file extension
+ * Returns CSS variable reference for theme support
  */
 export function getFileIconColor(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
-  return (ext && FILE_ICON_COLORS[ext]) || '#5a5a5a';
+  return (ext && FILE_ICON_COLORS[ext]) || 'var(--file-txt)';
 }
 
 /**

@@ -1,0 +1,96 @@
+/**
+ * Editor Extensions - Core extension stack for IntelliJ look and feel
+ *
+ * Provides the common extension configuration used by CodeMirror 6
+ */
+
+import { EditorState } from '@codemirror/state';
+import { syntaxHighlighting, indentUnit, bracketMatching, indentOnInput } from '@codemirror/language';
+import {
+  lineNumbers,
+  highlightActiveLineGutter,
+  EditorView,
+  keymap,
+  highlightActiveLine,
+  drawSelection,
+  dropCursor,
+} from '@codemirror/view';
+import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
+import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
+import { intellijLightHighlight } from './editor-syntax.js';
+import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
+
+/**
+ * Generates the core extension stack for IntelliJ look and feel
+ * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
+ * @param onBreakpointClick - Callback for breakpoint clicks
+ */
+export function getCommonExtensions(
+  indentUnitStr: string = "    ",
+  onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void
+) {
+  return [
+    EditorState.tabSize.of(4),
+    indentUnit.of(indentUnitStr),
+    inlineValueField,
+    inlineValueDecorations(),
+    breakpointField,
+    breakpointGutter(onBreakpointClick ?? (() => {})),
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    ...customFoldGutter(),
+    ...debugLineHighlight(),
+    history(),
+    drawSelection(),
+    dropCursor(),
+    highlightActiveLine(),
+    bracketMatching(),
+    indentOnInput(),
+    // indentationMarkers with "fullScope" tracks both tabs and spaces
+    indentationMarkers({
+      highlightActiveBlock: true,
+      markerType: "fullScope",
+      thickness: 1,
+      activeThickness: 1,
+      colors: {
+        light: '#d0d0d0',
+        dark: '#505050',
+        activeLight: '#b0b0b0',
+        activeDark: '#707070',
+      },
+    }),
+    syntaxHighlighting(intellijLightHighlight),
+    // Keymap order matters - historyKeymap must come before defaultKeymap
+    // so undo/redo takes precedence
+    // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z
+    keymap.of([
+      {
+        key: 'Mod-z',
+        run: (view) => {
+          console.log('[Editor] Undo key pressed (Mod-z)');
+          return undo(view);
+        },
+      },
+      {
+        key: 'Mod-y',
+        run: (view) => {
+          console.log('[Editor] Redo key pressed (Mod-y)');
+          return redo(view);
+        },
+      },
+      {
+        key: 'Mod-Shift-z',
+        run: (view) => {
+          console.log('[Editor] Redo key pressed (Mod-Shift-z)');
+          return redo(view);
+        },
+      },
+      ...historyKeymap,
+      ...defaultKeymap,
+    ]),
+  ];
+}
+
+// Re-export these for convenience
+export { inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';

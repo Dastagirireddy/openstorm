@@ -106,8 +106,10 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="group flex items-center gap-2 min-w-[120px] max-w-[200px] h-full px-3 cursor-pointer border-r-0 transition-colors shrink-0
-          ${isActive ? 'bg-white text-[#1a1a1a] border-t-2 border-t-indigo-500' : 'bg-[#f0f0f0] text-[#5a5a5a] hover:bg-[#e8e8e8] border-t-2 border-t-transparent'}"
+        class="group flex items-center gap-2 min-w-[120px] max-w-[200px] h-full px-3 cursor-pointer border-r-0 transition-colors shrink-0 border-t-2"
+        style="background-color: ${isActive ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${isActive ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${isActive ? 'var(--app-tab-active-border)' : 'transparent'};"
+        @mouseenter=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+        @mouseleave=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
         data-tab-id="${tab.id}"
         @click=${() => this.selectTab(tab.id)}
         @auxclick=${(e: MouseEvent) => {
@@ -120,15 +122,18 @@ export class TabBar extends TailwindElement() {
         ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate select-none">${tab.name}</span>
         ${tab.modified
-          ? html`<span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>`
+          ? html`<span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: var(--app-tab-active-border);"></span>`
           : html`
               <button
-                class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0 flex items-center justify-center hover:bg-[#d0d0d0]"
+                class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-all flex-shrink-0 flex items-center justify-center"
+                style="color: var(--app-disabled-foreground);"
+                @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-active)'; }}
+                @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                 @click=${(e: MouseEvent) => {
                   e.stopPropagation();
                   this.closeTab(tab.id);
                 }}>
-                <os-icon name="x" color="#5a5a5a" size="12"></os-icon>
+                <os-icon name="x" size="12"></os-icon>
               </button>
             `}
       </div>
@@ -140,14 +145,17 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors ${isActive ? 'bg-indigo-200 text-[#1a1a1a]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
+        class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors"
+        style="background-color: ${isActive ? 'var(--app-selection-background)' : 'transparent'}; color: var(--app-foreground);"
+        @mouseenter=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+        @mouseleave=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
         @click=${() => {
           this.selectTab(tab.id);
           this.showDropdown = false;
         }}>
         ${this.renderFileIcon(tab.path)}
         <span class="flex-1 text-[13px] truncate">${tab.name}</span>
-        ${tab.modified ? html`<span class="w-2 h-2 rounded-full bg-indigo-500 flex-shrink-0"></span>` : ''}
+        ${tab.modified ? html`<span class="w-2 h-2 rounded-full flex-shrink-0" style="background-color: var(--app-tab-active-border);"></span>` : ''}
       </div>
     `;
   }
@@ -157,14 +165,24 @@ export class TabBar extends TailwindElement() {
 
     return html`
       <div
-        class="flex flex-row overflow-x-auto overflow-y-hidden bg-[#f0f0f0] h-[35px]"
+        class="flex flex-row overflow-x-auto overflow-y-hidden h-[35px]"
+        style="background-color: var(--app-tab-inactive);"
         ${ref(this.tabsContainerRef)}>
         ${this.visibleTabs.map(tab => this.renderTab(tab))}
       </div>
 
       ${this.hiddenTabs.length > 0 ? html`
         <button
-          class="dropdown-btn flex items-center justify-center px-2 h-full bg-[#f0f0f0] border-l border-[#c7c7c7] cursor-pointer text-[#5a5a5a] hover:text-[#1a1a1a] hover:bg-[#e0e0e0] transition-colors shrink-0"
+          class="dropdown-btn flex items-center justify-center px-2 h-full border-l cursor-pointer transition-colors shrink-0"
+          style="background-color: var(--app-tab-inactive); border-left-color: var(--app-tab-border); color: var(--app-disabled-foreground);"
+          @mouseenter=${(e: Event) => {
+            (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)';
+            (e.target as HTMLElement).style.color = 'var(--app-foreground)';
+          }}
+          @mouseleave=${(e: Event) => {
+            (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)';
+            (e.target as HTMLElement).style.color = 'var(--app-disabled-foreground)';
+          }}
           @click=${(e: Event) => {
             e.preventDefault();
             e.stopPropagation();
