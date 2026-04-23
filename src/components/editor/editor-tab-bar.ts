@@ -194,7 +194,8 @@ export class TabBar extends TailwindElement() {
 
         ${this.showDropdown ? html`
           <div
-            class="dropdown-menu absolute top-[66px] right-2 bg-white border border-[#c7c7c7] rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.15)] max-h-[calc(100vh-80px)] overflow-y-auto z-[1000] min-w-[260px] py-1"
+            class="dropdown-menu absolute top-[66px] right-2 border rounded-md max-h-[calc(100vh-80px)] overflow-y-auto z-[1000] min-w-[260px] py-1"
+            style="background-color: var(--app-bg); border-color: var(--app-border); box-shadow: 0 4px 20px rgba(0,0,0,0.15);"
             ${ref(this.dropdownMenuRef)}>
             ${this.hiddenTabs.map(tab => this.renderDropdownItem(tab))}
           </div>

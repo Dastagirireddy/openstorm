@@ -233,10 +233,10 @@ export class WelcomeScreen extends TailwindElement() {
             <os-icon name="folder-input" size="96" color="#6366f1"></os-icon>
           </div>
           ${this.filterText
-            ? html`<p class="text-[15px] font-semibold text-[#374151]">No projects match "${this.filterText}"</p>`
+            ? html`<p class="text-[15px] font-semibold" style="color: var(--app-foreground);">No projects match "${this.filterText}"</p>`
             : html`
-                <p class="text-[15px] font-semibold text-[#374151] mb-1">No recent projects</p>
-                <p class="text-[13px] text-[#6b7280] max-w-[280px]">Open a folder to start coding and see your recent projects here</p>
+                <p class="text-[15px] font-semibold mb-1" style="color: var(--app-foreground);">No recent projects</p>
+                <p class="text-[13px] max-w-[280px]" style="color: var(--app-disabled-foreground);">Open a folder to start coding and see your recent projects here</p>
               `
           }
         </div>
@@ -258,24 +258,24 @@ export class WelcomeScreen extends TailwindElement() {
             >
               <!-- Project type icon -->
               <div
-                class="w-9 h-9 rounded-md bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white' : 'group-hover:bg-white'} transition-colors border border-[#e5e7eb] ${isSelected ? 'border-indigo-200' : 'group-hover:border-[#d1d5db]'}"
+                class="w-9 h-9 rounded-md bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white' : 'group-hover:bg-white'} transition-colors border ${isSelected ? 'border-indigo-200' : 'border-[#e5e7eb] group-hover:border-[#d1d5db]'}"
               >
                 <os-icon name="${iconConfig.name}" size="18" color="${iconConfig.color}"></os-icon>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <div class="text-[14px] font-medium truncate ${isSelected ? 'text-indigo-700' : 'text-[#111827] group-hover:text-indigo-600'} transition-colors" title="${project.path}">
+                  <div class="text-[14px] font-medium truncate ${isSelected ? 'text-indigo-700' : 'group-hover:text-indigo-600'} transition-colors" style="color: ${isSelected ? '#4f46e5' : 'var(--app-foreground)'};" title="${project.path}">
                     ${project.name}
                   </div>
                   ${this.renderGitStatus(project)}
                 </div>
                 <div class="flex items-center gap-2">
-                  <span class="text-[11px] text-[#6b7280] truncate" title="${project.path}">${project.path}</span>
-                  <span class="text-[10px] text-[#9ca3af] flex-shrink-0">${this.getRelativeTime(project.lastOpened)}</span>
+                  <span class="text-[11px] truncate" title="${project.path}" style="color: var(--app-disabled-foreground);">${project.path}</span>
+                  <span class="text-[10px] flex-shrink-0" style="color: var(--app-disabled-foreground);">${this.getRelativeTime(project.lastOpened)}</span>
                 </div>
               </div>
               <!-- External link icon on hover -->
-              <os-icon name="external-link" size="16" color="#9ca3af" class="opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0.5 hidden group-hover:block"></os-icon>
+              <os-icon name="external-link" size="16" style="color: var(--app-disabled-foreground);" class="opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-0.5 hidden group-hover:block"></os-icon>
             </div>
           `;
         })}
@@ -287,41 +287,42 @@ export class WelcomeScreen extends TailwindElement() {
     const filtered = this.getFilteredProjects();
 
     return html`
-      <div class="flex flex-col h-screen items-center justify-center bg-[#fafafa]">
+      <div class="flex flex-col h-screen items-center justify-center" style="background-color: var(--app-bg);">
         <div class="w-full max-w-[880px] px-8">
           <!-- Header: Logo + Title centered -->
           <div class="flex flex-col items-center mb-10">
             <os-brand-logo size="72"></os-brand-logo>
-            <h1 class="mt-4 text-[34px] font-bold tracking-tight text-[#374151]">
+            <h1 class="mt-4 text-[34px] font-bold tracking-tight" style="color: var(--app-foreground);">
               openstorm
             </h1>
-            <p class="mt-1.5 text-[13px] text-[#6b7280] font-medium">
+            <p class="mt-1.5 text-[13px] font-medium" style="color: var(--app-disabled-foreground);">
               An open-source IDE with premium features
             </p>
           </div>
 
           <!-- Main content: Two columns in a unified card -->
-          <div class="bg-white rounded-2xl shadow-sm border border-[#e5e7eb] overflow-hidden">
+          <div class="rounded-2xl shadow-sm border overflow-hidden" style="background-color: var(--app-bg); border-color: var(--app-border);">
             <div class="flex">
               <!-- Left: Recent Projects (60%) -->
-              <div class="flex-[1.5] p-6 border-r border-[#e5e7eb]">
+              <div class="flex-[1.5] p-6 border-r" style="border-color: var(--app-border);">
                 <div class="flex items-center justify-between mb-4">
-                  <h2 class="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wider">
+                  <h2 class="text-[11px] font-semibold uppercase tracking-wider" style="color: var(--app-disabled-foreground);">
                     Recent Projects
                   </h2>
                   ${this.filterText
-                    ? html`<span class="text-[11px] text-[#9ca3af]">${filtered.length} of ${this.recentProjects.length}</span>`
+                    ? html`<span class="text-[11px]" style="color: var(--app-disabled-foreground);">${filtered.length} of ${this.recentProjects.length}</span>`
                     : ''
                   }
                 </div>
 
                 <!-- Search/Filter box -->
                 <div class="relative mb-4">
-                  <os-icon name="list-filter" size="14" color="#9ca3af" class="absolute left-3 top-1/2 -translate-y-1/2"></os-icon>
+                  <os-icon name="list-filter" size="14" style="color: var(--app-disabled-foreground);" class="absolute left-3 top-1/2 -translate-y-1/2"></os-icon>
                   <input
                     id="project-filter"
                     type="text"
-                    class="w-full pl-9 pr-8 py-2 text-[13px] bg-[#f9fafb] border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent placeholder-[#9ca3af]"
+                    class="w-full pl-9 pr-8 py-2 text-[13px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
                     placeholder="Filter projects... (press / to focus)"
                     .value=${this.filterText}
                     @input=${(e: Event) => {
@@ -346,14 +347,17 @@ export class WelcomeScreen extends TailwindElement() {
                   ${this.filterText
                     ? html`
                       <button
-                        class="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-[#e5e7eb] rounded"
+                        class="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded"
+                        style="color: var(--app-disabled-foreground);"
+                        @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                        @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                         @click=${() => { this.filterText = ''; this.selectedIndex = -1; }}
                       >
-                        <os-icon name="x" size="12" color="#6b7280"></os-icon>
+                        <os-icon name="x" size="12"></os-icon>
                       </button>
                     `
                     : html`
-                      <kbd class="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] bg-white border border-[#e5e7eb] rounded text-[#9ca3af] font-mono">/</kbd>
+                      <kbd class="absolute right-2 top-1/2 -translate-y-1/2 px-1.5 py-0.5 text-[9px] border rounded font-mono" style="background-color: var(--app-bg); border-color: var(--app-border); color: var(--app-disabled-foreground);">/</kbd>
                     `
                   }
                 </div>
@@ -364,16 +368,16 @@ export class WelcomeScreen extends TailwindElement() {
                 </div>
 
                 <!-- Keyboard hints -->
-                <div class="mt-4 pt-3 border-t border-[#e5e7eb] flex items-center gap-3 text-[10px] text-[#9ca3af]">
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 bg-[#f9fafb] rounded border border-[#e5e7eb]">↑↓</kbd> Navigate</span>
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 bg-[#f9fafb] rounded border border-[#e5e7eb]">Enter</kbd> Open</span>
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 bg-[#f9fafb] rounded border border-[#e5e7eb]">/</kbd> Filter</span>
+                <div class="mt-4 pt-3 border-t flex items-center gap-3 text-[10px]" style="border-color: var(--app-border); color: var(--app-disabled-foreground);">
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">↑↓</kbd> Navigate</span>
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">Enter</kbd> Open</span>
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">/</kbd> Filter</span>
                 </div>
               </div>
 
               <!-- Right: Start Actions (40%) -->
-              <div class="flex-1 p-6 bg-[#fafafa]">
-                <h2 class="text-[11px] font-semibold text-[#6b7280] uppercase tracking-wider mb-4">
+              <div class="flex-1 p-6" style="background-color: var(--app-tab-inactive);">
+                <h2 class="text-[11px] font-semibold uppercase tracking-wider mb-4" style="color: var(--app-disabled-foreground);">
                   Start
                 </h2>
                 <div class="flex flex-col gap-2.5">
@@ -397,7 +401,8 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open Folder -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 bg-white rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border border-[#e5e7eb] hover:border-indigo-300 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border hover:border-indigo-300 hover:-translate-y-0.5"
+                    style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFolder}
                   >
                     <div
@@ -406,10 +411,10 @@ export class WelcomeScreen extends TailwindElement() {
                       <os-icon name="folder-open" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold text-[#111827] group-hover:text-indigo-600 transition-colors">
+                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 transition-colors" style="color: var(--app-foreground);">
                         Open Folder
                       </div>
-                      <div class="text-[12px] text-[#6b7280]">
+                      <div class="text-[12px]" style="color: var(--app-disabled-foreground);">
                         Open existing project
                       </div>
                     </div>
@@ -417,7 +422,8 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open File -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 bg-white rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border border-[#e5e7eb] hover:border-indigo-300 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border hover:border-indigo-300 hover:-translate-y-0.5"
+                    style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFile}
                   >
                     <div
@@ -426,10 +432,10 @@ export class WelcomeScreen extends TailwindElement() {
                       <os-icon name="file" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold text-[#111827] group-hover:text-indigo-600 transition-colors">
+                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 transition-colors" style="color: var(--app-foreground);">
                         Open File
                       </div>
-                      <div class="text-[12px] text-[#6b7280]">
+                      <div class="text-[12px]" style="color: var(--app-disabled-foreground);">
                         Open a single file
                       </div>
                     </div>
@@ -437,14 +443,14 @@ export class WelcomeScreen extends TailwindElement() {
                 </div>
 
                 <!-- Quick tips -->
-                <div class="mt-6 pt-4 border-t border-[#e5e7eb]">
-                  <div class="text-[11px] text-[#6b7280] space-y-1.5">
+                <div class="mt-6 pt-4 border-t" style="border-color: var(--app-border);">
+                  <div class="text-[11px] space-y-1.5" style="color: var(--app-disabled-foreground);">
                     <div class="flex items-center gap-2">
-                      <kbd class="px-1.5 py-0.5 bg-white rounded border border-[#e5e7eb] font-mono text-[10px]">Ctrl+P</kbd>
+                      <kbd class="px-1.5 py-0.5 rounded border font-mono text-[10px]" style="background-color: var(--app-bg); border-color: var(--app-border); color: var(--app-foreground);">Ctrl+P</kbd>
                       <span>Quick search</span>
                     </div>
                     <div class="flex items-center gap-2">
-                      <kbd class="px-1.5 py-0.5 bg-white rounded border border-[#e5e7eb] font-mono text-[10px]">Ctrl+${'`'}</kbd>
+                      <kbd class="px-1.5 py-0.5 rounded border font-mono text-[10px]" style="background-color: var(--app-bg); border-color: var(--app-border); color: var(--app-foreground);">Ctrl+${'`'}</kbd>
                       <span>Toggle terminal</span>
                     </div>
                   </div>

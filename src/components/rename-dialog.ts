@@ -137,7 +137,8 @@ export class RenameDialog extends TailwindElement() {
         @click=${this.handleCancel}
       >
         <div
-          class="bg-white rounded-lg shadow-2xl w-[400px] border border-[#d0d0d0] overflow-hidden"
+          class="rounded-lg shadow-2xl w-[400px] border overflow-hidden"
+          style="background-color: var(--app-bg); border-color: var(--app-border);"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
           @keydown=${this.handleKeydown}
@@ -145,10 +146,11 @@ export class RenameDialog extends TailwindElement() {
         >
           <!-- Content -->
           <div class="px-6 py-5">
-            <h3 class="text-[14px] font-semibold text-[#1a1a1a] mb-4">Rename</h3>
+            <h3 class="text-[14px] font-semibold mb-4" style="color: var(--app-foreground);">Rename</h3>
             <input
               type="text"
-              class="w-full px-3 py-2 border ${showError ? 'border-red-500' : 'border-[#d0d0d0]'} rounded-md text-[13px] focus:outline-none focus:ring-2 focus:ring-[#5b47c9] focus:border-transparent"
+              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:ring-2 focus:border-transparent"
+              style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
               value="${this.newName}"
               @input=${this.handleInput}
               @keydown=${this.handleKeydown}
@@ -157,8 +159,8 @@ export class RenameDialog extends TailwindElement() {
             ${showError ? html`
               <p class="mt-2 text-[12px] text-red-600">${this.error}</p>
             ` : fullName ? html`
-              <p class="mt-2 text-[12px] text-[#5a5a5a]">
-                Renaming to: <span class="font-mono text-[#1a1a1a]">${fullName}</span>
+              <p class="mt-2 text-[12px]" style="color: var(--app-disabled-foreground);">
+                Renaming to: <span class="font-mono" style="color: var(--app-foreground);">${fullName}</span>
               </p>
             ` : ''}
           </div>
@@ -166,7 +168,8 @@ export class RenameDialog extends TailwindElement() {
           <!-- Buttons -->
           <div class="px-6 py-4 flex justify-end gap-2">
             <button
-              class="px-4 py-1.5 text-[13px] text-[#5a5a5a] bg-white border border-[#d0d0d0] rounded-md hover:bg-[#f5f5f5] transition-colors"
+              class="px-4 py-1.5 text-[13px] border rounded-md transition-colors"
+              style="background-color: var(--app-bg); color: var(--app-disabled-foreground); border-color: var(--app-border);"
               @click=${this.handleCancel}
             >
               Cancel

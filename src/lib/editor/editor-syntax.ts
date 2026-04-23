@@ -28,7 +28,7 @@ import { getFileExtension } from '../file-icons.js';
 /**
  * Syntax highlighting style using CSS variables for theme support
  */
-export const intellijLightHighlight = HighlightStyle.define([
+export const openStormHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier], color: 'var(--app-keyword)', fontWeight: 'bold' },
   { tag: [t.definition(t.variableName), t.function(t.variableName)], color: 'var(--app-type)' },
   { tag: t.propertyName, color: 'var(--app-type)' },
@@ -44,7 +44,7 @@ export const intellijLightHighlight = HighlightStyle.define([
  * Get syntax highlighting extension
  */
 export function getSyntaxHighlighting(): Extension {
-  return syntaxHighlighting(intellijLightHighlight);
+  return syntaxHighlighting(openStormHighlight);
 }
 
 /**

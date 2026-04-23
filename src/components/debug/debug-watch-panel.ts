@@ -135,9 +135,10 @@ export class DebugWatchPanel extends TailwindElement() {
           </button>
         </div>
       </div>
-      <div class="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-200 bg-gray-50">
+      <div class="flex items-center gap-1.5 px-3 py-1.5 border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
         <input type="text"
-               class="flex-1 px-2 py-0.5 text-xs font-mono border border-gray-300 rounded bg-white outline-none focus:border-indigo-500"
+               class="flex-1 px-2 py-0.5 text-xs font-mono border rounded outline-none focus:border-indigo-500"
+               style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-border);"
                placeholder="Add expression..."
                @keydown=${this.handleWatchInputKeydown}
                id="watch-input"/>
@@ -148,25 +149,25 @@ export class DebugWatchPanel extends TailwindElement() {
       <div>
         ${this.watches.length === 0
           ? html`
-              <div class="flex flex-col items-center justify-center min-h-[60px] px-3 py-2 text-gray-500 text-xs font-sans">
+              <div class="flex flex-col items-center justify-center min-h-[60px] px-3 py-2 text-xs font-sans" style="color: var(--app-disabled-foreground);">
                 No watch expressions
               </div>
             `
           : this.watches.map((watch) => html`
-              <div class="flex items-start px-3 py-1 cursor-pointer font-mono text-xs border-b border-gray-100 hover:bg-gray-100 ${watch.error ? 'text-red-600' : ''}">
-                <span class="text-gray-900 mr-2 whitespace-nowrap">${watch.expression}</span>
-                <span class="text-gray-500 mr-2">:</span>
+              <div class="flex items-start px-3 py-1 cursor-pointer font-mono text-xs border-b hover:bg-gray-100 ${watch.error ? 'text-red-600' : ''}" style="border-color: var(--app-border);">
+                <span class="mr-2 whitespace-nowrap" style="color: var(--app-foreground);">${watch.expression}</span>
+                <span class="mr-2" style="color: var(--app-disabled-foreground);">:</span>
                 <span class="${this.getValueClass(watch.value || '', watch.type)} flex-1 min-w-0 break-all">
                   ${watch.error ? '⚠ ' : ''}${watch.value || '〈not available〉'}
                 </span>
-                ${watch.type ? html`<span class="text-gray-500 text-[10px] ml-2 whitespace-nowrap font-sans">${watch.type}</span>` : ''}
+                ${watch.type ? html`<span class="text-[10px] ml-2 whitespace-nowrap font-sans" style="color: var(--app-disabled-foreground);">${watch.type}</span>` : ''}
                 <div class="hidden items-center gap-0.5 ml-2 hover:flex">
-                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-115"
+                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                           @click=${() => this.copyToClipboard(watch.value || '', "Value copied")}
                           title="Copy value">
                     <iconify-icon icon="mdi:content-copy" width="12"></iconify-icon>
                   </button>
-                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-115"
+                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                           @click=${() => this.removeWatch(watch.id)}
                           title="Remove">
                     <iconify-icon icon="mdi:close" width="12"></iconify-icon>

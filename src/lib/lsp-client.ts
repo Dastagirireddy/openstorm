@@ -17,19 +17,14 @@ export interface CompletionItem {
 }
 
 export interface HoverInfo {
-  contents: string;
+  contents: string;      // Raw markdown (for debugging)
+  html: string;          // Pre-rendered HTML with Tailwind classes
   range?: {
     start_line: number;
     start_char: number;
     end_line: number;
     end_char: number;
   };
-  // Extended metadata for rich tooltips
-  signature?: string;
-  typeInfo?: string;
-  documentation?: string;
-  tags?: string[];  // e.g., ['built-in', 'dom', 'deprecated']
-  link?: { text: string; url: string };
 }
 
 export interface LocationInfo {
@@ -340,7 +335,7 @@ export function completionKindToType(kind: number): string {
 }
 
 /**
- * Format markdown-like content from LSP hover - IntelliJ style
+ * Format markdown-like content from LSP hover - Clean professional style
  */
 export function formatHoverContent(contents: string, options?: {
   signature?: string;
@@ -365,96 +360,84 @@ export function formatHoverContent(contents: string, options?: {
 
   // 2. Component Building
 
-  // Quick Actions Bar (The "Fix" links at the top)
-  const actionsHtml = `
-    <div class="intellij-actions">
-      <div class="action-item">
-        <span class="action-link">Explain & Fix</span>
-        <span class="action-shortcut">⌥⇧↵</span>
-      </div>
-      <div class="action-item">
-        <span class="action-link">More actions...</span>
-        <span class="action-shortcut">⌥↵</span>
-      </div>
-    </div>`;
-
   // Signature Section (High-contrast code block)
-  const formattedSignature = signature ? `<div class="tooltip-signature"><code>${formatSignature(signature)}</code></div>` : '';
+  const formattedSignature = signature ? `<div class="hover-signature"><code>${formatSignature(signature)}</code></div>` : '';
 
-  // Availability Bar
-  let availabilityHtml = '';
-  if (options?.availability === 'widely-available') {
-    availabilityHtml = `
-      <div class="availability-bar">
-        <span class="check-icon">✓</span>
-        <span class="avail-text">Widely available across major browsers</span>
-        <span class="chevron-icon">⌄</span>
-      </div>`;
-  }
+  // Type info badge
+  const typeBadge = options?.typeInfo ? `<span class="type-badge">${options.typeInfo}</span>` : '';
 
-  // Footer/Badges
+  // Tags badges
   const tags = options?.tags || [];
-  const hasTsBadge = tags.includes('built-in') || tags.includes('dom');
-  const footerHtml = `
-    <div class="tooltip-footer">
-      ${hasTsBadge ? '<span class="ts-badge">TS</span>' : ''}
-      <span class="footer-meta">${options?.typeInfo || 'built-in'}</span>
-      ${link ? `<a href="${link.url}" class="mdn-link">${link.text} ↗</a>` : ''}
-    </div>`;
+  const badgesHtml = tags.length > 0
+    ? `<div class="hover-badges">${tags.map(tag => `<span class="tag-badge">${tag}</span>`).join('')}</div>`
+    : '';
+
+  // Link
+  const linkHtml = link ? `<a href="${link.url}" class="docs-link" target="_blank" rel="noopener">${link.text} <span class="link-arrow">↗</span></a>` : '';
 
   // 3. Final Assembly
-  const sigForErrorMsg = signature.split('(')[0].split(' ').pop() || 'symbol';
   return `
-    <div class="intellij-tooltip">
-      <div class="tooltip-top-header">
-        <span class="error-msg">Definition found for ${sigForErrorMsg}</span>
-        <span class="menu-icon">⋮</span>
-      </div>
-      ${actionsHtml}
-      <hr class="intellij-divider" />
+    <div class="hover-content">
       ${formattedSignature}
-      <hr class="intellij-divider" />
-      ${availabilityHtml}
-      <div class="tooltip-body">
+      <div class="hover-body">
         ${formatDescription(description)}
       </div>
-      ${footerHtml}
+      ${(typeBadge || badgesHtml || linkHtml) ? `
+        <div class="hover-footer">
+          ${typeBadge}
+          ${badgesHtml}
+          ${linkHtml}
+        </div>
+      ` : ''}
     </div>`;
 }
 
 /**
- * Format description text with proper syntax highlighting
+ * Format description text using marked markdown parser with custom renderer
  */
 function formatDescription(text: string): string {
   if (!text) return '';
 
-  // Process code blocks first
-  let html = text
-    .replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
-      const highlighted = highlightCode(code, lang);
-      return `<pre class="code-block"><code>${highlighted}</code></pre>`;
-    })
-    // Inline code with pills
-    .replace(/`([^`]+)`/g, '<code class="code-pill">$1</code>')
-    // Bold/italic
-    .replace(/\*\*([^*]+)\*\*/g, '<strong class="highlight">$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    // Links with labels
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="inline-link">$1<span>↗</span></a>')
-    // List items
-    .replace(/^- (.*)$/gm, '<li>$1</li>');
+  // Configure marked with custom renderer for syntax highlighting
+  const renderer = new marked.Renderer();
 
-  // Wrap lists
-  html = html.replace(/(<li>.*<\/li>)/g, '<ul class="styled-list">$1</ul>');
+  // Override code block rendering with syntax highlighting
+  renderer.code = (code: string, language?: string) => {
+    const highlighted = highlightCode(code, language || '');
+    return `<pre class="code-block"><code>${highlighted}</code></pre>`;
+  };
 
-  // Paragraphs
-  html = html
-    .replace(/\n\n+/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+  // Override inline code rendering
+  renderer.codespan = (code: string) => {
+    return `<code class="code-pill">${code}</code>`;
+  };
 
-  if (html && !html.startsWith('<p>')) {
-    html = `<p>${html}</p>`;
-  }
+  // Override link rendering
+  renderer.link = (href: string, title: string, text: string) => {
+    return `<a href="${href}" class="inline-link" target="_blank" rel="noopener">${text}</a>`;
+  };
+
+  // Override list rendering
+  renderer.list = (body: string, ordered: boolean) => {
+    return `<ul class="styled-list">${body}</ul>`;
+  };
+
+  // Override list item rendering
+  renderer.listitem = (text: string) => {
+    return `<li class="list-item">${text}</li>`;
+  };
+
+  // Configure marked
+  marked.setOptions({
+    renderer,
+    breaks: true,        // Convert \n to <br>
+    gfm: true,           // GitHub Flavored Markdown
+    headerIds: false,    // Don't add IDs to headers
+    mangle: false,       // Don't mangle email links
+  });
+
+  // Parse markdown to HTML
+  const html = marked.parse(text, { async: false }) as string;
 
   return html;
 }
@@ -484,25 +467,46 @@ function formatParamsSection(params: string): string {
 }
 
 /**
- * Apply syntax highlighting to code blocks
+ * Apply syntax highlighting to code blocks - matches editor theme colors
  */
 function highlightCode(code: string, lang: string): string {
   // Escape HTML
   code = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-  // Simple highlighting rules
-  code = code
-    .replace(/\b(const|let|var|function|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|try|catch|throw|switch|case|break|continue|default|yield|await|static|public|private|protected|readonly|abstract|declare|module|namespace|export|require|typeof|keyof|infer|extract|exclude|partial|readonly|record|pick|omit|nonnullable|non-nullable)\b/g, '<span class="kw">$1</span>')
-    .replace(/\b(string|number|boolean|any|never|unknown|void|null|undefined|true|false|Object|Array|Promise|Map|Set|WeakMap|WeakSet|Symbol|BigInt|Date|RegExp|Error|JSON|Math|Console|Function|Generator|Iterator|Observable|Subject)\b/g, '<span class="type">$1</span>')
-    .replace(/(['"`])(.*?)\1/g, '<span class="string">$1$2$1</span>')
-    .replace(/(\/\/.*$)/gm, '<span class="comment">$1</span>');
+  // Keywords - use var(--app-keyword) color
+  code = code.replace(/\b(const|let|var|function|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|try|catch|throw|switch|case|break|continue|default|yield|static|public|private|protected|readonly|abstract|declare|module|namespace|require|keyof|infer|extract|exclude|partial|record|pick|omit|nonnullable|non-nullable|match|fn|impl|struct|trait|use|mod|pub|crate|self|Self|Self|mut|ref|dyn|where|for|in|as|box|continue|loop|unsafe|macro_rules)\b/g, '<span class="hl-kw">$1</span>');
+
+  // Types - use var(--app-type) color
+  code = code.replace(/\b(string|number|boolean|any|never|unknown|Object|Array|Promise|Map|Set|WeakMap|WeakSet|Symbol|BigInt|Date|RegExp|Error|JSON|Math|Console|Function|Generator|Iterator|Observable|Subject|String|Number|Boolean|Symbol|BigInt64Array|BigUint64Array|Float32Array|Float64Array|Int8Array|Uint8Array|Uint8ClampedArray|Int16Array|Uint16Array|Int32Array|Uint32Array|Option|Result|Vec|HashMap|HashSet|BTreeMap|BTreeSet|LinkedList| Rc|Arc|Box|Cell|Ref|RefCell|RefMut|Mutex|MutexGuard|RwLock|RwLockReadGuard|RwLockWriteGuard|Pin|NonNull|Unique|Lazy|Once|Cow|Path|PathBuf|OsStr|OsString|CString|CStr)\b/g, '<span class="hl-type">$1</span>');
+
+  // Capitalized custom types (PascalCase classes, interfaces, etc.)
+  code = code.replace(/\b([A-Z][a-zA-Z0-9_]*)\b/g, '<span class="hl-type">$1</span>');
+
+  // Strings - use var(--app-string) color
+  code = code.replace(/(['"`])(.*?)\1/g, '<span class="hl-str">$1$2$1</span>');
+
+  // Numbers - use var(--app-number) color
+  code = code.replace(/\b(\d+\.?\d*(?:f32|f64|i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize)?)\b/g, '<span class="hl-num">$1</span>');
+
+  // Booleans - use var(--app-boolean) color
+  code = code.replace(/\b(true|false|Some|None|Ok|Err)\b/g, '<span class="hl-bool">$1</span>');
+
+  // Comments - use a muted color
+  code = code.replace(/(\/\/.*$)/gm, '<span class="hl-comment">$1</span>');
+  code = code.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="hl-comment">$1</span>');
+
+  // Function calls - slightly emphasized
+  code = code.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\(/g, '<span class="hl-fn">$1</span>(');
+
+  // Properties after dot
+  code = code.replace(/\.([a-zA-Z_][a-zA-Z0-9_]*)/g, '.<span class="hl-prop">$1</span>');
 
   return code;
 }
 
 /**
- * Format signature with simple syntax highlighting
- * Handles patterns like: "var console: Console", "function foo(): void", etc.
+ * Format signature with syntax highlighting matching editor theme
+ * Handles patterns like: "var console: Console", "function foo(): void", "fn println!(...)"
  */
 function formatSignature(signature: string): string {
   if (!signature) return '';
@@ -513,15 +517,25 @@ function formatSignature(signature: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-  // Highlight keywords (var, let, const, function, async, etc.)
-  signature = signature.replace(/\b(var|let|const|function|async|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false)\b/g, '<span class="keyword">$1</span>');
+  // Highlight keywords
+  signature = signature.replace(/\b(fn|function|const|let|var|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|pub|crate|self|mut|ref|dyn|where|trait|impl|struct|use|mod)\b/g, '<span class="hl-kw">$1</span>');
 
-  // Highlight types (capitalized words after : or implements/extends)
-  signature = signature.replace(/: ([A-Z][a-zA-Z0-9_]*)/g, ': <span class="type">$1</span>');
-  signature = signature.replace(/(extends|implements) ([A-Z][a-zA-Z0-9_]*)/g, '$1 <span class="type">$2</span>');
+  // Highlight types (capitalized words, or after : or <)
+  signature = signature.replace(/: ([A-Z][a-zA-Z0-9_<>\[\], ]*)/g, ': <span class="hl-type">$1</span>');
+  signature = signature.replace(/<([A-Z][a-zA-Z0-9_<>\[\], ]*)>/g, '&lt;<span class="hl-type">$1</span>&gt;');
+  signature = signature.replace(/(extends|implements|:) ([A-Z][a-zA-Z0-9_]*)/g, '$1 <span class="hl-type">$2</span>');
 
-  // Highlight function names (word followed by parenthesis)
-  signature = signature.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\(/g, '<span class="variable">$1</span>(');
+  // Highlight function names (word followed by parenthesis or !)
+  signature = signature.replace(/([a-zA-Z_][a-zA-Z0-9_]*)(\(|!)/g, '<span class="hl-fn">$1</span>$2');
+
+  // Highlight string literals
+  signature = signature.replace(/(["'])(.*?)\1/g, '<span class="hl-str">$1$2$1</span>');
+
+  // Highlight numbers
+  signature = signature.replace(/\b(\d+)\b/g, '<span class="hl-num">$1</span>');
+
+  // Highlight self/Self
+  signature = signature.replace(/\b(self|Self)\b/g, '<span class="hl-prop">$1</span>');
 
   return signature;
 }

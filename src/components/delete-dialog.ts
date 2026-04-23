@@ -64,7 +64,8 @@ export class DeleteDialog extends TailwindElement() {
         @click=${this.handleCancel}
       >
         <div
-          class="bg-white rounded-lg shadow-2xl w-[420px] border border-[#d0d0d0] overflow-hidden"
+          class="rounded-lg shadow-2xl w-[420px] border overflow-hidden"
+          style="background-color: var(--app-bg); border-color: var(--app-border);"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
           @keydown=${this.handleKeydown}
@@ -74,19 +75,19 @@ export class DeleteDialog extends TailwindElement() {
           <div class="px-6 py-5">
             <div class="flex items-start gap-4">
               <!-- Warning icon in red circle -->
-              <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
-                <svg class="w-5 h-5 text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style="background-color: rgba(239, 68, 68, 0.1);">
+                <svg class="w-5 h-5" style="color: #ef4444;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                   <line x1="12" y1="9" x2="12" y2="13"/>
                   <circle cx="12" cy="17" r="1" fill="currentColor"/>
                 </svg>
               </div>
               <div class="flex-1 min-w-0">
-                <h3 class="text-[14px] font-semibold text-[#1a1a1a] mb-1">${title}</h3>
-                <p class="text-[13px] text-[#5a5a5a] leading-relaxed">
+                <h3 class="text-[14px] font-semibold mb-1" style="color: var(--app-foreground);">${title}</h3>
+                <p class="text-[13px] leading-relaxed" style="color: var(--app-disabled-foreground);">
                   ${this.isDirectory
-                    ? html`Are you sure you want to delete the folder <strong class="font-semibold text-[#1a1a1a]">${this.fileName}</strong> and all its contents? This action cannot be undone.`
-                    : html`Are you sure you want to delete <strong class="font-semibold text-[#1a1a1a]">${this.fileName}</strong>? This action cannot be undone.`
+                    ? html`Are you sure you want to delete the folder <strong class="font-semibold" style="color: var(--app-foreground);">${this.fileName}</strong> and all its contents? This action cannot be undone.`
+                    : html`Are you sure you want to delete <strong class="font-semibold" style="color: var(--app-foreground);">${this.fileName}</strong>? This action cannot be undone.`
                   }
                 </p>
                 ${this.error ? html`
@@ -99,7 +100,8 @@ export class DeleteDialog extends TailwindElement() {
           <!-- Buttons - right aligned, no background -->
           <div class="px-6 py-4 flex justify-end gap-2">
             <button
-              class="px-4 py-1.5 text-[13px] text-[#5a5a5a] bg-white border border-[#d0d0d0] rounded-md hover:bg-[#f5f5f5] transition-colors"
+              class="px-4 py-1.5 text-[13px] border rounded-md transition-colors"
+              style="background-color: var(--app-bg); color: var(--app-disabled-foreground); border-color: var(--app-border);"
               @click=${this.handleCancel}
               ?disabled=${this.isDeleting}
             >

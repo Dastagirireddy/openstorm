@@ -1,7 +1,6 @@
 /**
  * Editor Theme - CodeMirror theme configuration
  *
- * Provides IntelliJ-style theme for CodeMirror 6
  * Uses CSS variables for dynamic theme support
  */
 
@@ -16,7 +15,7 @@ export function getEditorTheme(): Extension {
     '&': {
       height: '100%',
       fontSize: '15px',
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
       backgroundColor: 'var(--editor-background)',
       direction: 'ltr !important',
     },
@@ -31,11 +30,19 @@ export function getEditorTheme(): Extension {
       cursor: 'text',
     },
     '.cm-gutters': {
-      backgroundColor: 'var(--editor-gutter-background)',
-      color: 'var(--editor-line-numbers)',
+      backgroundColor: 'var(--editor-gutter-background) !important',
+      color: 'var(--editor-line-numbers) !important',
       borderRight: '1px solid var(--editor-gutter-border)',
       border: 'none',
       direction: 'ltr !important',
+    },
+    '.cm-gutter': {
+      backgroundColor: 'var(--editor-gutter-background) !important',
+      color: 'var(--editor-line-numbers) !important',
+    },
+    '.cm-gutterElement': {
+      backgroundColor: 'var(--editor-gutter-background) !important',
+      color: 'var(--editor-line-numbers) !important',
     },
     '.cm-breakpoint-gutter': {
       pointerEvents: 'auto',
@@ -63,7 +70,7 @@ export function getEditorTheme(): Extension {
     },
     // Debug hover tooltip styling
     '.debug-hover-tooltip': {
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
       fontSize: '12px',
       maxWidth: '400px',
       minWidth: '200px',
@@ -83,19 +90,224 @@ export function getEditorTheme(): Extension {
       color: 'var(--app-string)',
     },
     // LSP hover tooltip styling
-    '.cm-lsp-hover': {
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-      fontSize: '12px',
-      maxWidth: '500px',
-      padding: '8px 12px',
-      background: 'var(--app-bg)',
+    '.cm-tooltip': {
+      padding: '0',
       border: '1px solid var(--app-input-border)',
+      background: 'var(--app-bg)',
       borderRadius: '6px',
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06)',
+      overflow: 'hidden',
+      zIndex: '1000',
     },
-    '.cm-lsp-hover .hover-content': {
-      whiteSpace: 'pre-wrap',
+    '.cm-tooltip-lsp': {
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+      fontSize: '11px',
+      lineHeight: '1.5',
+      color: 'var(--app-foreground)',
+      maxWidth: 'min(450px, 80vw)',
+      maxHeight: 'min(280px, 60vh)',
+      overflow: 'auto',
+    },
+    '.cm-tooltip-lsp .hover-content': {
+      padding: '0',
+      whiteSpace: 'normal',
       wordBreak: 'break-word',
+      overflowWrap: 'break-word',
+    },
+    // Hover signature - code block at top
+    '.cm-tooltip-lsp .hover-signature': {
+      padding: '6px 10px',
+      background: 'var(--app-toolbar-hover)',
+      borderBottom: '1px solid var(--app-input-border)',
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+      fontSize: '11px',
+    },
+    '.cm-tooltip-lsp .hover-signature code': {
+      color: 'var(--app-foreground)',
+    },
+    // Hover body - main content
+    '.cm-tooltip-lsp .hover-body': {
+      padding: '8px 10px',
+      fontSize: '11px',
+      lineHeight: '1.5',
+    },
+    '.cm-tooltip-lsp .hover-body p': {
+      margin: '0 0 10px 0',
+      color: 'var(--app-foreground)',
+    },
+    '.cm-tooltip-lsp .hover-body p:last-child': {
+      margin: '0',
+    },
+    // Code blocks in description
+    '.cm-tooltip-lsp .hover-body .code-block': {
+      background: 'var(--app-toolbar-hover)',
+      borderRadius: '4px',
+      padding: '8px 10px',
+      overflow: 'auto',
+      margin: '6px 0',
+      fontSize: '10px',
+      lineHeight: '1.4',
+      border: '1px solid var(--app-input-border)',
+    },
+    '.cm-tooltip-lsp .hover-body .code-block code': {
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+      fontSize: '10px',
+      background: 'transparent',
+      padding: '0',
+      color: 'inherit',
+    },
+    '.cm-tooltip-lsp .hover-body .code-pill': {
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+      fontSize: '10px',
+      background: 'var(--app-toolbar-hover)',
+      padding: '1px 5px',
+      borderRadius: '3px',
+      color: 'var(--app-type)',
+      border: '1px solid var(--app-input-border)',
+    },
+    '.cm-tooltip-lsp .hover-body code:not(.code-pill):not(.code-block code)': {
+      fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
+      fontSize: '10px',
+      background: 'var(--app-toolbar-hover)',
+      padding: '1px 4px',
+      borderRadius: '3px',
+      color: 'var(--app-type)',
+      border: '1px solid var(--app-input-border)',
+    },
+    // Hover footer with badges and links
+    '.cm-tooltip-lsp .hover-footer': {
+      padding: '6px 10px 8px',
+      display: 'flex',
+      flexWrap: 'wrap',
+      gap: '6px',
+      alignItems: 'center',
+      borderTop: '1px solid var(--app-input-border)',
+      background: 'var(--app-toolbar-hover)',
+    },
+    '.cm-tooltip-lsp .type-badge': {
+      fontSize: '9px',
+      padding: '1px 6px',
+      borderRadius: '8px',
+      background: 'var(--app-button-background)',
+      color: '#fff',
+      fontWeight: '500',
+    },
+    '.cm-tooltip-lsp .tag-badge': {
+      fontSize: '9px',
+      padding: '1px 6px',
+      borderRadius: '8px',
+      background: 'var(--app-selection-background)',
+      color: 'var(--app-foreground)',
+      fontWeight: '500',
+    },
+    '.cm-tooltip-lsp .docs-link': {
+      fontSize: '10px',
+      color: 'var(--app-button-background)',
+      textDecoration: 'none',
+      fontWeight: '500',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '2px',
+    },
+    '.cm-tooltip-lsp .docs-link:hover': {
+      textDecoration: 'underline',
+    },
+    '.cm-tooltip-lsp .link-arrow': {
+      fontSize: '9px',
+    },
+    // Lists in hover (marked.js output)
+    '.cm-tooltip-lsp .hover-body .styled-list': {
+      margin: '6px 0',
+      paddingLeft: '18px',
+      listStyleType: 'disc',
+    },
+    '.cm-tooltip-lsp .hover-body .styled-list .list-item': {
+      marginBottom: '4px',
+      paddingLeft: '3px',
+      color: 'var(--app-foreground)',
+      fontSize: '11px',
+    },
+    '.cm-tooltip-lsp .hover-body .styled-list::marker': {
+      color: 'var(--app-button-background)',
+    },
+    // Inline links
+    '.cm-tooltip-lsp .hover-body .inline-link': {
+      color: 'var(--app-button-background)',
+      textDecoration: 'none',
+      fontWeight: '500',
+      fontSize: '11px',
+    },
+    '.cm-tooltip-lsp .hover-body .inline-link:hover': {
+      textDecoration: 'underline',
+    },
+    // Strong/emphasis
+    '.cm-tooltip-lsp .hover-body strong': {
+      fontWeight: '600',
+      color: 'var(--app-foreground)',
+    },
+    '.cm-tooltip-lsp .hover-body em': {
+      fontStyle: 'italic',
+      color: 'var(--app-disabled-foreground)',
+    },
+    // Markdown headers (if any)
+    '.cm-tooltip-lsp .hover-body h1': {
+      fontSize: '13px',
+      fontWeight: '600',
+      margin: '8px 0 5px',
+      color: 'var(--app-foreground)',
+    },
+    '.cm-tooltip-lsp .hover-body h2': {
+      fontSize: '12px',
+      fontWeight: '600',
+      margin: '6px 0 4px',
+      color: 'var(--app-foreground)',
+    },
+    '.cm-tooltip-lsp .hover-body h3': {
+      fontSize: '11px',
+      fontWeight: '500',
+      margin: '5px 0 3px',
+      color: 'var(--app-foreground)',
+    },
+    // Blockquotes
+    '.cm-tooltip-lsp .hover-body blockquote': {
+      margin: '6px 0',
+      paddingLeft: '10px',
+      borderLeft: '2px solid var(--app-button-background)',
+      color: 'var(--app-disabled-foreground)',
+      fontStyle: 'italic',
+      fontSize: '10px',
+    },
+    // Syntax highlighting in tooltips - matches editor theme
+    '.cm-tooltip-lsp .hl-kw': {
+      color: 'var(--app-keyword)',
+      fontWeight: '500',
+    },
+    '.cm-tooltip-lsp .hl-type': {
+      color: 'var(--app-type)',
+    },
+    '.cm-tooltip-lsp .hl-str': {
+      color: 'var(--app-string)',
+    },
+    '.cm-tooltip-lsp .hl-num': {
+      color: 'var(--app-number)',
+    },
+    '.cm-tooltip-lsp .hl-bool': {
+      color: 'var(--app-boolean)',
+    },
+    '.cm-tooltip-lsp .hl-fn': {
+      color: 'var(--app-foreground)',
+      fontWeight: '600',
+    },
+    '.cm-tooltip-lsp .hl-prop': {
+      color: 'var(--app-foreground)',
+      fontStyle: 'italic',
+    },
+    '.cm-tooltip-lsp .hl-comment': {
+      color: 'var(--app-disabled-foreground)',
+      fontStyle: 'italic',
+    },
+    '.cm-tooltip-lsp .hover-body li': {
+      marginBottom: '4px',
     },
     // Breakpoint styling
     '.cm-breakpoint-dot': {

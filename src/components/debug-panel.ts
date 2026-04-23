@@ -213,7 +213,7 @@ export class DebugPanel extends TailwindElement() {
           <iconify-icon class="debug-action-icon text-blue-600" icon="mdi:debug-step-out" width="16"></iconify-icon>
         </button>
 
-        <div class="w-px h-4.5 bg-gray-300 mx-1"></div>
+        <div class="w-px h-4.5 mx-1" style="background-color: var(--app-border);"></div>
 
         <button
           class="debug-action w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden ${this.debugState !== 'running' ? 'opacity-40 cursor-not-allowed' : ''}"
@@ -241,7 +241,8 @@ export class DebugPanel extends TailwindElement() {
       <!-- Tab Bar -->
       <div class="flex overflow-x-auto" style="background-color: var(--app-toolbar-hover); border-bottom: 1px solid var(--app-border);">
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "variables" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "variables" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "variables" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "variables" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "variables")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "variables") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "variables") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
@@ -249,7 +250,8 @@ export class DebugPanel extends TailwindElement() {
           Variables
         </button>
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "watch" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "watch" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "watch" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "watch" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "watch")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "watch") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "watch") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
@@ -257,7 +259,8 @@ export class DebugPanel extends TailwindElement() {
           Watch
         </button>
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "call-stack" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "call-stack" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "call-stack" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "call-stack" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "call-stack")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "call-stack") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "call-stack") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
@@ -265,7 +268,8 @@ export class DebugPanel extends TailwindElement() {
           Call Stack
         </button>
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "threads" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "threads" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "threads" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "threads" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "threads")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "threads") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "threads") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
@@ -273,7 +277,8 @@ export class DebugPanel extends TailwindElement() {
           Threads
         </button>
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "breakpoints" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "breakpoints" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "breakpoints" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "breakpoints" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "breakpoints")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "breakpoints") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "breakpoints") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
@@ -281,7 +286,8 @@ export class DebugPanel extends TailwindElement() {
           Breakpoints
         </button>
         <button
-          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all ${this.activeTab === "console" ? "text-gray-900 border-b-indigo-500 bg-white" : 'text-gray-500 hover:text-gray-900'}"
+          class="flex items-center gap-1.5 px-3.5 py-2 text-xs font-medium border-none border-b-2 border-transparent cursor-pointer transition-all"
+          style="background-color: ${this.activeTab === "console" ? 'var(--app-tab-active)' : 'transparent'}; color: ${this.activeTab === "console" ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-bottom-color: ${this.activeTab === "console" ? '#6366f1' : 'transparent'};"
           @click=${() => (this.activeTab = "console")}
           @mouseenter=${(e: Event) => { if (this.activeTab !== "console") (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
           @mouseleave=${(e: Event) => { if (this.activeTab !== "console") (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>

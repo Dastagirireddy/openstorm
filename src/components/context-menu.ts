@@ -142,15 +142,15 @@ export class ContextMenu extends TailwindElement() {
         @keydown=${this.handleKeydown}
       >
         <div
-          class="absolute bg-white rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-[#d0d0d0] overflow-hidden z-50 min-w-[180px] py-1"
-          style="left: ${this.anchorX}px; top: ${this.anchorY}px;"
+          class="absolute rounded-md shadow-[0_4px_20px_rgba(0,0,0,0.15)] border overflow-hidden z-50 min-w-[180px] py-1"
+          style="left: ${this.anchorX}px; top: ${this.anchorY}px; background-color: var(--app-bg); border-color: var(--app-border);"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
           @contextmenu=${(e: Event) => { e.preventDefault(); e.stopPropagation(); }}
         >
           ${this.items.map((item, index) => {
             if (item.separator) {
-              return html`<div class="my-1 border-t border-[#e0e0e0]"></div>`;
+              return html`<div class="my-1 border-t" style="border-color: var(--app-border);"></div>`;
             }
 
             const actualIndex = this.items.filter(i => !i.separator).indexOf(item);
@@ -158,18 +158,18 @@ export class ContextMenu extends TailwindElement() {
 
             return html`
               <div
-                class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors
-                  ${isHovered ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}
-                  ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}"
-                @click=${() => this.handleItemClick(item)}
+                class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors"
+                style="background-color: ${isHovered ? 'var(--app-selection-background)' : 'transparent'}; color: ${isHovered ? 'var(--app-foreground)' : 'var(--app-foreground)'};"
                 @mouseenter=${() => this.hoveredIndex = actualIndex}
+                @mouseleave=${() => { if (!isHovered) this.hoveredIndex = -1; }}
+                @click=${() => this.handleItemClick(item)}
               >
                 ${item.icon ? html`
                   <os-icon name="${item.icon}" color="currentColor" size="14"></os-icon>
                 ` : html`<span class="w-3.5"></span>`}
                 <span class="flex-1 text-[12px]">${item.label}</span>
                 ${item.shortcut ? html`
-                  <span class="text-[10px] text-[#8a8a8a]">${item.shortcut}</span>
+                  <span class="text-[10px]" style="color: var(--app-disabled-foreground);">${item.shortcut}</span>
                 ` : ''}
               </div>
             `;

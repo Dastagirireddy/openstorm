@@ -141,10 +141,10 @@ export class SearchOverlay extends TailwindElement() {
     if (!this.isOpen) return html``;
 
     return html`
-      <div class="fixed top-20 left-1/2 -translate-x-1/2 w-[600px] max-w-[90vw] bg-white border border-[#c7c7c7] rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.15)] z-[1000] overflow-hidden">
+      <div class="fixed top-20 left-1/2 -translate-x-1/2 w-[600px] max-w-[90vw] border rounded-lg shadow-[0_8px_30px_rgba(0,0,0,0.15)] z-[1000] overflow-hidden" style="background-color: var(--app-bg); border-color: var(--app-border);">
         <!-- Search Input -->
-        <div class="flex items-center gap-3 p-3 border-b border-[#e0e0e0]">
-          <svg class="w-5 h-5 text-[#5a5a5a] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <div class="flex items-center gap-3 p-3 border-b" style="border-color: var(--app-border);">
+          <svg class="w-5 h-5 flex-shrink-0" style="color: var(--app-disabled-foreground);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/>
             <line x1="21" y1="21" x2="16.65" y2="16.65"/>
           </svg>
@@ -152,11 +152,12 @@ export class SearchOverlay extends TailwindElement() {
             id="search-input"
             type="text"
             placeholder="Search files... (type to search)"
-            class="flex-1 bg-transparent text-[14px] text-[#1a1a1a] outline-none placeholder-[#8a8a8a]"
+            class="flex-1 bg-transparent text-[14px] outline-none"
+            style="color: var(--app-foreground);"
             .value=${this.query}
             @input=${this._handleInput}/>
           <div class="flex items-center gap-1 flex-shrink-0">
-            <span class="px-1.5 py-0.5 bg-[#e0e0e0] rounded text-[10px] font-medium text-[#5a5a5a]">⌘P</span>
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" style="background-color: var(--app-toolbar-hover); color: var(--app-disabled-foreground);">⌘P</span>
           </div>
         </div>
 
@@ -165,14 +166,14 @@ export class SearchOverlay extends TailwindElement() {
           ${this.isLoading
             ? html`
                 <div class="flex items-center justify-center gap-2 py-6">
-                  <div class="w-4 h-4 border-2 border-[#e0e0e0] border-t-[#3592c4] rounded-full animate-spin"></div>
-                  <span class="text-[13px] text-[#5a5a5a]">Searching...</span>
+                  <div class="w-4 h-4 border-2 rounded-full animate-spin" style="border-color: var(--app-border); border-top-color: var(--app-button-background);"></div>
+                  <span class="text-[13px]" style="color: var(--app-disabled-foreground);">Searching...</span>
                 </div>
               `
             : this.results.length === 0 && this.query.length >= 2
             ? html`
                 <div class="flex items-center justify-center py-6">
-                  <span class="text-[13px] text-[#5a5a5a]">No files found</span>
+                  <span class="text-[13px]" style="color: var(--app-disabled-foreground);">No files found</span>
                 </div>
               `
             : this.results.map((result, index) => this.renderResult(result, index))}
@@ -186,17 +187,17 @@ export class SearchOverlay extends TailwindElement() {
 
     return html`
       <div
-        class="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors
-          ${isSelected ? 'bg-[#b3d4ff]' : 'hover:bg-[#f0f0f0]'}"
+        class="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors"
+        style="background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'};"
         @click=${() => this.selectResult(result)}
         @mouseenter=${() => this.selectedIndex = index}>
-        <svg class="w-4 h-4 text-[#5a5a5a] flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg class="w-4 h-4 flex-shrink-0" style="color: var(--app-disabled-foreground);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
         </svg>
         <div class="flex-1 min-w-0">
-          <div class="text-[13px] text-[#1a1a1a] truncate">${result.name}</div>
-          <div class="text-[11px] text-[#5a5a5a] truncate">${result.path}</div>
+          <div class="text-[13px] truncate" style="color: var(--app-foreground);">${result.name}</div>
+          <div class="text-[11px] truncate" style="color: var(--app-disabled-foreground);">${result.path}</div>
         </div>
         ${result.score > 0.9
           ? html`<span class="text-[10px] text-[#3592c4] font-medium flex-shrink-0">Best match</span>`

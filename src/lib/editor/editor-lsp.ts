@@ -9,8 +9,8 @@
  */
 
 import { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete';
-import { hoverTooltip } from '@codemirror/view';
-import type { EditorView } from '@codemirror/view';
+import { hoverTooltip, EditorView } from '@codemirror/view';
+import type { HoverData } from '../../components/hover-tooltip.js';
 import {
   getCompletions,
   getHover,
@@ -104,13 +104,18 @@ export async function lspCompletionSource(
 }
 
 /**
- * Create LSP hover tooltip extension
+ * Show LSP hover tooltip using global component
+ * Emits event for hover-tooltip component to render
  */
-export function lspHoverTooltip(filePath: string) {
+export function showLspHoverTooltip(
+  view: EditorView,
+  pos: number,
+  filePath: string
+): void {
   const languageId = getLanguageIdFromPath(filePath);
-  if (!languageId) return null;
+  if (!languageId) return;
 
-  return hoverTooltip(async (view: EditorView, pos: number) => {
+  (async () => {
     try {
       const line = view.state.doc.lineAt(pos);
       const column = pos - line.from;
@@ -123,54 +128,45 @@ export function lspHoverTooltip(filePath: string) {
         column
       );
 
-      if (!hover || !hover.contents) return null;
+      // Log original LSP hover response to console
+      console.log('[LSP Hover] Raw hover response:', hover);
+      console.log('[LSP Hover] HTML from backend:', hover?.html);
+      console.log('[LSP Hover] Contents from backend:', hover?.contents);
 
-      // Parse hover contents to extract metadata for rich tooltip
-      const sections = hover.contents.split(/\n---\n/);
-      const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
-      const description = sections.slice(1, -1).join('\n').trim();
-      const lastSection = sections[sections.length - 1]?.trim() || '';
+      if (!hover) return;
 
-      // Parse link from last section
-      const linkMatch = lastSection.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
-
-      // Detect tags from content or signature
-      const tags: string[] = [];
-      if (signature.includes('Console') || languageId === 'typescript') {
-        if (signature.includes('Console')) tags.push('built-in');
-        tags.push('dom');
+      // Check if we have any content at all
+      const hasContent = hover.html || hover.contents;
+      if (!hasContent) {
+        console.log('[LSP Hover] No content returned from LSP server');
+        return;
       }
 
-      // Detect availability from content keywords
-      let availability: 'widely-available' | 'experimental' | 'deprecated' | undefined;
-      if (description.toLowerCase().includes('deprecated')) {
-        availability = 'deprecated';
-      } else if (description.toLowerCase().includes('experimental')) {
-        availability = 'experimental';
-      } else if (description.toLowerCase().includes('widely available') || description.toLowerCase().includes('standard')) {
-        availability = 'widely-available';
-      }
+      // Get coordinates for positioning
+      const coords = view.coordsAtPos(pos);
+      if (!coords) return;
 
-      const dom = document.createElement('div');
-      dom.innerHTML = formatHoverContent(hover.contents, {
-        signature,
-        typeInfo: hover.range ? 'property' : undefined,
-        tags: tags.length > 0 ? tags : undefined,
-        link,
-        availability,
-      });
+      const editorRect = view.dom.getBoundingClientRect();
 
-      return {
-        pos,
-        above: true,
-        create: () => ({ dom }),
-      };
+      // Emit event for global tooltip component - use pre-rendered HTML from backend
+      document.dispatchEvent(new CustomEvent('lsp-hover', {
+        detail: {
+          html: hover.html || '',
+          contents: hover.contents,  // Keep for debugging
+          position: {
+            x: coords.right,
+            y: coords.bottom,
+            editorRect,
+          },
+          languageId,
+        } as HoverData,
+        bubbles: true,
+        composed: true,
+      }));
     } catch (error) {
       console.error('LSP hover error:', error);
-      return null;
     }
-  });
+  })();
 }
 
 /**
