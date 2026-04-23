@@ -56,16 +56,22 @@ export class ActivityBar extends TailwindElement() {
 
     return html`
       <div
-        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-l-2 transition-colors relative group
-          ${isActive ? 'border-transparent bg-[#e0e0e0]' : 'border-transparent hover:bg-[#e8e8e8]'}"
+        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-l-2 transition-colors relative group"
+        style="border-left-color: transparent; background-color: ${isActive ? 'var(--activitybar-active-background)' : 'transparent'};"
+        @mouseenter=${(e: Event) => {
+          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--activitybar-active-background)';
+        }}
+        @mouseleave=${(e: Event) => {
+          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'transparent';
+        }}
         @click=${() => this.setActive(item.id)}
         title="${item.label}">
         <span
-          class="text-[11px] font-medium tracking-wide ${isActive ? 'text-[#1a1a1a] font-semibold' : 'text-[#5a5a5a]'}"
-          style="writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 4px;">
+          class="text-[11px] font-medium tracking-wide"
+          style="writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 4px; color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'}; ${isActive ? 'font-weight: 600;' : ''}">
           ${item.label}
         </span>
-        <div class="-rotate-90 text-[#5a5a5a] ${isActive ? 'text-[#1a1a1a]' : ''}">
+        <div class="-rotate-90" style="color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'};">
           ${isActive ? item.filledIcon : item.icon}
         </div>
       </div>
@@ -77,15 +83,18 @@ export class ActivityBar extends TailwindElement() {
 
     return html`
       <div
-        class="gap-1 flex flex-col items-center justify-center py-2 cursor-pointer border-l-2 border-transparent hover:bg-[#e0e0e0] transition-colors"
+        class="gap-1 flex flex-col items-center justify-center py-2 cursor-pointer border-l-2 transition-colors"
+        style="border-left-color: transparent;"
+        @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--activitybar-active-background)'}
+        @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
         @click=${() => this.setActive('settings')}
         title="Settings">
         <span
-          class="text-[11px] font-medium tracking-wide text-[#5a5a5a]"
-          style="writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 4px;">
+          class="text-[11px] font-medium tracking-wide"
+          style="writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 4px; color: var(--activitybar-inactive-foreground);">
           Settings
         </span>
-        <div class="text-[#5a5a5a] ${isActive ? 'text-[#1a1a1a]' : ''}">
+        <div style="color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'};">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
             <circle cx="12" cy="12" r="3"/>
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
@@ -97,7 +106,8 @@ export class ActivityBar extends TailwindElement() {
 
   render() {
     return html`
-      <div class="w-[28px] h-full bg-[#f7f7f7] border-r border-[#c7c7c7] flex flex-col shrink-0">
+      <div class="w-[28px] h-full flex flex-col shrink-0"
+           style="background-color: var(--activitybar-background); border-right-color: var(--activitybar-border); border-right-width: 1px; border-right-style: solid;">
         <!-- Top Section: Main Activities -->
         <div class="flex flex-col gap-1">
           ${this.items.map(item => this.renderActivityItem(item))}

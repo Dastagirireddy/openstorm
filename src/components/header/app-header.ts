@@ -34,22 +34,30 @@ export class AppHeader extends TailwindElement() {
   @property() isSingleFileMode = false;
 
   private renderAction(action: HeaderAction): TemplateResult {
+    const isLabel = action.id === 'git-label';
+    if (isLabel) {
+      return html`
+        <span class="text-[12px] font-medium" style="color: var(--app-disabled-foreground);">${action.label}</span>
+      `;
+    }
     return html`
       <button
-        class="p-0.5 rounded hover:bg-[#e0e0e0] transition-colors"
+        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-all"
+        @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+        @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
         title="${action.title}"
         data-action="${action.id}">
         <os-icon
           name="${action.icon}"
-          color="${action.color || '#5f6368'}"
-          size=${12}></os-icon>
+          color="${action.color || 'var(--app-disabled-foreground)'}"
+          width="16"></os-icon>
       </button>
     `;
   }
 
   private renderSection(section: HeaderSection): TemplateResult {
     return html`
-      <div class="flex items-center gap-1.5">
+      <div class="flex items-center gap-0.5">
         ${section.actions.map(action => this.renderAction(action))}
       </div>
     `;
@@ -57,7 +65,7 @@ export class AppHeader extends TailwindElement() {
 
   private renderBreadcrumbSegment(segment: BreadcrumbSegment, index: number, totalSegments: number): TemplateResult {
     const isLast = index === totalSegments - 1;
-    const iconColor = isLast ? getFileIconColor(segment.path || segment.label) : '#5f6368';
+    const iconColor = isLast ? getFileIconColor(segment.path || segment.label) : 'var(--app-disabled-foreground)';
     const isFolder = !isLast || segment.icon === 'folder';
 
     return html`
@@ -68,12 +76,13 @@ export class AppHeader extends TailwindElement() {
           <file-icon path="${segment.path || segment.label}" size=${14}></file-icon>
         `}
         <span
-          class="${isLast ? 'text-[#1a1a1a] font-semibold' : 'hover:text-[#1a1a1a] cursor-pointer transition-colors'} text-[13px]"
+          class="${isLast ? 'font-semibold' : 'hover:text-[#1a1a1a] cursor-pointer transition-colors'} text-[13px]"
+          style="color: ${isLast ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'};"
           ${!isLast && segment.path ? 'data-path="' + segment.path + '"' : ''}>
           ${segment.label}
         </span>
         ${!isLast ? html`
-          <os-icon name="chevron-right" color="#a0a0a0" size=${18}></os-icon>
+          <os-icon name="chevron-right" color="var(--app-disabled-foreground)" size=${18}></os-icon>
         ` : ''}
       </div>
     `;
@@ -88,12 +97,13 @@ export class AppHeader extends TailwindElement() {
       <div class="flex flex-col shrink-0">
         <!-- Titlebar with integrated breadcrumb -->
         <div
-          class="flex items-center justify-between h-[36px] px-2 bg-gradient-to-b from-[#f5f5f5] to-[#e8e8e8] border-b border-[#d0d0d0] select-none">
+          class="flex items-center justify-between h-[36px] px-2 border-b select-none"
+          style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-input-border);">
 
           <!-- Left: Project name + Breadcrumb -->
           <div class="flex items-center gap-2 min-w-0 flex-1">
             <os-brand-logo size="20"></os-brand-logo>
-            <span class="text-[12px] font-medium text-[#1a1a1a] shrink-0">${projectName}</span>
+            <span class="text-[12px] font-medium shrink-0" style="color: var(--app-foreground);">${projectName}</span>
 
             ${showBreadcrumb && breadcrumbSegments.length > 0 ? html`
               <div class="flex items-center gap-1 min-w-0">
@@ -108,28 +118,28 @@ export class AppHeader extends TailwindElement() {
                 <div class="flex items-center gap-2 shrink-0">
                   <run-toolbar id="run-toolbar"></run-toolbar>
 
-                  <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
+                  <div class="w-[1px] h-3.5 mx-0.5" style="background-color: var(--app-scrollbar);"></div>
 
                   <!-- Git section -->
                   ${this.renderSection({
                     id: 'git',
                     actions: [
                       { id: 'git-label', icon: '', title: 'Git:', label: 'Git:' },
-                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: '#3b82f6' },
-                      { id: 'commit', icon: 'check', title: 'Commit', color: '#22c55e' },
-                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: '#22c55e' },
+                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: 'var(--app-step-color)' },
+                      { id: 'commit', icon: 'check', title: 'Commit', color: 'var(--app-continue-color)' },
+                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: 'var(--app-continue-color)' },
                       { id: 'history', icon: 'clock', title: 'History' },
                       { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback' },
                     ],
                   })}
 
-                  <div class="w-[1px] h-3.5 bg-[#c0c0c0] mx-0.5"></div>
+                  <div class="w-[1px] h-3.5 mx-0.5" style="background-color: var(--app-scrollbar);"></div>
 
                   <!-- Update section -->
                   ${this.renderSection({
                     id: 'update',
                     actions: [
-                      { id: 'update', icon: 'cloud', title: 'Update Project', color: '#f97316' },
+                      { id: 'update', icon: 'cloud', title: 'Update Project', color: 'var(--app-pause-color)' },
                     ],
                   })}
                 </div>
@@ -139,7 +149,7 @@ export class AppHeader extends TailwindElement() {
 
         <!-- Unsaved indicator bar -->
         ${this.saveStatus === 'unsaved' ? html`
-          <div class="h-[2px] bg-[#f57c00] w-full"></div>
+          <div class="h-[2px] w-full" style="background-color: var(--app-pause-color);"></div>
         ` : ''}
       </div>
     `;

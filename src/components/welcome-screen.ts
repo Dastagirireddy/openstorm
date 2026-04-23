@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement } from "../tailwind-element.js";
 
 export type GitStatus = 'synced' | 'modified' | 'behind' | 'ahead' | 'untracked';
-export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'generic';
+export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'database' | 'generic';
 
 export interface RecentProject {
   path: string;
@@ -148,19 +148,20 @@ export class WelcomeScreen extends TailwindElement() {
   }
 
   private getProjectIcon(type: ProjectType): { name: string; color: string } {
+    // Colors are CSS variables for theme support
     const iconMap: Record<ProjectType, { name: string; color: string }> = {
-      'rust': { name: 'box', color: '#ea580c' },
-      'node': { name: 'terminal', color: '#22c55e' },
-      'python': { name: 'layers', color: '#3b82f6' },
-      'go': { name: 'globe', color: '#06b6d4' },
-      'java': { name: 'server', color: '#dc2626' },
-      'typescript': { name: 'file-code', color: '#2563eb' },
-      'react': { name: 'box', color: '#0891b2' },
-      'vue': { name: 'box', color: '#42b883' },
-      'angular': { name: 'box', color: '#dd0031' },
-      'docker': { name: 'package', color: '#0db7ed' },
-      'database': { name: 'database', color: '#a855f7' },
-      'generic': { name: 'folder', color: '#4f46e5' },
+      'rust': { name: 'box', color: 'var(--project-rust)' },
+      'node': { name: 'terminal', color: 'var(--project-node)' },
+      'python': { name: 'layers', color: 'var(--project-python)' },
+      'go': { name: 'globe', color: 'var(--project-go)' },
+      'java': { name: 'server', color: 'var(--project-java)' },
+      'typescript': { name: 'file-code', color: 'var(--project-typescript)' },
+      'react': { name: 'box', color: 'var(--project-react)' },
+      'vue': { name: 'box', color: 'var(--project-vue)' },
+      'angular': { name: 'box', color: 'var(--project-angular)' },
+      'docker': { name: 'package', color: 'var(--project-docker)' },
+      'database': { name: 'database', color: 'var(--project-database)' },
+      'generic': { name: 'folder', color: 'var(--project-generic)' },
     };
     return iconMap[type] || iconMap['generic'];
   }
@@ -178,16 +179,16 @@ export class WelcomeScreen extends TailwindElement() {
 
     if (!gitStatus || gitStatus === 'synced') {
       return html`
-        <span class="flex items-center text-[11px] text-emerald-600" title="Up to date">
-          <os-icon name="check" size="14" color="#059669"></os-icon>
+        <span class="flex items-center text-[11px]" style="color: var(--app-console-success);" title="Up to date">
+          <os-icon name="check" size="14" color="var(--app-console-success)"></os-icon>
         </span>
       `;
     }
 
     if (gitStatus === 'modified') {
       return html`
-        <span class="flex items-center gap-1 text-[11px] text-amber-600" title="${uncommittedChanges} uncommitted changes">
-          <os-icon name="circle-dot" size="12" color="#d97706"></os-icon>
+        <span class="flex items-center gap-1 text-[11px]" style="color: var(--app-status-stopped);" title="${uncommittedChanges} uncommitted changes">
+          <os-icon name="circle-dot" size="12" color="var(--app-status-stopped)"></os-icon>
           <span>${uncommittedChanges}</span>
         </span>
       `;
@@ -195,8 +196,8 @@ export class WelcomeScreen extends TailwindElement() {
 
     if (gitStatus === 'ahead') {
       return html`
-        <span class="flex items-center gap-1 text-[11px] text-blue-600" title="${uncommittedChanges} commits to push">
-          <os-icon name="arrow-up-from-line" size="12" color="#2563eb"></os-icon>
+        <span class="flex items-center gap-1 text-[11px]" style="color: var(--app-button-background);" title="${uncommittedChanges} commits to push">
+          <os-icon name="arrow-up-from-line" size="12" color="var(--app-button-background)"></os-icon>
           <span>${uncommittedChanges}</span>
         </span>
       `;
@@ -204,16 +205,16 @@ export class WelcomeScreen extends TailwindElement() {
 
     if (gitStatus === 'behind') {
       return html`
-        <span class="flex items-center gap-1 text-[11px] text-orange-600" title="Behind remote">
-          <os-icon name="arrow-down-to-line" size="12" color="#ea580c"></os-icon>
+        <span class="flex items-center gap-1 text-[11px]" style="color: var(--project-rust);" title="Behind remote">
+          <os-icon name="arrow-down-to-line" size="12" color="var(--project-rust)"></os-icon>
         </span>
       `;
     }
 
     if (gitStatus === 'untracked') {
       return html`
-        <span class="flex items-center gap-1 text-[11px] text-gray-400" title="Not tracked by git">
-          <os-icon name="cloud" size="12" color="#9ca3af"></os-icon>
+        <span class="flex items-center gap-1 text-[11px]" style="color: var(--app-disabled-foreground);" title="Not tracked by git">
+          <os-icon name="cloud" size="12" color="var(--app-disabled-foreground)"></os-icon>
         </span>
       `;
     }
@@ -251,7 +252,7 @@ export class WelcomeScreen extends TailwindElement() {
 
           return html`
             <div
-              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group ${isSelected ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-[#f9fafb]'}"
+              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2 ${isSelected ? 'bg-indigo-50 border-indigo-500' : 'border-transparent hover:bg-[#f9fafb]'}"
               @click=${() => this.handleProjectClick(project)}
               @mouseenter=${() => { if (!this.filterText) this.selectedIndex = index; }}
             >

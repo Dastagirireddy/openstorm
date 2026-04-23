@@ -2,8 +2,9 @@
 
 @source "**/*.{ts,html}";
 
-/* Theme Variables - IntelliJ Classic Light Theme */
+/* Theme Variables - IntelliJ Classic Light Theme (Default) */
 :root {
+  /* Application */
   --app-bg: #ffffff;
   --app-foreground: #1a1a1a;
   --app-disabled-foreground: #8a8a8a;
@@ -26,7 +27,8 @@
   --app-tab-active-border: #6366f1;
   --app-scrollbar: #c1c1c1;
   --app-scrollbar-hover: #a8a8a8;
-  /* Debug panel specific */
+
+  /* Debug panel */
   --app-continue-color: #22c55e;
   --app-step-color: #0078d4;
   --app-stop-color: #f44336;
@@ -46,22 +48,111 @@
   --app-error-background: #fef2f2;
   --app-pinned-background: #fefce8;
   --app-toast-background: #3c3c3c;
-  /* Syntax colors (IntelliJ Classic Light) */
+
+  /* Syntax highlighting */
   --app-keyword: #0033b3;
   --app-type: #00627a;
   --app-string: #067d17;
   --app-number: #1750eb;
   --app-boolean: #0033b3;
   --app-null: #808080;
-  /* Console colors */
+
+  /* Console */
   --app-console-info: #3c3c3c;
   --app-console-warning: #cca700;
   --app-console-error: #f44336;
   --app-console-success: #16825d;
-  /* Breakpoint colors */
+
+  /* Breakpoints */
   --app-breakpoint: #f44336;
   --app-breakpoint-disabled: #9ca3af;
   --app-breakpoint-conditional: #ffd700;
+
+  /* Editor */
+  --editor-background: #ffffff;
+  --editor-gutter-background: #f0f0f0;
+  --editor-gutter-border: #d1d1d1;
+  --editor-active-line: #e4ffaf7a;
+  --editor-selection: #2142832e;
+  --editor-line-numbers: #adadad;
+
+  /* File icon colors */
+  --file-rs: #dea584;
+  --file-go: #00add8;
+  --file-ts: #3178c6;
+  --file-tsx: #3178c6;
+  --file-js: #f7df1e;
+  --file-jsx: #f7df1e;
+  --file-json: #f7df1e;
+  --file-yaml: #cb171e;
+  --file-toml: #9c4221;
+  --file-css: #42a5f5;
+  --file-scss: #c6538c;
+  --file-less: #1d365d;
+  --file-html: #e34c26;
+  --file-xml: #f1662a;
+  --file-sql: #4479a1;
+  --file-py: #3776ab;
+  --file-java: #f89820;
+  --file-kt: #7f52ff;
+  --file-swift: #f05138;
+  --file-c: #519aba;
+  --file-cpp: #519aba;
+  --file-cs: #239120;
+  --file-php: #777bb4;
+  --file-rb: #cc342d;
+  --file-sh: #4eaa25;
+  --file-md: #519aba;
+  --file-txt: #5a5a5a;
+  --file-dockerfile: #2496ed;
+  --file-gitignore: #f44d27;
+
+  /* Folder type colors (IntelliJ-style) */
+  --folder-build-color: #cc6600;
+  --folder-build-bg: #fff0e0;
+  --folder-tmp-color: #8a8a8a;
+  --folder-tmp-bg: #f5f5f5;
+  --folder-node-modules-color: #7c5bbf;
+  --folder-node-modules-bg: #f3e8ff;
+  --folder-vcs-color: #008040;
+  --folder-vcs-bg: #e6f6ed;
+  --folder-ide-color: #0078d4;
+  --folder-ide-bg: #e6f2ff;
+
+  /* Project type colors */
+  --project-rust: #ea580c;
+  --project-node: #22c55e;
+  --project-python: #3b82f6;
+  --project-go: #06b6d4;
+  --project-java: #dc2626;
+  --project-typescript: #2563eb;
+  --project-react: #0891b2;
+  --project-vue: #42b883;
+  --project-angular: #dd0031;
+  --project-docker: #0db7ed;
+  --project-database: #a855f7;
+  --project-generic: #4f46e5;
+
+  /* Status bar */
+  --statusbar-background: #f6f8fa;
+  --statusbar-foreground: #57606a;
+  --statusbar-hover-background: #eaeef2;
+  --statusbar-hover-foreground: #24292f;
+  --statusbar-border: #d0d7de;
+
+  /* Activity bar */
+  --activitybar-background: #f7f7f7;
+  --activitybar-border: #c7c7c7;
+  --activitybar-active-background: #e0e0e0;
+  --activitybar-inactive-foreground: #5a5a5a;
+  --activitybar-active-foreground: #1a1a1a;
+
+  /* Terminal */
+  --terminal-background: #ffffff;
+
+  /* Brand colors */
+  --brand-primary: #5b47c9;
+  --brand-primary-hover: #4a37a8;
 }
 
 /* Global resets */
@@ -129,4 +220,65 @@ html, body {
 #terminal .xterm-viewport {
   overflow-y: auto;
   background-color: #ffffff;
+}
+
+/* CodeMirror editor - ensure full height */
+.cm-editor {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.cm-editor .cm-scroller {
+  flex: 1;
+  overflow: auto;
+}
+
+/* Breakpoint gutter */
+.cm-breakpoint-gutter {
+  width: 20px !important;
+  min-width: 20px !important;
+}
+
+.cm-breakpoint-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: #e53935;
+  margin: 2px 4px;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.cm-breakpoint-dot:hover {
+  transform: scale(1.2);
+  background-color: #c62828;
+}
+
+.cm-breakpoint-dot.cm-breakpoint-debug {
+  background-color: #1976d2;
+}
+
+.cm-breakpoint-dot.cm-breakpoint-current {
+  background-color: #f57c00;
+  box-shadow: 0 0 6px rgba(245, 124, 0, 0.6);
+}
+
+.cm-debug-line-current {
+  background-color: rgba(255, 235, 59, 0.3);
+}
+
+.cm-debug-line {
+  background-color: rgba(255, 235, 59, 0.2);
+}
+
+.cm-inline-value-after {
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.cm-inline-value-after::after {
+  content: ' = ' attr(data-value);
+  color: #666;
+  font-style: italic;
 }

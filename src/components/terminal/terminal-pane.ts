@@ -59,11 +59,12 @@ const componentStyles = css`
     height: 100%;
   }
 
+  /* Top: -16px and bottom: 40px offset needed to keep terminal cursor within viewport area */
   .terminal-instance {
     position: absolute;
     top: -16px;
-    left: 10px;
-    right: 10px;
+    left: 5px;
+    right: 5px;
     bottom: 40px;
     background: #ffffff;
   }
@@ -664,41 +665,50 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     const filteredOutputs = this.getFilteredOutputs();
 
     return html`
-      <div class="flex flex-col h-full w-full bg-white border-t border-[#d0d7de]">
+      <div class="flex flex-col h-full w-full bg-white">
         <!-- Unified tab bar: Terminal instances + App Console -->
-        <div class="flex items-center justify-between h-[36px] px-2 bg-[#f6f8fa] shrink-0 border-b border-[#d0d7de]">
+        <div class="flex items-center justify-between h-[36px] px-2 shrink-0" style="background-color: var(--app-tab-inactive);">
           <div class="flex items-center gap-0.5 h-full">
             <!-- Terminal instance tabs -->
-            ${this.terminals.map(t => html`
-              <div class="flex items-center gap-1 px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2
-                ${this.activeTerminalId === t.id && this.activeBottomTab === 'terminal'
-                  ? 'bg-white text-[#24292f] border-indigo-500 font-medium'
-                  : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb] hover:border-transparent'}"
-                @click=${() => { this.switchToTerminalTab(); this.switchTerminal(t.id); }}>
-                <span>${t.name}</span>
-                <button @click=${(e: MouseEvent) => { e.stopPropagation(); this.requestCloseTerminal(t.id); }}
-                  class="ml-1 p-0.5 rounded hover:bg-[rgba(0,0,0,0.1)] opacity-0 hover:opacity-100"
-                  title="Close terminal"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </div>
-            `)}
+            ${this.terminals.map(t => {
+              const isActive = this.activeTerminalId === t.id && this.activeBottomTab === 'terminal';
+              return html`
+                <div class="flex items-center gap-1 px-3 h-full cursor-pointer transition-colors border-t-2"
+                  style="background-color: ${isActive ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${isActive ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${isActive ? 'var(--app-tab-active-border)' : 'transparent'};"
+                  @mouseenter=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                  @mouseleave=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
+                  @click=${() => { this.switchToTerminalTab(); this.switchTerminal(t.id); }}>
+                  <span class="text-[13px]">${t.name}</span>
+                  <button @click=${(e: MouseEvent) => { e.stopPropagation(); this.requestCloseTerminal(t.id); }}
+                    class="ml-1 p-0.5 rounded opacity-0 hover:opacity-100 flex items-center justify-center"
+                    @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-active)'; }}
+                    @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
+                    title="Close terminal"
+                  >
+                    <os-icon name="x" size="12"></os-icon>
+                  </button>
+                </div>
+              `;
+            })}
             <!-- App Console tab -->
             <button
-              class="px-2 py-1.5 text-[11px] cursor-pointer transition-colors border-b-2 relative ${this.activeBottomTab === 'app-console' ? 'bg-white text-[#24292f] border-indigo-500 font-medium' : 'bg-transparent text-[#57606a] border-transparent hover:bg-[#e5e7eb]'}"
+              class="px-3 h-full text-[13px] cursor-pointer transition-colors border-t-2"
+              style="background-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${this.activeBottomTab === 'app-console' ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active-border)' : 'transparent'};"
+              @mouseenter=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
               @click=${() => { this.activeBottomTab = 'app-console'; this.consoleHasNewOutput = false; }}>
               App Console
               ${this.consoleHasNewOutput && this.activeBottomTab !== 'app-console'
-                ? html`<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>`
+                ? html`<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
                 : ''}
             </button>
           </div>
           ${this.activeBottomTab === 'terminal'
-            ? html`<button @click=${() => this.addTerminal()} class="p-1 hover:bg-[#d0d7de] rounded" title="New terminal">＋</button>`
+            ? html`<button @click=${() => this.addTerminal()} class="p-1 rounded flex items-center justify-center" title="New terminal"
+                @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-active)'; }}
+                @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
+                <os-icon name="plus" size="14"></os-icon>
+              </button>`
             : ''}
         </div>
 

@@ -4,6 +4,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
 
+// Initialize theme service early for CSS variable injection
+import { ThemeService } from "./lib/theme-service.js";
+ThemeService.getInstance().initialize();
+
 // Import iconify-icon web component and register icon collections
 import "iconify-icon";
 import { addCollection } from 'iconify-icon';
@@ -29,8 +33,8 @@ import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
 import "./components/navigation/activity-bar.js";
 import "./components/explorer/project-explorer.js";
-import "./components/editor/editor-pane.js";
-import "./components/editor/tab-bar.js";
+import "./components/editor/pane.js";
+import "./components/editor/editor-tab-bar.js";
 import "./components/terminal/terminal-pane.js";
 import "./components/status-bar.js";
 import "./components/search-overlay.js";
@@ -836,7 +840,7 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- Terminal container with absolute resize handle -->
                   <div
-                    class="relative shrink-0 border-t border-[#c7c7c7]"
+                    class="relative shrink-0"
                     style="height: ${this.terminalHeight}px;">
                     <!-- Resize handle - absolutely positioned at top -->
                     <div

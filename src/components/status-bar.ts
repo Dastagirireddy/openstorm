@@ -140,15 +140,10 @@ export class StatusBar extends TailwindElement() {
   }
 
   public async installLspServer(languageId: string, showNotification = true): Promise<void> {
+    const serverInfo = this.getActiveServerInfo();
+    const serverName = serverInfo?.server_name || `${languageId}-language-server`;
+
     try {
-      const serverInfo = this.getActiveServerInfo();
-      const serverName = serverInfo?.server_name || `${languageId}-language-server`;
-
-      if (serverInfo) {
-        (serverInfo as any).is_installing = true;
-        this.requestUpdate();
-      }
-
       // Listen for progress events from backend (Tauri window events)
       const { listen } = await import('@tauri-apps/api/event');
       const unlisten = await listen('lsp-install-progress', (event: any) => {
@@ -276,16 +271,16 @@ export class StatusBar extends TailwindElement() {
    */
   private getStatusMessageStyle(): string {
     if (this.statusMessage.includes('failed')) {
-      return 'bg-red-50 text-red-700';
+      return 'bg-red-100 text-red-800 font-medium';
     }
     if (this.statusMessage.includes('ready')) {
-      return 'bg-green-50 text-green-700';
+      return 'bg-green-100 text-green-800 font-medium';
     }
     if (this.statusMessage.includes('Downloading')) {
-      return 'bg-indigo-50 text-indigo-700';
+      return 'bg-indigo-100 text-indigo-800 font-medium';
     }
     if (this.statusMessage.includes('not installed')) {
-      return 'bg-yellow-50 text-yellow-700';
+      return 'bg-yellow-100 text-yellow-800 font-medium';
     }
     return '';
   }
@@ -336,28 +331,36 @@ export class StatusBar extends TailwindElement() {
   render() {
     return html`
       <div
-        class="flex h-[28px] items-center justify-between px-3 bg-[#f6f8fa] border-t border-[#d0d7de] text-[#57606a] text-[12px] shrink-0 select-none">
+        class="flex h-[28px] items-center justify-between px-3 text-[12px] shrink-0 select-none"
+        style="background-color: var(--statusbar-background); color: var(--statusbar-foreground); border-top-color: var(--statusbar-border); border-top-width: 1px; border-top-style: solid;">
 
         <!-- Left section -->
         <div class="flex items-center gap-3">
-          <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-            <os-icon name="git-branch" size="12"></os-icon>
-            <span>${this.branch}</span>
+          <div class="flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors"
+               style="background-color: transparent;"
+               @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+               @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            <os-icon name="git-branch" size="12" color="var(--statusbar-foreground)"></os-icon>
+            <span style="color: var(--statusbar-foreground);">${this.branch}</span>
           </div>
 
           ${this.hasErrors
             ? html`
-              <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-                <os-icon name="x" size="12" color="#ef4444"></os-icon>
-                <span>0 Errors</span>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                   @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                   @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                <os-icon name="x" size="12" color="var(--app-console-error)"></os-icon>
+                <span style="color: var(--statusbar-foreground);">0 Errors</span>
               </div>`
             : ''}
 
           ${this.hasWarnings
             ? html`
-              <div class="flex items-center gap-1.5 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-                <os-icon name="circle-dot" size="12" color="#f59e0b"></os-icon>
-                <span>0 Warnings</span>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                   @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                   @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                <os-icon name="circle-dot" size="12" color="var(--app-console-warning)"></os-icon>
+                <span style="color: var(--statusbar-foreground);">0 Warnings</span>
               </div>`
             : ''}
 
@@ -368,15 +371,18 @@ export class StatusBar extends TailwindElement() {
 
           <!-- Terminal toggle button -->
           <button
-            class="p-1 hover:bg-[#eaeef2] hover:text-[#0969da] rounded transition-colors relative"
+            class="w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-all relative"
+            style="color: var(--statusbar-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="Toggle Terminal (Ctrl+\`)"
             @click=${() => {
               this.terminalHasOutput = false;
               this.dispatchEvent(new CustomEvent('toggle-terminal', { bubbles: true }));
             }}>
-            <os-icon name="terminal" size="14"></os-icon>
+            <os-icon name="terminal" width="14"></os-icon>
             ${this.terminalHasOutput && !this.terminalVisible
-              ? html`<span class="absolute -top-0.5 -right-0.5 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>`
+              ? html`<span class="absolute top-1 right-1 w-2 h-2 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
               : ''}
           </button>
 
@@ -389,9 +395,11 @@ export class StatusBar extends TailwindElement() {
             // Downloading state - clean single line
             if (isInstalling) {
               return html`
-                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-indigo-50 border border-[#d0d7de]">
-                  <os-icon name="clock" size="12" color="#4f46e5" class="animate-spin"></os-icon>
-                  <span class="text-indigo-700">Downloading ${serverInfo.server_name}...</span>
+                <div class="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer transition-colors"
+                     @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                     @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                  <os-icon name="clock" size="12" color="var(--app-button-background)" class="animate-spin"></os-icon>
+                  <span style="color: var(--statusbar-foreground);">Downloading ${serverInfo.server_name}...</span>
                 </div>
               `;
             }
@@ -404,17 +412,25 @@ export class StatusBar extends TailwindElement() {
               const displayError = this.getUserFriendlyError(errorMessage, serverInfo.language_id);
 
               return html`
-                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-red-50 border border-[#d0d7de]">
-                  <os-icon name="circle-dot" size="12" color="#dc2626"></os-icon>
-                  <span class="text-red-700">${serverInfo.server_name}: ${displayError}</span>
+                <div class="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer transition-colors"
+                     @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                     @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                  <os-icon name="circle-dot" size="12" color="var(--app-console-error)"></os-icon>
+                  <span style="color: var(--statusbar-foreground);">${serverInfo.server_name}: ${displayError}</span>
                   <button
-                    class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
-                    @click=${() => this.installLspServer(serverInfo.language_id)}>
+                    class="ml-1 px-2 py-0.5 text-xs rounded transition-colors"
+                    style="background-color: var(--app-button-background); color: var(--app-button-foreground);"
+                    @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-hover)'}
+                    @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-background)'}
+                    @click=${(e: Event) => { e.stopPropagation(); this.installLspServer(serverInfo.language_id); }}>
                     Retry
                   </button>
                   <button
-                    class="ml-1 px-1.5 py-0.5 text-xs text-[#57606a] hover:text-[#24292f] transition-colors"
-                    @click=${() => this.dismissInstallError(serverInfo.language_id)}>
+                    class="ml-1 px-1.5 py-0.5 text-xs transition-colors"
+                    style="color: var(--statusbar-foreground);"
+                    @mouseenter=${(e: Event) => (e.target as HTMLElement).style.color = 'var(--app-foreground)'}
+                    @mouseleave=${(e: Event) => (e.target as HTMLElement).style.color = 'var(--statusbar-foreground)'}
+                    @click=${(e: Event) => { e.stopPropagation(); this.dismissInstallError(serverInfo.language_id); }}>
                     <os-icon name="x" size="12"></os-icon>
                   </button>
                 </div>
@@ -424,22 +440,29 @@ export class StatusBar extends TailwindElement() {
             // Installed state
             if (serverInfo.is_installed) {
               return html`
-                <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-green-50 border border-[#d0d7de]">
-                  <os-icon name="check" size="12" color="#16a34a"></os-icon>
-                  <span class="text-green-700">${serverInfo.server_name} ready</span>
+                <div class="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer transition-colors"
+                     @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                     @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                  <os-icon name="check" size="12" color="var(--app-console-success)"></os-icon>
+                  <span style="color: var(--statusbar-foreground);">${serverInfo.server_name} ready</span>
                 </div>
               `;
             }
 
             // Not installed state
             return html`
-              <div class="flex items-center gap-2 px-2 py-0.5 rounded bg-yellow-50 border border-[#d0d7de]">
-                <os-icon name="circle-dot" size="12" color="#ca8a04"></os-icon>
-                <span class="text-yellow-700">${serverInfo.server_name} not installed - click to install</span>
+              <div class="flex items-center gap-1.5 px-2 py-0.5 cursor-pointer transition-colors"
+                     @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                     @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                <os-icon name="circle-dot" size="12" color="var(--app-console-warning)"></os-icon>
+                <span style="color: var(--statusbar-foreground);">${serverInfo.server_name} not installed</span>
                 <button
-                  class="ml-1 px-2 py-0.5 text-xs bg-[#0969da] text-white rounded hover:bg-[#0860ca] transition-colors"
-                  @click=${() => this.installLspServer(serverInfo.language_id)}>
-                  Install Now
+                  class="ml-1 px-2 py-0.5 text-xs rounded transition-colors"
+                  style="background-color: var(--app-button-background); color: var(--app-button-foreground);"
+                  @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-hover)'}
+                  @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-background)'}
+                  @click=${(e: Event) => { e.stopPropagation(); this.installLspServer(serverInfo.language_id); }}>
+                  Install
                 </button>
               </div>
             `;
@@ -449,19 +472,27 @@ export class StatusBar extends TailwindElement() {
         <!-- Right section -->
         <div class="flex items-center gap-3">
           ${this.fileOpen
-            ? html`<div class="flex items-center gap-1 hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors font-mono">
-                <span>Ln ${this.cursorLine}, Col ${this.cursorCol}</span>
+            ? html`<div class="flex items-center gap-1 px-2 py-0.5 rounded cursor-pointer transition-colors font-mono"
+                        @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+                        @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+                <span style="color: var(--statusbar-foreground);">Ln ${this.cursorLine}, Col ${this.cursorCol}</span>
               </div>`
             : ''}
 
-          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-            ${this.spaces} spaces
+          <div class="px-2 py-0.5 rounded cursor-pointer transition-colors"
+               @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+               @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            <span style="color: var(--statusbar-foreground);">${this.spaces} spaces</span>
           </div>
-          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-            ${this.encoding.toUpperCase()}
+          <div class="px-2 py-0.5 rounded cursor-pointer transition-colors"
+               @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+               @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            <span style="color: var(--statusbar-foreground);">${this.encoding.toUpperCase()}</span>
           </div>
-          <div class="hover:bg-[#eaeef2] hover:text-[#24292f] px-2 py-0.5 rounded cursor-pointer transition-colors">
-            ${this.lineEnding}
+          <div class="px-2 py-0.5 rounded cursor-pointer transition-colors"
+               @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--statusbar-hover-background)'}
+               @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            <span style="color: var(--statusbar-foreground);">${this.lineEnding}</span>
           </div>
         </div>
       </div>

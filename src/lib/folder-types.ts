@@ -67,24 +67,51 @@ export function detectFolderType(folderName: string, folderPath: string = ''): F
  * Get color for folder type (IntelliJ-style)
  * Only folders NOT committed to git get special coloring.
  * Background colors are subtle tints of the icon color.
+ *
+ * Colors are now CSS variables for theme support.
  */
 export function getFolderColor(type: FolderType): FolderColor {
   switch (type) {
     case 'build':
-      return { type, color: '#b35c00', iconColor: '#cc6600', bgColor: '#fff0e0' }; // Orange
+      return {
+        type,
+        color: 'var(--folder-build-color)',
+        iconColor: 'var(--folder-build-color)',
+        bgColor: 'var(--folder-build-bg)',
+      };
     case 'tmp':
-      return { type, color: '#6a6a6a', iconColor: '#8a8a8a', bgColor: '#f5f5f5' }; // Gray
+      return {
+        type,
+        color: 'var(--folder-tmp-color)',
+        iconColor: 'var(--folder-tmp-color)',
+        bgColor: 'var(--folder-tmp-bg)',
+      };
     case 'node_modules':
-      return { type, color: '#6b4c9a', iconColor: '#7c5bbf', bgColor: '#f3e8ff' }; // Purple
+      return {
+        type,
+        color: 'var(--folder-node-modules-color)',
+        iconColor: 'var(--folder-node-modules-color)',
+        bgColor: 'var(--folder-node-modules-bg)',
+      };
     case 'vcs':
-      return { type, color: '#006633', iconColor: '#008040', bgColor: '#e6f6ed' }; // Green
+      return {
+        type,
+        color: 'var(--folder-vcs-color)',
+        iconColor: 'var(--folder-vcs-color)',
+        bgColor: 'var(--folder-vcs-bg)',
+      };
     case 'ide':
-      return { type, color: '#0066cc', iconColor: '#0078d4', bgColor: '#e6f2ff' }; // Blue
+      return {
+        type,
+        color: 'var(--folder-ide-color)',
+        iconColor: 'var(--folder-ide-color)',
+        bgColor: 'var(--folder-ide-bg)',
+      };
     case 'root':
-      return { type, color: '#5a5a5a', iconColor: '#c9a228', bgColor: 'transparent' };
+      return { type, color: 'var(--project-generic)', iconColor: 'var(--project-generic)', bgColor: 'transparent' };
     case 'source':
     default:
-      return { type, color: '#5a5a5a', iconColor: '#5a5a5a', bgColor: 'transparent' };
+      return { type, color: 'var(--app-foreground)', iconColor: 'var(--app-foreground)', bgColor: 'transparent' };
   }
 }
 

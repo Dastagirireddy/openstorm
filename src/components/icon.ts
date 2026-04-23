@@ -2,7 +2,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { LitElement, svg, css, html } from 'lit';
 
 // Import icons individually (tree-shakeable)
-import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FolderOpen, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X } from 'lucide';
+import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FolderOpen, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus } from 'lucide';
 
 const iconMap: Record<string, any> = {
   'play': Play,
@@ -44,15 +44,17 @@ const iconMap: Record<string, any> = {
   'server': Server,
   'terminal': Terminal,
   'x': X,
+  'plus': Plus,
 };
 
 // OpenStorm brand logo - modern minimalist monkey face
 // Monkey = clever, problem-solver, agile, playful creativity
+// Uses CSS variable for theme-aware brand color
 function OpenStormLogo(): ReturnType<typeof svg> {
   return svg`
     <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
       <!-- Outer rounded square background -->
-      <rect x="2" y="2" width="44" height="44" rx="10" fill="#5b47c9"/>
+      <rect x="2" y="2" width="44" height="44" rx="10" fill="var(--brand-primary)"/>
       <!-- Monkey face (heart-shaped head) -->
       <path d="M24 36c6 0 10-5 10-10V20c0-4-4-7-10-7s-10 3-10 7v6c0 5 4 10 10 10z" stroke="white" stroke-width="2.5" fill="none"/>
       <!-- Ears (circles on sides) -->
@@ -181,8 +183,8 @@ export class OpenStormLogoIcon extends LitElement {
         xmlns="http://www.w3.org/2000/svg"
         style="display: block;"
       >
-        <!-- Outer rounded square background -->
-        <rect x="2" y="2" width="44" height="44" rx="10" fill="#5b47c9"/>
+        <!-- Outer rounded square background with theme-aware color -->
+        <rect x="2" y="2" width="44" height="44" rx="10" fill="var(--brand-primary)"/>
         <!-- Monkey face (heart-shaped head) -->
         <path d="M24 36c6 0 10-5 10-10V20c0-4-4-7-10-7s-10 3-10 7v6c0 5 4 10 10 10z" stroke="white" stroke-width="2.5" fill="none"/>
         <!-- Ears (circles on sides) -->

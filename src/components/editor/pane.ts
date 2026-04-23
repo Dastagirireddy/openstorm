@@ -1,404 +1,65 @@
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
-import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, gutter, GutterMarker, Decoration, gutterLineClass } from '@codemirror/view';
-import { EditorState, EditorSelection, StateField, StateEffect, RangeSetBuilder } from '@codemirror/state';
+import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, Decoration } from '@codemirror/view';
+import { EditorState, EditorSelection, StateEffect } from '@codemirror/state';
+import { indentUnit } from '@codemirror/language';
 import { defaultKeymap, history, historyKeymap, undo, redo } from '@codemirror/commands';
-import { bracketMatching, indentOnInput, foldKeymap, syntaxHighlighting, HighlightStyle, indentUnit } from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
+import { bracketMatching, indentOnInput, foldKeymap } from '@codemirror/language';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
-import { Facet } from '@codemirror/state';
-
-// Language Imports
-import { rust } from '@codemirror/lang-rust';
-import { javascript } from '@codemirror/lang-javascript';
-import { go } from '@codemirror/lang-go';
-import { python } from '@codemirror/lang-python';
-import { cpp } from '@codemirror/lang-cpp';
-import { html as htmlLang } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { json } from '@codemirror/lang-json';
-import { markdown } from '@codemirror/lang-markdown';
-import { yaml } from '@codemirror/lang-yaml';
-import { java } from '@codemirror/lang-java';
-import { sql } from '@codemirror/lang-sql';
-import { php } from '@codemirror/lang-php';
 
 import { TailwindElement } from '../../tailwind-element.js';
 import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
 import { getFileExtension } from '../../lib/file-icons.js';
+import { dispatch } from '../../lib/events.js';
 import type { EditorTab } from '../../lib/file-types.js';
 import type { BreakpointCondition } from '../conditional-breakpoint-dialog.js';
+import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
+
+// Import extracted editor modules
+import {
+  getSyntaxHighlighting,
+  getLanguageExtension,
+  detectIndentUnit,
+  getLanguageId,
+} from '../../lib/editor/editor-syntax.js';
+import {
+  type Breakpoint,
+  breakpointField,
+  debugLineField,
+  addBreakpointEffect,
+  removeBreakpointEffect,
+  setBreakpointsEffect,
+  setDebugLineEffect,
+  setDebugModeEffect,
+  clearInlineValueEffect,
+  setInlineValueEffect,
+  BreakpointManager,
+} from '../../lib/editor/editor-breakpoints.js';
+import {
+  lspCompletionSource,
+  lspHoverTooltip,
+  debugHoverTooltip,
+  notifyLspDocumentOpen,
+  notifyLspDocumentChange,
+  handleGoToDefinition,
+  checkDefinitionAtPosition,
+} from '../../lib/editor/editor-lsp.js';
 import {
   getCompletions,
   getHover,
   getDefinition,
-  notifyDocumentOpened,
-  notifyDocumentChanged,
-  notifyDocumentClosed,
   completionKindToType,
-  getCompletionIcon,
   formatHoverContent,
   pathToFileUri,
+  notifyDocumentOpened,
+  notifyDocumentChanged,
 } from '../../lib/lsp-client.js';
 import {
-  autocompletion,
-  CompletionContext,
-  CompletionResult,
-  Completion,
-} from '@codemirror/autocomplete';
-import { hoverTooltip } from '@codemirror/view';
-
-/**
- * IntelliJ Classic Light Theme Constants
- */
-const IJ_COLORS = {
-  background: '#ffffff',
-  gutterBackground: '#f0f0f0',
-  gutterBorder: '#d1d1d1',
-  activeLine: '#e4ffaf7a', 
-  selection: '#2142832e',
-  lineNumbers: '#adadad',
-};
-
-const intellijLightHighlight = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier], color: '#0033b3', fontWeight: 'bold' },
-  { tag: [t.definition(t.variableName), t.function(t.variableName)], color: '#00627a' },
-  { tag: t.propertyName, color: '#871094' },
-  { tag: t.string, color: '#067d17' },
-  { tag: t.number, color: '#1750eb' },
-  { tag: [t.comment, t.lineComment], color: '#8c8c8c', fontStyle: 'italic' },
-  { tag: t.meta, color: '#9e880d' },
-  { tag: t.operator, color: '#000000' },
-  { tag: t.bracket, color: '#000000' }
-]);
-
-/**
- * Breakpoint interface
- */
-export interface Breakpoint {
-  id: number;
-  sourcePath: string;
-  line: number;
-  enabled: boolean;
-  condition?: string;
-  hitCondition?: string;
-  logMessage?: string;
-  verified: boolean;
-}
-
-/**
- * State field for tracking breakpoints in the editor
- */
-const breakpointField = StateField.define<Set<number>>({
-  create: () => new Set<number>(),
-  update(value, transaction) {
-    for (const e of transaction.effects) {
-      if (e.is(addBreakpointEffect)) {
-        const newValue = new Set(value);
-        newValue.add(e.value);
-        return newValue;
-      }
-      if (e.is(removeBreakpointEffect)) {
-        const newValue = new Set(value);
-        newValue.delete(e.value);
-        return newValue;
-      }
-      if (e.is(setBreakpointsEffect)) {
-        return new Set(e.value);
-      }
-    }
-    return value;
-  },
-});
-
-/**
- * State effects for breakpoint operations
- */
-const addBreakpointEffect = StateEffect.define<number>();
-const removeBreakpointEffect = StateEffect.define<number>();
-const setBreakpointsEffect = StateEffect.define<number[]>();
-
-/**
- * Gutter marker for breakpoints
- */
-class BreakpointMarker extends GutterMarker {
-  constructor(
-    private readonly isDebugMode: boolean = false,
-    private readonly isCurrentLine: boolean = false
-  ) {
-    super();
-  }
-
-  toDOM() {
-    const div = document.createElement('div');
-    if (this.isCurrentLine) {
-      div.className = 'cm-breakpoint-dot cm-breakpoint-current';
-    } else if (this.isDebugMode) {
-      div.className = 'cm-breakpoint-dot cm-breakpoint-debug';
-    } else {
-      div.className = 'cm-breakpoint-dot';
-    }
-    return div;
-  }
-}
-
-const breakpointMarker = new BreakpointMarker();
-const breakpointDebugMarker = new BreakpointMarker(true);
-const breakpointCurrentMarker = new BreakpointMarker(false, true);
-
-/**
- * Gutter marker for debug line highlighting (when no breakpoint present)
- * This creates a full-width background highlight in the gutter
- */
-class DebugLineGutterMarker extends GutterMarker {
-  toDOM() {
-    const div = document.createElement('div');
-    div.className = 'cm-debug-line-gutter-marker';
-    return div;
-  }
-}
-
-const debugLineGutterMarker = new DebugLineGutterMarker();
-
-/**
- * Inline value display during debugging
- * Shows variable values as ghost text after the variable name
- */
-const inlineValueField = StateField.define<Map<number, { line: number; column: number; value: string }>>({
-  create() {
-    return new Map();
-  },
-  update(value, transaction) {
-    for (const effect of transaction.effects) {
-      if (effect.is(setInlineValueEffect)) {
-        const newMap = new Map(value);
-        const key = `${effect.value.line}-${effect.value.column}`;
-        newMap.set(key, effect.value);
-        return newMap;
-      }
-      if (effect.is(clearInlineValueEffect)) {
-        return new Map();
-      }
-    }
-    return value;
-  },
-});
-
-const setInlineValueEffect = StateEffect.define<{ line: number; column: number; value: string }>();
-const clearInlineValueEffect = StateEffect.define();
-
-/**
- * Inline value decoration
- */
-function inlineValueDecorations() {
-  return EditorView.decorations.compute(['doc', inlineValueField], (state) => {
-    const inlineValues = state.field(inlineValueField);
-    const decorations: Range<Decoration>[] = [];
-
-    for (const [key, data] of inlineValues.entries()) {
-      const line = state.doc.line(data.line);
-      if (line && data.column < line.length) {
-        const pos = line.from + data.column;
-        decorations.push(
-          Decoration.mark({
-            class: 'cm-inline-value-after',
-            attributes: { 'data-value': data.value },
-          }).range(pos, pos)
-        );
-      }
-    }
-
-    return Decoration.set(decorations);
-  });
-}
-
-/**
- * Gutter extension for breakpoints - must be before lineNumbers() to render first
- */
-function breakpointGutter(onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void) {
-  return [
-    breakpointField,
-    debugModeField,
-    debugLineField,
-    // Combined gutter that handles both breakpoints and debug line highlighting
-    gutter({
-      class: 'cm-breakpoint-gutter',
-      lineMarker: (view, line) => {
-        const breakpoints = view.state.field(breakpointField);
-        const isDebugMode = view.state.field(debugModeField);
-        const currentLine = view.state.field(debugLineField);
-        const lineNum = view.state.doc.lineAt(line.from).number;
-        const isDebugLine = currentLine === lineNum;
-        const hasBreakpoint = breakpoints.has(lineNum);
-
-        // If on debug line but no breakpoint, return a marker for gutter highlighting
-        if (isDebugLine && !hasBreakpoint) {
-          return debugLineGutterMarker;
-        }
-
-        if (hasBreakpoint) {
-          // If this breakpoint is on the current debug line, use special highlighting
-          if (isDebugLine) {
-            return breakpointCurrentMarker;
-          }
-          return isDebugMode ? breakpointDebugMarker : breakpointMarker;
-        }
-        return null;
-      },
-      lineMarkerChange: (update) => {
-        return update.transactions.some(t => t.effects.some(e =>
-          e.is(addBreakpointEffect) || e.is(removeBreakpointEffect) || e.is(setBreakpointsEffect) || e.is(setDebugModeEffect) || e.is(setDebugLineEffect)
-        ));
-      },
-      domEventHandlers: {
-        mousedown(view, line, event) {
-          const lineNum = view.state.doc.lineAt(line.from).number;
-          const breakpoints = view.state.field(breakpointField);
-          const hasBreakpoint = breakpoints.has(lineNum);
-
-          // Left click (button 0) - toggle breakpoint
-          if (event.button === 0) {
-            view.dispatch({
-              effects: hasBreakpoint
-                ? removeBreakpointEffect.of(lineNum)
-                : addBreakpointEffect.of(lineNum)
-            });
-
-            if (onBreakpointClick) onBreakpointClick(lineNum, hasBreakpoint);
-            return true;
-          }
-          return false;
-        },
-        contextmenu(view, line) {
-          const lineNum = view.state.doc.lineAt(line.from).number;
-          const breakpoints = view.state.field(breakpointField);
-          const hasBreakpoint = breakpoints.has(lineNum);
-
-          // Only show context menu if there's a breakpoint
-          if (hasBreakpoint && onBreakpointClick) {
-            event.preventDefault();
-            // Pass negative line number to indicate "edit" mode vs "toggle" mode
-            onBreakpointClick(-lineNum, true);
-            return true;
-          }
-          return false;
-        }
-      },
-    }),
-    EditorView.baseTheme({
-      '.cm-breakpoint-gutter': {
-        width: '28px',
-        minWidth: '28px',
-        cursor: 'pointer',
-      },
-      '.cm-breakpoint-gutter .cm-breakpoint-dot': {
-        display: 'block',
-        width: '14px',
-        height: '14px',
-        borderRadius: '50%',
-        backgroundColor: '#e53935',
-        border: '1px solid #b71c1c',
-        margin: '4px auto',
-        transition: 'all 0.2s ease',
-      },
-      '.cm-breakpoint-gutter .cm-breakpoint-dot.cm-breakpoint-debug': {
-        backgroundColor: '#ff5252',
-        border: '2px solid #ffffff',
-        boxShadow: '0 0 0 1px #e53935, 0 0 0 3px rgba(229, 57, 53, 0.3)',
-        transform: 'scale(1.1)',
-      },
-      '.cm-breakpoint-gutter .cm-breakpoint-dot.cm-breakpoint-current': {
-        backgroundColor: '#ffd700',
-        border: '2px solid #ffffff',
-        boxShadow: '0 0 0 1px #ffb300, 0 0 0 3px rgba(255, 193, 7, 0.4)',
-        transform: 'scale(1.2)',
-      },
-      '.cm-breakpoint-gutter .cm-breakpoint-dot:hover': {
-        backgroundColor: '#ff5252',
-      },
-      '.cm-debug-line': {
-        backgroundColor: 'rgba(255, 249, 196, 0.5) !important',
-      },
-      '.cm-debug-line-gutter-marker': {
-        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
-        width: '100%',
-        height: '100%',
-      },
-      '.cm-debug-line-gutter': {
-        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
-      },
-      '.cm-gutterElement.cm-debug-line-gutter': {
-        backgroundColor: 'rgba(255, 245, 157, 0.4) !important',
-        color: '#000000 !important',
-        fontWeight: 'bold',
-      },
-      '.cm-inline-value-after': {
-        display: 'inline-block',
-        color: '#8b5cf6',
-        fontSize: '12px',
-        fontStyle: 'italic',
-        opacity: '0.7',
-        marginLeft: '8px',
-        cursor: 'pointer',
-      },
-      '.cm-inline-value-after::after': {
-        content: 'attr(data-value)',
-        color: '#8b5cf6',
-      },
-    }),
-  ];
-}
-
-/**
- * State field for current debug line highlighting
- */
-const debugLineField = StateField.define<number | null>({
-  create: () => null,
-  update(value, transaction) {
-    for (const e of transaction.effects) {
-      if (e.is(setDebugLineEffect)) {
-        return e.value;
-      }
-    }
-    return value;
-  },
-});
-
-/**
- * State field for debug mode
- */
-const debugModeField = StateField.define<boolean>({
-  create: () => false,
-  update(value, transaction) {
-    for (const e of transaction.effects) {
-      if (e.is(setDebugModeEffect)) {
-        return e.value;
-      }
-    }
-    return value;
-  },
-});
-
-const setDebugLineEffect = StateEffect.define<number | null>();
-const setDebugModeEffect = StateEffect.define<boolean>();
-
-function debugLineHighlight() {
-  return [
-    debugLineField,
-    debugModeField,
-    EditorView.decorations.compute(['doc', debugLineField], (state) => {
-      const line = state.field(debugLineField);
-      if (line === null) return Decoration.none;
-
-      const lineInfo = state.doc.line(line);
-      if (!lineInfo) return Decoration.none;
-
-      return Decoration.set([
-        Decoration.line({ class: 'cm-debug-line' }).range(lineInfo.from),
-      ]);
-    }),
-  ];
-}
+  getEditorTheme,
+  getLineNumbers,
+} from '../../lib/editor/editor-theme.js';
+import { getDebugService } from '../../lib/services/debug-service.js';
+import { getCommonExtensions } from '../../lib/editor/editor-extensions.js';
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
@@ -406,6 +67,7 @@ export class EditorPane extends TailwindElement() {
   @state() activeTabId: string = '';
   @state() private isDebugging = false;
   @state() private currentDebugLine: number | null = null;
+  @state() private debugState: 'running' | 'stopped' | 'terminated' = 'terminated';
 
   // Track breakpoints per file path
   private breakpoints: Map<string, Breakpoint[]> = new Map();
@@ -423,577 +85,6 @@ export class EditorPane extends TailwindElement() {
   private _lastCheckedPosition: string | null = null;
   private _lastHasDefinition: boolean = false;
 
-  /**
-   * Detects the indentation unit from file content
-   * Analyzes the first 100 lines to find the most common indentation
-   * Falls back to language-specific defaults for empty files
-   */
-  private detectIndentUnit(content: string, path?: string): string {
-    // For empty files, use language-specific defaults
-    if (!content || !content.trim()) {
-      if (path) {
-        const ext = getFileExtension(path).toLowerCase();
-        // JS/TS typically use 2 spaces
-        if (['ts', 'tsx', 'js', 'jsx', 'mjs'].includes(ext)) {
-          return '  ';
-        }
-        // Go, Rust, Python typically use 4 spaces (or tabs for Go)
-        if (['go', 'rs', 'py'].includes(ext)) {
-          return '    ';
-        }
-      }
-      // Default to 4 spaces
-      return '    ';
-    }
-
-    const lines = content.split('\n').slice(0, 100);
-    const indentCounts = new Map<number, number>();
-
-    for (const line of lines) {
-      if (!line.trim()) continue; // Skip empty lines
-
-      const match = line.match(/^(\t+)/);
-      if (match && match[1].length > 0) {
-        // Tab indentation
-        indentCounts.set(1, (indentCounts.get(1) || 0) + 1);
-        continue;
-      }
-
-      const spaces = line.match(/^( +)/);
-      if (spaces) {
-        const count = spaces[1].length;
-        // Count common indent sizes (2, 4, 8 spaces)
-        if (count >= 2) {
-          const normalized = count >= 8 ? 8 : count >= 4 ? 4 : 2;
-          indentCounts.set(normalized, (indentCounts.get(normalized) || 0) + 1);
-        }
-      }
-    }
-
-    // Find most common indent size
-    let maxCount = 0;
-    let indentSize = 4; // Default to 4 spaces
-
-    for (const [size, count] of indentCounts) {
-      if (count > maxCount) {
-        maxCount = count;
-        indentSize = size;
-      }
-    }
-
-    // Return indent unit string
-    if (indentSize === 1) return '\t';
-    return ' '.repeat(indentSize);
-  }
-
-  /**
-   * Maps file paths to CodeMirror language extensions
-   */
-  private getLanguageExtension(path: string) {
-    const ext = getFileExtension(path).toLowerCase();
-    switch (ext) {
-      case 'rs': return rust();
-      case 'ts': case 'tsx': case 'js': case 'jsx': case 'mjs': return javascript();
-      case 'go': return go();
-      case 'py': return python();
-      case 'c': case 'cpp': case 'cc': case 'cxx': case 'h': case 'hpp': case 'hxx': return cpp();
-      case 'html': case 'htm': case 'xhtml': return htmlLang();
-      case 'css': case 'scss': case 'sass': case 'less': return css();
-      case 'json': return json();
-      case 'md': case 'markdown': return markdown();
-      case 'yaml': case 'yml': return yaml();
-      case 'java': return java();
-      case 'sql': return sql();
-      case 'php': return php();
-      default: return javascript();
-    }
-  }
-
-  /**
-   * Generates the core extension stack for IntelliJ look and feel
-   * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
-   */
-  private getCommonExtensions(indentUnitStr: string = "    ") {
-    return [
-      EditorState.tabSize.of(4),
-      indentUnit.of(indentUnitStr),
-      inlineValueField,
-      inlineValueDecorations(),
-      ...breakpointGutter((lineNum, wasThere) => {
-        const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-        if (!activeTab) return;
-
-        // Negative lineNum indicates right-click (edit mode)
-        if (lineNum < 0) {
-          const actualLine = Math.abs(lineNum);
-          const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
-          const bp = fileBreakpoints.find(b => b.line === actualLine);
-          if (bp) {
-            this.showConditionalDialog(activeTab.path, actualLine, bp);
-          }
-          return;
-        }
-
-        if (wasThere) {
-          const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
-          const bp = fileBreakpoints.find(b => b.line === lineNum);
-          if (bp) this._removeBreakpoint(activeTab.path, bp);
-        } else {
-          // Show conditional dialog for new breakpoint
-          this.pendingBreakpointLine = lineNum;
-          this.showConditionalDialog(activeTab.path, lineNum, null, true);
-        }
-      }),
-      lineNumbers(),
-      highlightActiveLineGutter(),
-      ...customFoldGutter(),
-      ...debugLineHighlight(),
-      history(),
-      drawSelection(),
-      dropCursor(),
-      highlightActiveLine(),
-      bracketMatching(),
-      indentOnInput(),
-      // indentationMarkers with "fullScope" tracks both tabs and spaces
-      indentationMarkers({
-        highlightActiveBlock: true,
-        markerType: "fullScope",
-        thickness: 1,
-        activeThickness: 1,
-        colors: {
-          light: '#d0d0d0',
-          dark: '#505050',
-          activeLight: '#b0b0b0',
-          activeDark: '#707070',
-        },
-      }),
-      syntaxHighlighting(intellijLightHighlight),
-      // Keymap order matters - historyKeymap must come before defaultKeymap
-      // so undo/redo takes precedence
-      // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z
-      keymap.of([
-        {
-          key: 'Mod-z',
-          run: (view) => {
-            console.log('[Editor] Undo key pressed (Mod-z)');
-            return undo(view);
-          },
-        },
-        {
-          key: 'Mod-y',
-          run: (view) => {
-            console.log('[Editor] Redo key pressed (Mod-y)');
-            return redo(view);
-          },
-        },
-        {
-          key: 'Mod-Shift-z',
-          run: (view) => {
-            console.log('[Editor] Redo key pressed (Mod-Shift-z)');
-            return redo(view);
-          },
-        },
-        ...historyKeymap,
-        ...defaultKeymap,
-        ...foldKeymap,
-      ]),
-
-      // LSP Intellisense
-      autocompletion({
-        override: [this._lspCompletionSource.bind(this)],
-        activateOnTyping: true,
-        activateOnTypingDelay: 50,
-      }),
-      // Debug hover (shown during debugging when stopped)
-      hoverTooltip(this._debugHoverTooltip.bind(this), {
-        hoverTime: 300,
-      }),
-      // LSP hover (shown when not debugging)
-      hoverTooltip(this._lspHoverTooltip.bind(this), {
-        hoverTime: 500,
-      }),
-
-      // Theme matching IntelliJ Classic
-      EditorView.theme({
-        "&": {
-          height: "100%",
-          fontSize: "15px",
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          backgroundColor: IJ_COLORS.background,
-          direction: "ltr !important",
-        },
-        ".cm-content": {
-          padding: "10px 0",
-          direction: "ltr !important",
-          caretColor: "#000000",
-          cursor: "text",
-        },
-        // Use 2px padding to match library's expected padding for indent markers
-        ".cm-line": {
-          padding: "0 2px",
-          cursor: "text",
-        },
-        ".cm-gutters": {
-          backgroundColor: IJ_COLORS.gutterBackground,
-          color: IJ_COLORS.lineNumbers,
-          borderRight: `1px solid ${IJ_COLORS.gutterBorder}`,
-          border: "none",
-          direction: "ltr !important",
-        },
-        ".cm-breakpoint-gutter": {
-          pointerEvents: "auto",
-          cursor: "pointer",
-        },
-        ".cm-activeLine": { backgroundColor: IJ_COLORS.activeLine },
-        ".cm-activeLineGutter": { backgroundColor: "#d4ebf7", color: "#000000" },
-        ".cm-lineNumbers .cm-gutterElement": {
-          padding: "0 8px 0 12px",
-          minWidth: "40px"
-        },
-        ".cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
-        "&.cm-focused .cm-selectionBackground": { backgroundColor: IJ_COLORS.selection },
-        ".cm-cursor": { borderLeft: "2px solid #000000" },
-        // Debug hover tooltip styling
-        ".debug-hover-tooltip": {
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          fontSize: "12px",
-          maxWidth: "400px",
-          minWidth: "200px",
-          padding: "8px 12px",
-          background: "#ffffff",
-          border: "1px solid #d0d0d0",
-          borderRadius: "6px",
-          boxShadow: "0 4px 16px rgba(0, 0, 0, 0.15)",
-          zIndex: "1000",
-        },
-        ".debug-hover-header": {
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          marginBottom: "6px",
-          paddingBottom: "6px",
-          borderBottom: "1px solid #e5e7eb",
-        },
-        ".debug-hover-name": {
-          fontWeight: "600",
-          color: "#5b47c9",
-        },
-        ".debug-hover-type": {
-          fontSize: "11px",
-          color: "#8b5cf6",
-          fontStyle: "italic",
-        },
-        ".debug-hover-value": {
-          color: "#0366d6",
-          wordBreak: "break-word",
-          marginBottom: "8px",
-        },
-        ".debug-hover-add-watch": {
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-          padding: "4px 8px",
-          fontSize: "11px",
-          background: "#f3f4f6",
-          border: "none",
-          borderRadius: "4px",
-          cursor: "pointer",
-          color: "#374151",
-          transition: "all 0.15s",
-        },
-        ".debug-hover-add-watch:hover": {
-          background: "#e5e7eb",
-          color: "#5b47c9",
-        },
-        // Pointer cursor when hovering over a definition (Cmd+Click target)
-        "&.cm-has-definition .cm-content, &.cm-has-definition .cm-line": {
-          cursor: "pointer !important",
-        },
-        // Autocomplete styling - IntelliJ style
-        ".cm-tooltip-autocomplete": {
-          fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
-          fontSize: "13px",
-          padding: "0",
-          backgroundColor: "#ffffff",
-          border: "1px solid #c7c7c7",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.2)",
-          borderRadius: "4px",
-          overflow: "hidden",
-        },
-        ".cm-tooltip-autocomplete ul": {
-          padding: "4px 0",
-          margin: "0",
-        },
-        ".cm-tooltip-autocomplete ul li": {
-          padding: "4px 12px",
-          margin: "0",
-          cursor: "default",
-          display: "flex",
-          alignItems: "center",
-          gap: "8px",
-          color: "#000000",
-        },
-        ".cm-tooltip-autocomplete ul li[aria-selected]": {
-          backgroundColor: "#4f46e5",
-          color: "#ffffff !important",
-        },
-        ".cm-tooltip-autocomplete ul li[aria-selected] .cm-completionLabel, .cm-tooltip-autocomplete ul li[aria-selected] .cm-completionDetail": {
-          color: "#ffffff !important",
-        },
-        // Completion item type icons/colors
-        ".cm-tooltip-autocomplete .cm-completionLabel": {
-          fontWeight: "500",
-          color: "#000000",
-        },
-        ".cm-tooltip-autocomplete .cm-completionDetail": {
-          color: "#666666",
-          marginLeft: "8px",
-          fontSize: "12px",
-        },
-        // Type-specific colors (matching IntelliJ)
-        ".cm-tooltip-autocomplete .cm-completionIcon-method, .cm-tooltip-autocomplete .cm-completionIcon-function": {
-          color: "#871094",
-        },
-        ".cm-tooltip-autocomplete .cm-completionIcon-variable, .cm-tooltip-autocomplete .cm-completionIcon-field": {
-          color: "#00627a",
-        },
-        ".cm-tooltip-autocomplete .cm-completionIcon-class, .cm-tooltip-autocomplete .cm-completionIcon-interface": {
-          color: "#0033b3",
-        },
-        ".cm-tooltip-autocomplete .cm-completionIcon-keyword": {
-          color: "#0033b3",
-        },
-        // Hover tooltip - IntelliJ style (exact match)
-        ".cm-tooltip": {
-          padding: "0",
-          maxWidth: "450px",
-          backgroundColor: "#ffffff",
-          color: "#1d1d1d",
-          fontFamily: "'Inter', system-ui, sans-serif",
-          fontSize: "12px",
-          border: "1px solid #c9c9c9",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-          borderRadius: "0",
-        },
-        ".cm-tooltip .cm-tooltip-hover": {
-          padding: "0",
-        },
-        // Top header with error message
-        ".cm-tooltip .tooltip-top-header": {
-          padding: "4px 8px",
-          display: "flex",
-          justifyContent: "space-between",
-          color: "#1d1d1d",
-        },
-        ".cm-tooltip .tooltip-top-header .error-msg": {
-          fontSize: "11px",
-          color: "#666666",
-        },
-        ".cm-tooltip .tooltip-top-header .menu-icon": {
-          color: "#888888",
-          cursor: "pointer",
-          fontSize: "14px",
-        },
-        // Quick actions bar
-        ".cm-tooltip .intellij-actions": {
-          display: "flex",
-          gap: "12px",
-          padding: "2px 8px 6px 8px",
-        },
-        ".cm-tooltip .intellij-actions .action-item": {
-          display: "flex",
-          alignItems: "center",
-          gap: "4px",
-        },
-        ".cm-tooltip .intellij-actions .action-link": {
-          color: "#2470b3",
-          cursor: "pointer",
-          fontSize: "11px",
-        },
-        ".cm-tooltip .intellij-actions .action-shortcut": {
-          color: "#909090",
-          fontSize: "10px",
-        },
-        // Divider
-        ".cm-tooltip .intellij-divider": {
-          border: "none",
-          borderTop: "1px solid #ebebeb",
-          margin: "0",
-        },
-        // Signature
-        ".cm-tooltip .tooltip-signature": {
-          padding: "8px",
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: "11px",
-        },
-        ".cm-tooltip .tooltip-signature code": {
-          color: "#1d1d1d",
-        },
-        ".cm-tooltip .tooltip-signature .keyword": {
-          color: "#871094",
-          fontWeight: "bold",
-        },
-        ".cm-tooltip .tooltip-signature .variable": {
-          color: "#1d1d1d",
-        },
-        ".cm-tooltip .tooltip-signature .type": {
-          color: "#0033b3",
-        },
-        // Availability bar
-        ".cm-tooltip .availability-bar": {
-          padding: "6px 8px",
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          color: "#595959",
-          fontSize: "11px",
-        },
-        ".cm-tooltip .availability-bar .check-icon": {
-          color: "#4fa54f",
-          fontWeight: "bold",
-          fontSize: "12px",
-        },
-        ".cm-tooltip .availability-bar .avail-text": {
-          flex: "1",
-        },
-        ".cm-tooltip .availability-bar .chevron-icon": {
-          color: "#888888",
-          fontSize: "12px",
-        },
-        // Body content
-        ".cm-tooltip .tooltip-body": {
-          padding: "8px",
-          lineHeight: "1.5",
-          fontSize: "11px",
-          color: "#333333",
-        },
-        ".cm-tooltip .tooltip-body p": {
-          margin: "0 0 6px 0",
-        },
-        ".cm-tooltip .tooltip-body p:last-child": {
-          margin: "0",
-        },
-        ".cm-tooltip .tooltip-body code": {
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: "10px",
-          backgroundColor: "#f5f5f5",
-          padding: "1px 4px",
-          borderRadius: "2px",
-          border: "1px solid #e8e8e8",
-        },
-        ".cm-tooltip .tooltip-body pre": {
-          backgroundColor: "#f9f9f9",
-          border: "1px solid #e8e8e8",
-          borderRadius: "2px",
-          padding: "8px",
-          overflow: "auto",
-          fontSize: "10px",
-          margin: "6px 0",
-          fontFamily: "'JetBrains Mono', monospace",
-        },
-        ".cm-tooltip .tooltip-body .kw": { color: "#871094", fontWeight: "bold" },
-        ".cm-tooltip .tooltip-body .type": { color: "#0033b3" },
-        ".cm-tooltip .tooltip-body .string": { color: "#067d17" },
-        ".cm-tooltip .tooltip-body .comment": { color: "#999999", fontStyle: "italic" },
-        // Footer
-        ".cm-tooltip .tooltip-footer": {
-          padding: "8px",
-          borderTop: "1px solid #ebebeb",
-          display: "flex",
-          alignItems: "center",
-          gap: "6px",
-          fontSize: "10px",
-        },
-        ".cm-tooltip .tooltip-footer .ts-badge": {
-          background: "#3178c6",
-          color: "white",
-          fontSize: "9px",
-          padding: "1px 3px",
-          borderRadius: "2px",
-          fontWeight: "bold",
-        },
-        ".cm-tooltip .tooltip-footer .footer-meta": {
-          color: "#888888",
-        },
-        ".cm-tooltip .tooltip-footer .mdn-link": {
-          color: "#2470b3",
-          textDecoration: "none",
-          marginLeft: "auto",
-        },
-        ".cm-tooltip .tooltip-footer .mdn-link:hover": {
-          textDecoration: "underline",
-        },
-      }),
-
-      // Listen for changes and cursor position updates
-      EditorView.updateListener.of((update: ViewUpdate) => {
-        if (update.docChanged) {
-          const content = update.state.doc.toString();
-          this._handleContentChange(content);
-          this._notifyDocumentChanged(content);
-        }
-        // Track cursor position per tab on selection changes
-        if (update.selectionSet) {
-          const pos = update.state.selection.main.head;
-          const line = update.state.doc.lineAt(pos);
-          const column = pos - line.from;
-
-          // Update cursor position in the active tab
-          const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-          if (activeTab) {
-            activeTab.cursorLine = line.number;
-            activeTab.cursorCol = column + 1;
-          }
-
-          // Dispatch cursor position for status bar
-          document.dispatchEvent(new CustomEvent('cursor-position', {
-            detail: { line: line.number, column: column + 1 },
-            bubbles: true,
-            composed: true,
-          }));
-        }
-      }),
-
-      // Click handler for Ctrl+Click go-to-definition
-      EditorView.domEventHandlers({
-        click: (event, view) => {
-          if ((event.ctrlKey || event.metaKey) && view.state.selection.main) {
-            this._handleGoToDefinition(view);
-            return true;
-          }
-          return false;
-        },
-        mousemove: (event, view) => {
-          const isCtrlOrMeta = event.ctrlKey || event.metaKey;
-          if (isCtrlOrMeta) {
-            // Show pointer cursor immediately when Cmd is held
-            view.dom.classList.add('cm-has-definition');
-
-            const rect = view.dom.getBoundingClientRect();
-            const pos = view.posAtCoords({ x: event.clientX - rect.left, y: event.clientY - rect.top });
-            if (pos !== null) {
-              const line = view.state.doc.lineAt(pos);
-              const column = pos - line.from;
-              this._checkDefinitionAtPosition(view, line.number - 1, column);
-            }
-          } else {
-            view.dom.classList.remove('cm-has-definition');
-          }
-          return false;
-        },
-        keyup: (event, view) => {
-          if (event.key === 'Control' || event.key === 'Meta') {
-            view.dom.classList.remove('cm-has-definition');
-            if (this._definitionCheckTimeout) {
-              clearTimeout(this._definitionCheckTimeout);
-              this._definitionCheckTimeout = null;
-            }
-          }
-          return false;
-        },
-      })
-    ];
-  }
 
   /**
    * Check if there's a definition at the given position and update cursor style
@@ -1098,15 +189,11 @@ export class EditorPane extends TailwindElement() {
       }
 
       // Dispatch event to navigate to the definition
-      document.dispatchEvent(new CustomEvent('go-to-location', {
-        detail: {
-          uri: loc.uri,
-          line: loc.start_line,
-          column: loc.start_char,
-        },
-        bubbles: true,
-        composed: true,
-      }));
+      dispatch('go-to-location', {
+        uri: loc.uri,
+        line: loc.start_line,
+        column: loc.start_char,
+      });
     } catch (error) {
       console.error('[Editor] LSP definition error:', error);
     }
@@ -1168,11 +255,7 @@ export class EditorPane extends TailwindElement() {
     }
 
     // Also dispatch event for debug panel (if visible)
-    document.dispatchEvent(new CustomEvent('breakpoint-added', {
-      detail: breakpoint,
-      bubbles: true,
-      composed: true,
-    }));
+    dispatch('breakpoint-added', breakpoint);
   }
 
   /**
@@ -1202,11 +285,36 @@ export class EditorPane extends TailwindElement() {
     });
 
     // Dispatch event for debug panel
-    document.dispatchEvent(new CustomEvent('breakpoint-removed', {
-      detail: { id: breakpoint.id },
-      bubbles: true,
-      composed: true,
-    }));
+    dispatch('breakpoint-removed', { id: breakpoint.id });
+  }
+
+  /**
+   * Handle breakpoint click from gutter
+   */
+  private _handleBreakpointClick(lineNum: number, wasThere: boolean): void {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    // Negative lineNum indicates right-click (edit mode)
+    if (lineNum < 0) {
+      const actualLine = Math.abs(lineNum);
+      const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
+      const bp = fileBreakpoints.find(b => b.line === actualLine);
+      if (bp) {
+        this.showConditionalDialog(activeTab.path, actualLine, bp);
+      }
+      return;
+    }
+
+    if (wasThere) {
+      const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
+      const bp = fileBreakpoints.find(b => b.line === lineNum);
+      if (bp) this._removeBreakpoint(activeTab.path, bp);
+    } else {
+      // Show conditional dialog for new breakpoint
+      this.pendingBreakpointLine = lineNum;
+      this.showConditionalDialog(activeTab.path, lineNum, null, true);
+    }
   }
 
   /**
@@ -1466,7 +574,7 @@ export class EditorPane extends TailwindElement() {
           try {
             await invoke("add_watch_expression", { expression: varName });
             // Notify debug panel to refresh
-            document.dispatchEvent(new CustomEvent('watches-refresh'));
+            dispatch('watches-refresh');
           } catch (err) {
             console.error("Failed to add watch:", err);
           }
@@ -1649,12 +757,12 @@ export class EditorPane extends TailwindElement() {
     const editorContainer = this.renderRoot.querySelector('#editor-container');
     if (!editorContainer) return;
 
-    const language = this.getLanguageExtension(activeTab.path);
+    const language = getLanguageExtension(activeTab.path);
     const newLanguageKey = activeTab.path.split('.').pop() || '';
     const tabChanged = this._currentTabId !== activeTab.id;
 
     // Detect indent unit from file content (or use language default for empty files)
-    const indentUnitStr = this.detectIndentUnit(activeTab.content, activeTab.path);
+    const indentUnitStr = detectIndentUnit(activeTab.content, activeTab.path);
     console.log('[Editor] Detected indent unit:', JSON.stringify(indentUnitStr), 'for file:', activeTab.path);
 
     // Check if editorView's DOM element is still in the document
@@ -1667,7 +775,12 @@ export class EditorPane extends TailwindElement() {
       }
       const state = EditorState.create({
         doc: activeTab.content,
-        extensions: [...this.getCommonExtensions(indentUnitStr), language]
+        extensions: [
+          ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
+            this._handleBreakpointClick(lineNum, wasThere);
+          }),
+          language
+        ]
       });
       this.editorView = new EditorView({
         state,
@@ -1700,7 +813,12 @@ export class EditorPane extends TailwindElement() {
         // Create state with restored cursor position
         const state = EditorState.create({
           doc: activeTab.content,
-          extensions: [...this.getCommonExtensions(indentUnitStr), language],
+          extensions: [
+            ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
+              this._handleBreakpointClick(lineNum, wasThere);
+            }),
+            language
+          ],
           selection: EditorSelection.create([EditorSelection.cursor(pos)])
         });
         this.editorView.setState(state);
@@ -1709,11 +827,7 @@ export class EditorPane extends TailwindElement() {
         this._isInitialTabLoad = true;
 
         // Dispatch cursor position immediately after tab switch
-        document.dispatchEvent(new CustomEvent('cursor-position', {
-          detail: { line: storedLine, column: storedCol },
-          bubbles: true,
-          composed: true,
-        }));
+        dispatch('cursor-position', { line: storedLine, column: storedCol });
       }
     }
   }
@@ -1735,8 +849,6 @@ export class EditorPane extends TailwindElement() {
     // Dispatch content-changed event with modified status
     this.dispatchEvent(new CustomEvent('content-changed', {
       detail: { path: activeTab.path, content, isModified },
-      bubbles: true,
-      composed: true,
     }));
   }
 
@@ -1772,7 +884,7 @@ export class EditorPane extends TailwindElement() {
 
     const languageId = languageMap[ext] || null;
     if (languageId) {
-      document.dispatchEvent(new CustomEvent('active-language-changed', { detail: { languageId } }));
+      dispatch('active-language-changed', { languageId });
       // Trigger auto-install if server is missing
       this._triggerAutoInstall(languageId);
     }
@@ -1781,11 +893,7 @@ export class EditorPane extends TailwindElement() {
   private _triggerAutoInstall(languageId: string): void {
     // Dispatch a custom event that status-bar listens for
     // This is more reliable than direct method calls
-    document.dispatchEvent(new CustomEvent('lsp-auto-install-request', {
-      detail: { languageId },
-      bubbles: true,
-      composed: true,
-    }));
+    dispatch('lsp-auto-install-request', { languageId });
   }
 
   private async _handleLspServerReady(event: Event): Promise<void> {
@@ -1886,11 +994,7 @@ export class EditorPane extends TailwindElement() {
     }
 
     // Dispatch cursor position for status bar
-    document.dispatchEvent(new CustomEvent('cursor-position', {
-      detail: { line, column },
-      bubbles: true,
-      composed: true,
-    }));
+    dispatch('cursor-position', { line, column });
 
     console.log('[Editor] Restored cursor to line', line, 'col', column);
   }
@@ -1926,11 +1030,7 @@ export class EditorPane extends TailwindElement() {
     }
     console.log('[Editor] Sending', allBreakpoints.length, 'breakpoints to debug panel');
     for (const bp of allBreakpoints) {
-      document.dispatchEvent(new CustomEvent('breakpoint-added', {
-        detail: bp,
-        bubbles: true,
-        composed: true,
-      }));
+      dispatch('breakpoint-added', bp);
     }
   }
 
@@ -1958,15 +1058,11 @@ export class EditorPane extends TailwindElement() {
 
           // If stopped in a different file, open it first
           if (!activeTab || activeTab.path !== normalizedTargetPath) {
-            document.dispatchEvent(new CustomEvent('go-to-location', {
-              detail: {
-                uri: targetPath.startsWith('file://') ? targetPath : `file://${targetPath}`,
-                line: topFrame.line - 1,
-                column: topFrame.column - 1,
-              },
-              bubbles: true,
-              composed: true,
-            }));
+            dispatch('go-to-location', {
+              uri: targetPath.startsWith('file://') ? targetPath : `file://${targetPath}`,
+              line: topFrame.line - 1,
+              column: topFrame.column - 1,
+            });
           }
 
           // Wait for file to open (if needed), then highlight the line
