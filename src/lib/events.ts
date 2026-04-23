@@ -1,6 +1,6 @@
 /**
  * Event Utilities
- * Simplified event creation and dispatching
+ * Simplified creation and dispatching of custom events
  */
 
 /**

@@ -1,7 +1,7 @@
 /**
  * Hover Tooltip - Global LSP hover tooltip component
  *
- * Displays LSP hover information using pre-rendered HTML from backend
+ * Displays LSP hover information using markdown-it for rendering
  * Positioned absolutely based on cursor location
  */
 
@@ -9,31 +9,13 @@ import { html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../tailwind-element.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import MarkdownIt from 'markdown-it';
 
-/**
- * Apply syntax highlighting to HTML content
- * Highlights code patterns within text content (not inside existing tags)
- */
-function highlightCodeInHtml(html: string): string {
-  // Don't process if no code-like patterns
-  if (!html.match(/\b(fn|let|const|use|impl|struct|trait|pub|crate|mod|if|else|for|while|match|return|async|await|mut|ref|dyn|where|Self|Option|Result|Vec|HashMap|String|Box|Arc|Rc|Ref|RefCell|println|writeln|format|unwrap|expect|unwrap_or|unwrap_or_else|unwrap_err|unwrap_or_default)\b/)) {
-    return html;
-  }
-
-  // Keywords
-  html = html.replace(/\b(fn|function|const|let|var|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|try|catch|throw|switch|case|break|continue|default|yield|static|public|private|protected|readonly|abstract|declare|module|namespace|require|keyof|infer|pub|crate|self|Self|mut|ref|dyn|where|trait|impl|struct|use|mod|unsafe|match|as|box|loop|macro_rules)\b/g, '<span class="hl-kw">$1</span>');
-
-  // Types
-  html = html.replace(/\b(string|number|boolean|any|never|unknown|Option|Result|Vec|HashMap|HashSet|BTreeMap|BTreeSet|Rc|Arc|Box|Cell|Ref|RefCell|RefMut|Mutex|MutexGuard|RwLock|Path|PathBuf|OsStr|OsString|CString|CStr|Promise|Map|Set|WeakMap|WeakSet|Symbol|BigInt|Date|RegExp|Error|JSON|Math|Console|Function|Write|stdout|stderr|stdin|File|BufReader|BufWriter|IoError|Result|None|Some|Ok|Err)\b/g, '<span class="hl-type">$1</span>');
-
-  // Function calls
-  html = html.replace(/([a-zA-Z_][a-zA-Z0-9_]*)(\(|!)/g, '<span class="hl-fn">$1</span>$2');
-
-  // Strings (simplified - won't work inside HTML attributes)
-  html = html.replace(/&quot;([^&]*?)&quot;/g, '<span class="hl-str">&quot;$1&quot;</span>');
-
-  return html;
-}
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
+});
 
 export interface HoverPosition {
   x: number;
@@ -42,8 +24,8 @@ export interface HoverPosition {
 }
 
 export interface HoverData {
-  html: string;          // Pre-rendered HTML from backend
-  contents?: string;     // Raw markdown (for debugging)
+  html: string;
+  contents?: string;
   position: HoverPosition;
   languageId?: string;
 }
@@ -54,7 +36,7 @@ export class HoverTooltip extends TailwindElement() {
   @state() private position: { x: number; y: number } = { x: 0, y: 0 };
   @state() private renderedHtml: string = '';
 
-  private tooltipRef: HTMLElement | null = null;
+  private tooltipEl: HTMLElement | null = null;
   private hideTimeout: number | null = null;
 
   connectedCallback(): void {
@@ -75,22 +57,22 @@ export class HoverTooltip extends TailwindElement() {
 
   private _handleHover = (e: Event) => {
     const customEvent = e as CustomEvent<HoverData>;
-    const { html, contents, position } = customEvent.detail;
+    const detail = customEvent.detail;
 
-    this.position = { x: position.x, y: position.y };
-    // Use pre-rendered HTML from backend, apply syntax highlighting, fall back to raw contents
-    const rawHtml = html || contents || '';
-    this.renderedHtml = highlightCodeInHtml(rawHtml);
+    this.position = { x: detail.position.x, y: detail.position.y };
+
+    // Render markdown to HTML using markdown-it
+    const markdownContent = detail.contents || detail.html || '';
+    this.renderedHtml = md.render(markdownContent);
+
     this.visible = true;
 
-    // Clear any pending hide timeout
     if (this.hideTimeout) {
       window.clearTimeout(this.hideTimeout);
       this.hideTimeout = null;
     }
 
-    // Position on next frame
-    requestAnimationFrame(() => this._positionTooltip(position));
+    requestAnimationFrame(() => this._positionTooltip(detail.position));
   };
 
   private _handleMouseMove = (e: MouseEvent) => {
@@ -131,10 +113,14 @@ export class HoverTooltip extends TailwindElement() {
     }
   }
 
-  private _positionTooltip(position: HoverPosition): void {
-    if (!this.tooltipRef) return;
+  private _setTooltipRef = (el: HTMLElement) => {
+    this.tooltipEl = el;
+  };
 
-    const tooltip = this.tooltipRef;
+  private _positionTooltip(position: HoverPosition): void {
+    if (!this.tooltipEl) return;
+
+    const tooltip = this.tooltipEl;
     const padding = 8;
 
     // Reset dimensions for measurement
@@ -177,18 +163,18 @@ export class HoverTooltip extends TailwindElement() {
   render() {
     if (!this.visible) return html``;
 
-    // Debug: log the actual rendered HTML
-    console.log('[HoverTooltip] Rendering HTML:', this.renderedHtml.substring(0, 200));
-
+    // Just render the HTML from backend
     return html`
       <div
-        ${this.tooltipRef = (el: HTMLElement) => { this.tooltipRef = el; }}
         class="hover-tooltip"
         style="position: fixed; left: ${this.position.x}px; top: ${this.position.y}px; z-index: 10000;"
         @mouseenter=${() => { if (this.hideTimeout) { window.clearTimeout(this.hideTimeout); this.hideTimeout = null; } }}
         @mouseleave=${() => { this._scheduleHide(); }}
+        ${this._setTooltipRef}
       >
-        <div class="tooltip-content">${unsafeHTML(this.renderedHtml)}</div>
+        <div class="hover-tooltip-content">
+          <div class="hover-body">${unsafeHTML(this.renderedHtml)}</div>
+        </div>
       </div>
     `;
   }
@@ -198,131 +184,139 @@ export class HoverTooltip extends TailwindElement() {
       pointer-events: auto;
     }
 
-    .tooltip-content {
-      max-width: 450px;
-      max-height: 280px;
+    .hover-tooltip-content {
+      min-width: 280px;
+      max-width: 500px;
+      max-height: 400px;
       overflow: auto;
-      padding: 8px 12px;
       border: 1px solid var(--app-input-border);
+      border-radius: 8px;
       background: var(--app-bg);
-      border-radius: 6px;
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06);
-      font-family: 'Fira Code', 'JetBrains Mono', monospace;
-      font-size: 11px;
-      line-height: 1.6;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.5;
       color: var(--app-foreground);
     }
 
-    /* Code blocks */
-    .tooltip-content .code-block {
+    /* markdown-it output styles */
+    .hover-tooltip-content p {
+      margin: 0 0 12px 0;
+    }
+
+    .hover-tooltip-content p:last-child {
+      margin: 0;
+    }
+
+    /* Code blocks (fenced code) */
+    .hover-tooltip-content pre {
       background: var(--app-toolbar-hover);
       border-radius: 4px;
-      padding: 8px 10px;
-      overflow: auto;
-      margin: 8px 0;
-      font-size: 10px;
-      line-height: 1.4;
+      padding: 10px 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+      font-size: 11px;
+      line-height: 1.5;
       border: 1px solid var(--app-input-border);
     }
 
-    .tooltip-content .code-block code {
+    .hover-tooltip-content pre code {
       background: transparent;
       padding: 0;
-      color: inherit;
       font-family: 'Fira Code', 'JetBrains Mono', monospace;
+      color: var(--app-foreground);
     }
 
-    /* Inline code pills */
-    .tooltip-content .code-pill {
+    /* Inline code */
+    .hover-tooltip-content code {
       background: var(--app-toolbar-hover);
       padding: 2px 6px;
       border-radius: 3px;
       border: 1px solid var(--app-input-border);
       color: var(--app-type);
       font-family: 'Fira Code', 'JetBrains Mono', monospace;
-      font-size: 10px;
+      font-size: 11px;
     }
 
-    /* Syntax highlighting */
-    .tooltip-content .hl-kw { color: var(--app-keyword); }
-    .tooltip-content .hl-type { color: var(--app-type); }
-    .tooltip-content .hl-str { color: var(--app-string); }
-    .tooltip-content .hl-num { color: var(--app-number); }
-    .tooltip-content .hl-bool { color: var(--app-boolean); }
-    .tooltip-content .hl-fn { color: var(--app-foreground); font-weight: 600; }
-    .tooltip-content .hl-prop { color: var(--app-foreground); font-style: italic; }
-    .tooltip-content .hl-comment { color: var(--app-disabled-foreground); font-style: italic; }
-
-    /* Paragraphs */
-    .tooltip-content p {
-      margin: 0 0 8px 0;
+    .hover-tooltip-content pre code {
+      background: transparent;
+      padding: 0;
+      border: none;
     }
-    .tooltip-content p:last-child { margin: 0; }
 
     /* Lists */
-    .tooltip-content ul {
-      margin: 8px 0;
+    .hover-tooltip-content ul,
+    .hover-tooltip-content ol {
+      margin: 10px 0;
       padding-left: 20px;
     }
-    .tooltip-content li {
-      margin-bottom: 4px;
+
+    .hover-tooltip-content li {
+      margin-bottom: 6px;
     }
 
     /* Links */
-    .tooltip-content a {
+    .hover-tooltip-content a {
       color: var(--app-button-background);
       text-decoration: none;
     }
-    .tooltip-content a:hover {
+
+    .hover-tooltip-content a:hover {
       text-decoration: underline;
     }
 
     /* Emphasis */
-    .tooltip-content strong {
+    .hover-tooltip-content strong {
       font-weight: 600;
-      color: var(--app-foreground);
-    }
-    .tooltip-content em {
-      font-style: italic;
-      color: var(--app-disabled-foreground);
     }
 
-    /* Blockquotes */
-    .tooltip-content blockquote {
-      margin: 8px 0;
-      padding: 6px 10px 6px 12px;
-      border-left: 3px solid var(--app-button-background);
-      background: var(--app-toolbar-hover);
-      border-radius: 0 4px 4px 0;
-      color: var(--app-disabled-foreground);
+    .hover-tooltip-content em {
       font-style: italic;
     }
 
     /* Headers */
-    .tooltip-content h1 {
+    .hover-tooltip-content h1,
+    .hover-tooltip-content h2,
+    .hover-tooltip-content h3,
+    .hover-tooltip-content h4 {
       font-size: 13px;
       font-weight: 600;
       margin: 10px 0 6px;
     }
-    .tooltip-content h2 {
-      font-size: 12px;
-      font-weight: 600;
-      margin: 8px 0 4px;
-    }
-    .tooltip-content h3,
-    .tooltip-content h4,
-    .tooltip-content h5,
-    .tooltip-content h6 {
-      font-size: 11px;
-      font-weight: 500;
-      margin: 6px 0 3px;
-    }
 
     /* Horizontal rule */
-    .tooltip-content hr {
+    .hover-tooltip-content hr {
       border: none;
       border-top: 1px solid var(--app-input-border);
+      margin: 12px 0;
+    }
+
+    /* Blockquotes */
+    .hover-tooltip-content blockquote {
+      border-left: 3px solid var(--app-input-border);
+      padding-left: 12px;
       margin: 10px 0;
+      color: var(--app-disabled-foreground);
+    }
+
+    /* Tables */
+    .hover-tooltip-content table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 10px 0;
+      font-size: 11px;
+    }
+
+    .hover-tooltip-content th,
+    .hover-tooltip-content td {
+      border: 1px solid var(--app-input-border);
+      padding: 6px 8px;
+      text-align: left;
+    }
+
+    .hover-tooltip-content th {
+      background: var(--app-toolbar-hover);
+      font-weight: 600;
     }
   `;
 }

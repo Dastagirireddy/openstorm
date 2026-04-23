@@ -39,8 +39,8 @@ pub struct CompletionItemInfo {
 /// Hover info for frontend
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HoverInfo {
-    pub contents: String,      // Raw markdown (for debugging)
-    pub html: String,          // Pre-rendered HTML with Tailwind classes
+    pub contents: String,  // Raw markdown
+    pub html: String,      // Pre-rendered HTML
     pub range: Option<RangeInfo>,
 }
 
@@ -243,8 +243,6 @@ pub fn get_hover(
     line: u32,
     column: u32,
 ) -> Result<Option<HoverInfo>, String> {
-    use super::markdown::markdown_to_html;
-
     let pool = get_pool().ok_or("Connection pool not initialized")?;
     let mut pool_guard = pool.lock().map_err(|e| format!("Lock error: {}", e))?;
     let client = pool_guard.get_or_create(&language_id)?;
@@ -267,9 +265,6 @@ pub fn get_hover(
                 lsp_types::HoverContents::Markup(markup) => markup.value,
             };
 
-            // Convert markdown to HTML with syntax highlighting
-            let html = markdown_to_html(&contents);
-
             let range = hover.range.map(|r| RangeInfo {
                 start_line: r.start.line,
                 start_char: r.start.character,
@@ -277,11 +272,17 @@ pub fn get_hover(
                 end_char: r.end.character,
             });
 
-            Ok(Some(HoverInfo { contents, html, range }))
+            // Send raw markdown - frontend will render with markdown-it
+            Ok(Some(HoverInfo {
+                contents,
+                html: String::new(), // Frontend renders this
+                range,
+            }))
         }
         None => Ok(None),
     }
 }
+
 
 /// Tauri command: Get definition location at position
 #[tauri::command]

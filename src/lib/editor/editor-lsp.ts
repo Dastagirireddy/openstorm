@@ -11,6 +11,7 @@
 import { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete';
 import { hoverTooltip, EditorView } from '@codemirror/view';
 import type { HoverData } from '../../components/hover-tooltip.js';
+import { dispatch } from '../events.js';
 import {
   getCompletions,
   getHover,
@@ -148,21 +149,17 @@ export function showLspHoverTooltip(
 
       const editorRect = view.dom.getBoundingClientRect();
 
-      // Emit event for global tooltip component - use pre-rendered HTML from backend
-      document.dispatchEvent(new CustomEvent('lsp-hover', {
-        detail: {
-          html: hover.html || '',
-          contents: hover.contents,  // Keep for debugging
-          position: {
-            x: coords.right,
-            y: coords.bottom,
-            editorRect,
-          },
-          languageId,
-        } as HoverData,
-        bubbles: true,
-        composed: true,
-      }));
+      // Emit event for global tooltip component
+      dispatch<HoverData>('lsp-hover', {
+        html: hover.html || '',
+        contents: hover.contents,
+        position: {
+          x: coords.right,
+          y: coords.bottom,
+          editorRect,
+        },
+        languageId,
+      });
     } catch (error) {
       console.error('LSP hover error:', error);
     }

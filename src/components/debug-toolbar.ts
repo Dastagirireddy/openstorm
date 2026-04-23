@@ -2,6 +2,7 @@ import { html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { dispatch } from "../lib/events.js";
 import { TailwindElement } from "../tailwind-element.js";
 
 export interface StackFrame {
@@ -291,11 +292,7 @@ export class DebugToolbar extends TailwindElement() {
       const sessionId = await invoke<number>("start_debug_session", { config });
       this.isDebugging = true;
       this.sessionId = sessionId;
-      document.dispatchEvent(new CustomEvent("debug-session-started", {
-        detail: { session_id: sessionId },
-        bubbles: true,
-        composed: true,
-      }));
+      dispatch("debug-session-started", { session_id: sessionId });
     } catch (error) {
       console.error("Failed to start debug session:", error);
     }

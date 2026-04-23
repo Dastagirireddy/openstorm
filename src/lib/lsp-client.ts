@@ -5,6 +5,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { dispatch } from './events.js';
 
 export interface CompletionItem {
   label: string;
@@ -17,8 +18,8 @@ export interface CompletionItem {
 }
 
 export interface HoverInfo {
-  contents: string;      // Raw markdown (for debugging)
-  html: string;          // Pre-rendered HTML with Tailwind classes
+  contents: string;  // Raw markdown
+  html: string;      // Pre-rendered HTML
   range?: {
     start_line: number;
     start_char: number;
@@ -109,11 +110,7 @@ export async function getCompletions(
         errorMsg.includes('Failed to initialize') ||
         errorMsg.includes('Missing Content-Length')) {
       console.log('[LSP] Server not available, triggering auto-install...');
-      document.dispatchEvent(new CustomEvent('lsp-server-missing', {
-        detail: { languageId, serverName: getServerDisplayName(languageId) },
-        bubbles: true,
-        composed: true,
-      }));
+      dispatch('lsp-server-missing', { languageId, serverName: getServerDisplayName(languageId) });
     } else {
       console.error('[LSP] Completion error:', error);
     }

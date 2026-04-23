@@ -279,4 +279,34 @@ Prints a formatted string to stdout"#;
         let html = markdown_to_html(markdown);
         assert!(html.contains("<p>Hello world</p>"));
     }
+
+    #[test]
+    fn test_markdown_to_html_real_rust_analyzer() {
+        // Real hover content from rust-analyzer for println!
+        let markdown = r#"```rust
+macro_rules! println
+```
+
+Prints to the standard output, with a newline. On all platforms, the newline is the LINE FEED character (`\n`/`U+000A`) alone (no additional CARRIAGE RETURN (`\r`/`U+000D`)).
+
+This macro uses the same syntax as `format!`, but writes to the standard output instead. See `std::fmt` for more information.
+
+---
+
+[MDN Documentation](https://doc.rust-lang.org/std/macro.println.html)
+
+**Performance Note:** The `println!` macro will lock the standard output on each call."#;
+
+        let html = markdown_to_html(markdown);
+        println!("\n=== Real rust-analyzer Hover HTML Output ===\n{}\n=== End HTML ===\n", html);
+
+        assert!(html.contains("<pre class=\"code-block\">"));
+        assert!(html.contains("macro_rules"));
+        assert!(html.contains("println"));
+        assert!(html.contains("<p>Prints to the standard output"));
+        assert!(html.contains("<code>"));
+        assert!(html.contains("format!"));
+        assert!(html.contains("<a href="));
+        assert!(html.contains("doc.rust-lang.org"));
+    }
 }

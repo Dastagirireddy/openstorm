@@ -1,6 +1,7 @@
 import { html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement } from "../tailwind-element.js";
+import { dispatch } from "../lib/events.js";
 
 export type GitStatus = 'synced' | 'modified' | 'behind' | 'ahead' | 'untracked';
 export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'database' | 'generic';
@@ -75,11 +76,11 @@ export class WelcomeScreen extends TailwindElement() {
   }
 
   private handleOpenFolder = (): void => {
-    document.dispatchEvent(new CustomEvent("open-folder"));
+    dispatch("open-folder", {});
   };
 
   private handleOpenFile = (): void => {
-    document.dispatchEvent(new CustomEvent("open-file"));
+    dispatch("open-file", {});
   };
 
   private handleNewProject = (): void => {
