@@ -52,7 +52,7 @@ export function getEditorTheme(): Extension {
       backgroundColor: 'var(--editor-active-line)',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'var(--app-tab-active-border, #d4ebf7)',
+      backgroundColor: 'var(--editor-active-line) !important',
       color: 'var(--app-foreground)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
