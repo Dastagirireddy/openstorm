@@ -3,6 +3,8 @@
  * Supports multiple languages via different formatting backends
  */
 
+import { dispatch } from './events.js';
+
 export interface FormatterOptions {
   tabWidth: number;
   useTabs: boolean;
@@ -49,10 +51,7 @@ const jsFormatter: LanguageFormatter = {
 
       if (!serverInfo || !serverInfo.is_installed) {
         // Dispatch event to show install prompt in status bar
-        document.dispatchEvent(new CustomEvent('lsp-server-missing', {
-          detail: { languageId, serverName: serverInfo?.server_name || `${languageId}-language-server` },
-          bubbles: true,
-        }));
+        dispatch('lsp-server-missing', { languageId, serverName: serverInfo?.server_name || `${languageId}-language-server` });
         console.warn(`[JS Formatter] ${languageId}-language-server not installed. Click "Install" in status bar.`);
         return content;
       }

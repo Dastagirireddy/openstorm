@@ -39,7 +39,8 @@ pub struct CompletionItemInfo {
 /// Hover info for frontend
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HoverInfo {
-    pub contents: String,
+    pub contents: String,  // Raw markdown
+    pub html: String,      // Pre-rendered HTML
     pub range: Option<RangeInfo>,
 }
 
@@ -271,11 +272,17 @@ pub fn get_hover(
                 end_char: r.end.character,
             });
 
-            Ok(Some(HoverInfo { contents, range }))
+            // Send raw markdown - frontend will render with markdown-it
+            Ok(Some(HoverInfo {
+                contents,
+                html: String::new(), // Frontend renders this
+                range,
+            }))
         }
         None => Ok(None),
     }
 }
+
 
 /// Tauri command: Get definition location at position
 #[tauri::command]

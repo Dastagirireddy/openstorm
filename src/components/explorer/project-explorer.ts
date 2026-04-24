@@ -842,18 +842,25 @@ export class ProjectExplorer extends TailwindElement() {
     return html`
       <div>
         <div
-          class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors
-            ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'text-[#1a1a1a] hover:bg-[#e8e8e8]'}"
-          style="padding-left: ${indent + 8}px; ${folderColor ? `border-left: 3px solid ${folderColor}; background-color: ${folderBgColor || 'transparent'};` : 'border-left: 3px solid transparent;'} margin-left: -3px;"
+          class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors"
+          style="padding-left: ${indent + 8}px; ${folderColor ? `border-left: 3px solid ${folderColor}; background-color: ${folderBgColor || 'transparent'};` : 'border-left: 3px solid transparent;'} margin-left: -3px; background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'}; color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};"
           title="${folderTypeLabel}"
-          @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}>
+          @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}
+          @mouseenter=${(e: Event) => {
+            if (!isSelected) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)';
+          }}
+          @mouseleave=${(e: Event) => {
+            if (!isSelected) (e.target as HTMLElement).style.backgroundColor = folderBgColor || 'transparent';
+          }}>
           ${node.is_dir
             ? html`
                 <os-icon
                   name=${isExpanded ? 'chevron-down' : 'chevron-right'}
-                  color="#5a5a5a"
                   size="16"
-                  class="flex-shrink-0 transition-transform cursor-pointer hover:bg-[#d0d0d0] rounded p-0.5"
+                  style="color: var(--app-disabled-foreground);"
+                  class="flex-shrink-0 transition-transform cursor-pointer rounded p-0.5"
+                  @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+                  @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
                   @click=${(e: MouseEvent) => {
                     e.stopPropagation();
                     this.toggleNode(node);
@@ -866,7 +873,7 @@ export class ProjectExplorer extends TailwindElement() {
             class="flex-shrink-0 flex items-center gap-2 flex-1 min-w-0"
             @click=${() => this.selectFile(node)}>
             ${this.renderIcon(node, isExpanded)}
-            <span class="truncate select-none">${node.name}</span>
+            <span class="truncate select-none" style="color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};">${node.name}</span>
           </span>
         </div>
 
@@ -883,28 +890,34 @@ export class ProjectExplorer extends TailwindElement() {
 
     return html`
       <div class="flex flex-col items-center justify-center h-full px-6 text-center">
-        <div class="w-16 h-16 mb-4 rounded-xl bg-[#f0f0f0] flex items-center justify-center">
-          <os-icon name="folder" color="#8a8a8a" size="32" />
+        <div class="w-16 h-16 mb-4 rounded-xl flex items-center justify-center" style="background-color: var(--app-tab-inactive);">
+          <os-icon name="folder" style="color: var(--app-disabled-foreground);" size="32" />
         </div>
         ${hasProject
           ? html`
-              <h3 class="text-[13px] font-semibold text-[#1a1a1a] mb-1">Empty Folder</h3>
-              <p class="text-[12px] text-[#6a6a6a] mb-4 max-w-[200px]">
+              <h3 class="text-[13px] font-semibold mb-1" style="color: var(--app-foreground);">Empty Folder</h3>
+              <p class="text-[12px] mb-4 max-w-[200px]" style="color: var(--app-disabled-foreground);">
                 "${projectName}" has no files or directories
               </p>
               <button
-                class="px-4 py-2 bg-[#2da44e] hover:bg-[#2c974b] text-white text-[12px] font-medium rounded-md transition-colors shadow-sm"
-                @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
+                class="px-4 py-2 text-[12px] font-medium rounded-md transition-colors shadow-sm"
+                style="background-color: var(--app-button-background); color: var(--app-button-foreground);"
+                @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-hover)'}
+                @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-background)'}
+                @click=${() => dispatch('create-file')}>
                 Create File
               </button>
             `
           : html`
-              <h3 class="text-[14px] font-semibold text-[#1a1a1a] mb-1">No Project Open</h3>
-              <p class="text-[12px] text-[#6a6a6a] mb-4 max-w-[200px]">
+              <h3 class="text-[14px] font-semibold mb-1" style="color: var(--app-foreground);">No Project Open</h3>
+              <p class="text-[12px] mb-4 max-w-[200px]" style="color: var(--app-disabled-foreground);">
                 Open a folder to start exploring your project files
               </p>
               <button
-                class="px-5 py-2 bg-[#0969da] hover:bg-[#0860ca] text-white text-[13px] font-medium rounded-md transition-colors shadow-sm"
+                class="px-5 py-2 text-[13px] font-medium rounded-md transition-colors shadow-sm"
+                style="background-color: var(--app-button-background); color: var(--app-button-foreground);"
+                @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-hover)'}
+                @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-button-background)'}
                 @click=${() => this.dispatchEvent(new CustomEvent('open-folder'))}>
                 Open Folder
               </button>
@@ -915,44 +928,63 @@ export class ProjectExplorer extends TailwindElement() {
 
   private renderHeader(): TemplateResult {
     return html`
-      <div class="flex items-center justify-between h-[35px] px-3 bg-gradient-to-b from-[#f5f5f5] to-[#e8e8e8] border-b border-[#d0d0d0] shrink-0">
+      <div class="flex items-center justify-between h-[35px] px-3 border-b shrink-0"
+           style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-border);">
         <div class="flex items-center gap-1.5">
-          <os-icon name="presentation" color="#5b47c9" size="14"></os-icon>
-          <span class="text-[10px] font-bold text-[#5a5a5a] uppercase tracking-wide">Project</span>
+          <os-icon name="presentation" style="color: var(--brand-primary);" size="14"></os-icon>
+          <span class="text-[10px] font-bold uppercase tracking-wide" style="color: var(--app-disabled-foreground);">Project</span>
         </div>
         <div class="flex items-center gap-0">
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="Locate in File Tree"
             @click=${() => this.handleLocateFile()}>
             <os-icon name="locate" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="Expand All"
             @click=${() => this.expandAll()}>
             <os-icon name="expand-all" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="Collapse All"
             @click=${() => this.collapseAll()}>
             <os-icon name="collapse-all" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer relative"
+            class="p-1 cursor-pointer relative"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="New File"
-            @click=${() => document.dispatchEvent(new CustomEvent('create-file'))}>
+            @click=${() => dispatch('create-file')}>
             <os-icon name="file-plus" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="New Folder"
-            @click=${() => document.dispatchEvent(new CustomEvent('create-folder'))}>
+            @click=${() => dispatch('create-folder')}>
             <os-icon name="folder-plus" color="currentColor" size="14" />
           </button>
           <button
-            class="p-1 text-[#5a5a5a] hover:text-[#1a1a1a] cursor-pointer"
+            class="p-1 cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             title="Refresh"
             @click=${() => this.loadDirectory(this.projectPath)}>
             <os-icon name="rotate-ccw" color="currentColor" size="14" />
@@ -966,7 +998,7 @@ export class ProjectExplorer extends TailwindElement() {
     const projectName = this.projectPath ? this.projectPath.split('/').pop() : 'OpenStorm';
 
     return html`
-      <div class="flex flex-col h-full overflow-hidden bg-[#f7f7f7]">
+      <div class="flex flex-col h-full overflow-hidden" style="background-color: var(--activitybar-background);">
         ${this.renderHeader()}
 
         <div class="flex-1 overflow-y-auto">
@@ -975,10 +1007,13 @@ export class ProjectExplorer extends TailwindElement() {
             : html`
                 <div class="py-1">
                   <div
-                    class="flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-bold text-[#1a1a1a] bg-[#e8e8e8] cursor-pointer hover:bg-[#d8d8d8] transition-colors"
+                    class="flex items-center gap-1.5 px-2 py-1.5 text-[12px] font-bold cursor-pointer transition-colors"
+                    style="background-color: var(--app-tab-inactive); color: var(--app-foreground);"
+                    @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+                    @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'}
                     @click=${() => { this.isProjectExpanded = !this.isProjectExpanded; this.requestUpdate(); }}>
-                    <os-icon name=${this.isProjectExpanded ? 'chevron-down' : 'chevron-right'} color="#5a5a5a" size="14"></os-icon>
-                    <os-icon name=${this.isProjectExpanded ? 'folder-open' : 'folder'} color=${this.isProjectExpanded ? '#c9a228' : '#5a5a5a'} size="14"></os-icon>
+                    <os-icon name=${this.isProjectExpanded ? 'chevron-down' : 'chevron-right'} style="color: var(--app-disabled-foreground);" size="14"></os-icon>
+                    <os-icon name=${this.isProjectExpanded ? 'folder-open' : 'folder'} color=${this.isProjectExpanded ? '#c9a228' : 'var(--app-disabled-foreground)'} size="14"></os-icon>
                     <span class="truncate flex-1">${projectName}</span>
                   </div>
                   ${this.isProjectExpanded
@@ -989,7 +1024,7 @@ export class ProjectExplorer extends TailwindElement() {
         </div>
       </div>
 
-      <!-- Unified File Create Dialog (IntelliJ-style) -->
+      <!-- Unified File Create Dialog -->
       <file-create-dialog
         ?open=${this.showCreateDialog}
         .templates=${this.availableTemplates}

@@ -2,6 +2,7 @@ import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
+import { dispatch } from '../lib/events.js';
 import './icon.js';
 
 /**
@@ -44,6 +45,7 @@ export class StatusBar extends TailwindElement() {
   @state() terminalVisible = true;
   @state() private fileOpen = false;
   @state() private terminalHasOutput = false;
+  @state() private currentThemeName = 'OpenStorm Light';
 
   static properties = {
     terminalVisible: { type: Boolean },
@@ -52,6 +54,17 @@ export class StatusBar extends TailwindElement() {
   async connectedCallback(): Promise<void> {
     super.connectedCallback();
     await this.checkLspStatus();
+
+    // Initialize theme display
+    const { ThemeService } = await import('../lib/theme-service.js');
+    const themeService = ThemeService.getInstance();
+    this.updateThemeDisplay(themeService);
+
+    // Subscribe to theme changes
+    this._themeDispose = themeService.subscribe(() => {
+      this.updateThemeDisplay(themeService);
+    });
+
     // Listen for cursor position updates from editor
     document.addEventListener('cursor-position', (e: Event) => {
       const customEvent = e as CustomEvent<{ line: number; column: number }>;
@@ -86,6 +99,23 @@ export class StatusBar extends TailwindElement() {
     document.addEventListener('app-console-output', () => {
       this.terminalHasOutput = true;
     });
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this._themeDispose) {
+      this._themeDispose();
+    }
+  }
+
+  private updateThemeDisplay(themeService: any): void {
+    const theme = themeService.getCurrentWorkbenchTheme();
+    this.currentThemeName = theme?.name || 'OpenStorm Light';
+    this.requestUpdate();
+  }
+
+  private openThemePalette(): void {
+    dispatch('open-theme-palette');
   }
 
   /**
@@ -494,6 +524,7 @@ export class StatusBar extends TailwindElement() {
                @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
             <span style="color: var(--statusbar-foreground);">${this.lineEnding}</span>
           </div>
+
         </div>
       </div>
     `;

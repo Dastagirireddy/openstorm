@@ -37,19 +37,17 @@ import {
 } from '../../lib/editor/editor-breakpoints.js';
 import {
   lspCompletionSource,
-  lspHoverTooltip,
   debugHoverTooltip,
   notifyLspDocumentOpen,
   notifyLspDocumentChange,
   handleGoToDefinition,
   checkDefinitionAtPosition,
+  showLspHoverTooltip,
 } from '../../lib/editor/editor-lsp.js';
 import {
   getCompletions,
-  getHover,
   getDefinition,
   completionKindToType,
-  formatHoverContent,
   pathToFileUri,
   notifyDocumentOpened,
   notifyDocumentChanged,
@@ -73,6 +71,10 @@ export class EditorPane extends TailwindElement() {
   private breakpoints: Map<string, Breakpoint[]> = new Map();
   private nextBreakpointId = 1;
 
+  // Hover tooltip debounce
+  private _hoverTimeout: ReturnType<typeof setTimeout> | null = null;
+  private _lastHoverPos: number | null = null;
+
   // Conditional breakpoint dialog
   private conditionalDialog: HTMLDivElement | null = null;
   private pendingBreakpointLine: number | null = null;
@@ -84,6 +86,7 @@ export class EditorPane extends TailwindElement() {
   private _definitionCheckTimeout: ReturnType<typeof setTimeout> | null = null;
   private _lastCheckedPosition: string | null = null;
   private _lastHasDefinition: boolean = false;
+  private _themeChangeHandler: () => void = this._handleThemeChanged.bind(this);
 
 
   /**
@@ -593,86 +596,29 @@ export class EditorPane extends TailwindElement() {
   }
 
   /**
-   * LSP hover tooltip for CodeMirror - IntelliJ style
+   * Handle mouse hover in editor to show LSP tooltip
    */
-  private async _lspHoverTooltip(view: EditorView, pos: number): Promise<{ pos: number; above: boolean; create: () => { dom: HTMLElement } } | null> {
+  private _handleEditorHover(event: MouseEvent): void {
+    if (!this.editorView) return;
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!activeTab) return null;
+    if (!activeTab) return;
 
-    const ext = getFileExtension(activeTab.path);
-    const languageMap: Record<string, string> = {
-      'rs': 'rust',
-      'go': 'go',
-      'py': 'python',
-      'cpp': 'cpp',
-      'c': 'c',
-      'ts': 'typescript',
-      'tsx': 'typescript',
-      'js': 'javascript',
-      'jsx': 'javascript',
-    };
-    const languageId = languageMap[ext];
-    if (!languageId) return null;
+    const pos = this.editorView.posAtCoords({ x: event.clientX, y: event.clientY });
+    if (pos === null) return;
 
-    const line = view.state.doc.lineAt(pos);
-    const column = pos - line.from;
+    // Debounce hover requests - only trigger if position changed significantly
+    if (pos === this._lastHoverPos) return;
+    this._lastHoverPos = pos;
 
-    try {
-      const hover = await getHover(
-        languageId,
-        activeTab.path,
-        view.state.doc.toString(),
-        line.number - 1,
-        column
-      );
-
-      if (!hover || !hover.contents) return null;
-
-      // Parse hover contents to extract metadata for rich tooltip
-      const sections = hover.contents.split(/\n---\n/);
-      const signature = sections[0]?.trim().replace(/^```(\w*)\n?([\s\S]*?)\n?```$/, '$2') || '';
-      const description = sections.slice(1, -1).join('\n').trim();
-      const lastSection = sections[sections.length - 1]?.trim() || '';
-
-      // Parse link from last section
-      const linkMatch = lastSection.match(/\[([^\]]+)\]\(([^)]+)\)/);
-      const link = linkMatch ? { text: linkMatch[1], url: linkMatch[2] } : undefined;
-
-      // Detect tags from content or signature
-      const tags: string[] = [];
-      if (signature.includes('Console') || languageId === 'typescript') {
-        if (signature.includes('Console')) tags.push('built-in');
-        tags.push('dom');
-      }
-
-      // Detect availability from content keywords
-      let availability: 'widely-available' | 'experimental' | 'deprecated' | undefined;
-      if (description.toLowerCase().includes('deprecated')) {
-        availability = 'deprecated';
-      } else if (description.toLowerCase().includes('experimental')) {
-        availability = 'experimental';
-      } else if (description.toLowerCase().includes('widely available') || description.toLowerCase().includes('standard')) {
-        availability = 'widely-available';
-      }
-
-      const dom = document.createElement('div');
-      dom.innerHTML = formatHoverContent(hover.contents, {
-        signature,
-        typeInfo: hover.range ? 'property' : undefined,
-        tags: tags.length > 0 ? tags : undefined,
-        link,
-        availability,
-      });
-
-      return {
-        pos,
-        above: true,
-        create: () => ({ dom }),
-      };
-    } catch (error) {
-      console.error('[Editor] LSP hover error:', error);
-      return null;
+    // Clear pending hover request
+    if (this._hoverTimeout) {
+      clearTimeout(this._hoverTimeout);
     }
+
+    // Delay hover request to avoid flickering
+    this._hoverTimeout = setTimeout(() => {
+      showLspHoverTooltip(this.editorView, pos, activeTab.path);
+    }, 150);
   }
 
   /**
@@ -779,12 +725,17 @@ export class EditorPane extends TailwindElement() {
           ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
             this._handleBreakpointClick(lineNum, wasThere);
           }),
+          getEditorTheme(),
           language
         ]
       });
       this.editorView = new EditorView({
         state,
         parent: editorContainer
+      });
+      // Add hover listener for LSP tooltips
+      this.editorView.dom.addEventListener('mousemove', (e: MouseEvent) => {
+        this._handleEditorHover(e);
       });
       // Notify LSP server that document is opened
       this._notifyDocumentOpened(activeTab.content);
@@ -817,6 +768,7 @@ export class EditorPane extends TailwindElement() {
             ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
               this._handleBreakpointClick(lineNum, wasThere);
             }),
+            getEditorTheme(),
             language
           ],
           selection: EditorSelection.create([EditorSelection.cursor(pos)])
@@ -949,11 +901,41 @@ export class EditorPane extends TailwindElement() {
     document.addEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
     // Listen for LSP server ready event (after install)
     document.addEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
+
+    // Listen for theme changes
+    document.addEventListener('theme-changed', this._themeChangeHandler);
+  }
+
+  private _handleThemeChanged(): void {
+    // Recreate editor with new theme
+    if (this.editorView) {
+      // Store current state
+      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+      const cursorPos = this.editorView.state.selection.main.head;
+
+      // Destroy old view to clear cached theme styles
+      this.editorView.destroy();
+      this.editorView = null;
+      this._currentTabId = null;
+
+      // Recreate editor - _updateEditor will create a new EditorView with updated CSS variables
+      this._updateEditor();
+
+      // Restore cursor position
+      if (this.editorView && cursorPos >= 0) {
+        this.editorView.dispatch({
+          selection: EditorSelection.create([EditorSelection.cursor(cursorPos)]),
+        });
+      }
+    }
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.editorView?.destroy();
+    if (this._hoverTimeout) {
+      clearTimeout(this._hoverTimeout);
+    }
     document.removeEventListener('file-saved', this._handleFileSaved.bind(this));
     document.removeEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
     document.removeEventListener('debug-session-started', this._handleDebugSessionStarted.bind(this));
@@ -962,6 +944,7 @@ export class EditorPane extends TailwindElement() {
     document.removeEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
     document.removeEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
     document.removeEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
+    document.removeEventListener('theme-changed', this._themeChangeHandler);
   }
 
   private _handleFileSaved(event: Event): void {
@@ -1114,11 +1097,11 @@ export class EditorPane extends TailwindElement() {
     const hasContent = this.tabs.length > 0;
 
     return html`
-      <div class="flex flex-col h-full overflow-hidden bg-white">
+      <div class="flex flex-col h-full overflow-hidden" style="background-color: var(--app-bg);">
         <slot name="tab-bar"></slot>
         ${hasContent
-          ? html`<div id="editor-container" class="flex-1 overflow-hidden border-t border-[#c7c7c7]"></div>`
-          : html`<div class="flex-1 flex items-center justify-center text-[#8a8a8a] text-sm">Select a file to edit</div>`
+          ? html`<div id="editor-container" class="flex-1 overflow-hidden" style="border-top-color: var(--app-border);"></div>`
+          : html`<div class="flex-1 flex items-center justify-center text-sm" style="color: var(--app-disabled-foreground);">Select a file to edit</div>`
         }
       </div>
     `;

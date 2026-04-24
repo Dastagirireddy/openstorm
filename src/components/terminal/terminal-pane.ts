@@ -4,8 +4,10 @@ import { TailwindElement } from '../../tailwind-element.js';
 import type { TerminalTabType } from '../../lib/file-types.js';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
 interface TerminalInstance {
@@ -33,7 +35,7 @@ const componentStyles = css`
     height: 100%;
     width: 100%;
     overflow: hidden;
-    background: #ffffff;
+    background: var(--terminal-background, #1e1e1e);
     position: relative;
   }
 
@@ -44,7 +46,7 @@ const componentStyles = css`
     position: relative;
     width: 100%;
     min-height: 0;
-    background: #ffffff;
+    background: var(--terminal-background, #1e1e1e);
     overflow: hidden;
   }
 
@@ -62,11 +64,14 @@ const componentStyles = css`
   /* Top: -16px and bottom: 40px offset needed to keep terminal cursor within viewport area */
   .terminal-instance {
     position: absolute;
-    top: -16px;
-    left: 5px;
-    right: 5px;
-    bottom: 40px;
-    background: #ffffff;
+    /*top: -16px;*/
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    /*bottom: 40px;*/
+    bottom: 6px;
+    background: var(--terminal-background, #1e1e1e);
+    overflow: hidden;
   }
 
   .terminal-instance[hidden] {
@@ -80,7 +85,7 @@ const componentStyles = css`
   }
 
   .xterm-viewport {
-    background-color: #ffffff !important;
+    background-color: var(--terminal-background, #1e1e1e) !important;
     height: 100% !important;
     overflow-y: auto !important;
   }
@@ -90,25 +95,32 @@ const componentStyles = css`
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
+    z-index: 1 !important;
+  }
+
+  .xterm-selection {
+    z-index: 1 !important;
   }
 
   .xterm-rows {
-    background-color: #ffffff !important;
+    background-color: var(--terminal-background, #1e1e1e) !important;
   }
 
   /* Prevent measurement artifacts from pushing layout */
   .xterm-helpers {
     opacity: 0 !important;
     pointer-events: none !important;
+    height: 0 !important;
+    /*display: none;*/
   }
 
   /* Make cursor visible - override default white outline */
   .xterm-cursor {
-    background-color: #24292f !important;
+    background-color: var(--app-foreground, #a9b7c6) !important;
   }
 
   .xterm-cursor.xterm-cursor-outline {
-    outline: 2px solid #24292f !important;
+    outline: 2px solid var(--app-foreground, #a9b7c6) !important;
     outline-offset: -2px !important;
   }
 
@@ -123,18 +135,24 @@ const componentStyles = css`
     }
   }
 
-  /* Make text selection visible */
-  .xterm .xterm-rows ::selection {
-    background-color: #4f46e5 !important;
-    color: #ffffff !important;
-  }
-
   .xterm-selection {
     pointer-events: none !important;
   }
 
   .xterm-selection div {
-    background-color: #4f46e5 !important;
+    background-color: var(--app-selection-background, #4f46e5) !important;
+    opacity: 0.4 !important;
+  }
+
+  /* Hyperlink hover effect */
+  .xterm .xterm-rows a {
+    color: #4da6ff !important;
+    text-decoration: none;
+  }
+
+  .xterm .xterm-rows a:hover {
+    text-decoration: underline !important;
+    cursor: pointer;
   }
 `;
 
@@ -170,6 +188,26 @@ export class TerminalPane extends TailwindElement(componentStyles) {
   private terminalCounter = 0;
   private globalOutputUnlisten: (() => void) | null = null;
   private hasInitializedTerminal = false;
+
+  private getTerminalTheme(): { background: string; foreground: string } {
+    const rootStyles = getComputedStyle(document.documentElement);
+    const terminalBackground = rootStyles.getPropertyValue('--terminal-background').trim() || '#1e1e1e';
+    const terminalForeground = rootStyles.getPropertyValue('--terminal-foreground').trim() || '#a9b7c6';
+    return { background: terminalBackground, foreground: terminalForeground };
+  }
+
+  private updateTerminalTheme(): void {
+    const theme = this.getTerminalTheme();
+    for (const instance of this.terminals) {
+      if (instance.xterm) {
+        instance.xterm.options.theme = {
+          ...instance.xterm.options.theme,
+          background: theme.background,
+          foreground: theme.foreground,
+        };
+      }
+    }
+  }
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -218,7 +256,7 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     // Listen for process output (run configurations) - App Console only
     listen<{ process_id: number; output_type: string; data: string; timestamp: number }>('process-output', (event) => {
       const { output_type, data } = event.payload;
-      // Only add to App Console (not terminal - keep them separate like IntelliJ)
+      // Only add to App Console (not terminal - keep them separate)
       this.addConsoleOutput({
         source: 'run',
         output_type: output_type as 'stdout' | 'stderr' | 'info',
@@ -227,16 +265,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       });
     });
 
-    // Listen for process termination
+    // Listen for process termination - App Console only (no terminal output)
     listen<{ process_id: number }>('process-terminated', (event) => {
-      const activeTerminal = this.terminals.find(t => t.terminalId !== null);
-      if (activeTerminal?.xterm) {
-        activeTerminal.xterm.write('\r\n\x1b[32m[Process exited]\x1b[0m\r\n');
-        requestAnimationFrame(() => {
-          if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
-        });
-      }
-      // Also add to App Console
       this.addConsoleOutput({
         source: 'run',
         output_type: 'info',
@@ -266,6 +296,11 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }
     }, 100);
 
+    // Listen for theme changes
+    document.addEventListener('theme-changed', () => {
+      this.updateTerminalTheme();
+    });
+
     // Handle Window/Pane Resizes - debounce to avoid infinite loop
     let resizeTimeout: ReturnType<typeof setTimeout> | null = null;
     this.resizeObserver = new ResizeObserver(() => {
@@ -275,25 +310,9 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }, 50);
     });
 
-    // Handle right-click context menu
-    this.addEventListener('contextmenu', this.handleContextMenu);
+    // Handle document click to close context menu
     document.addEventListener('click', this.handleDocumentClick);
   }
-
-  private handleContextMenu = (e: MouseEvent): void => {
-    e.preventDefault();
-    e.stopPropagation();
-    const terminal = (e.target as HTMLElement).closest('.terminal-instance') as HTMLElement;
-    if (terminal) {
-      const instance = this.terminals.find(t => t.id === terminal.id);
-      if (instance) {
-        this.contextMenuTerminalId = instance.id;
-        const rect = this.getBoundingClientRect();
-        this.contextMenuPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        this.contextMenuVisible = true;
-      }
-    }
-  };
 
   private handleDocumentClick = (): void => {
     this.contextMenuVisible = false;
@@ -321,10 +340,13 @@ export class TerminalPane extends TailwindElement(componentStyles) {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.terminals.forEach(t => this.disposeTerminal(t));
+    this.terminals.forEach(t => {
+      // Remove context menu listener from xterm element
+      t.xterm?.element?.removeEventListener('contextmenu', () => {});
+      this.disposeTerminal(t);
+    });
     this.resizeObserver?.disconnect();
     if (this.globalOutputUnlisten) this.globalOutputUnlisten();
-    this.removeEventListener('contextmenu', this.handleContextMenu);
     document.removeEventListener('click', this.handleDocumentClick);
   }
 
@@ -388,17 +410,22 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     console.log('[TerminalPane] terminalDiv created and appended:', id);
 
     // 4. Initialize Xterm
+    const theme = this.getTerminalTheme();
     const xterm = new Terminal({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: { background: '#ffffff', foreground: '#24292f' },
+      theme: { background: theme.background, foreground: theme.foreground },
       convertEol: true,
       scrollback: 10000 // Limit scrollback to 10000 lines to prevent memory growth
     });
 
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      window.open(uri, '_blank');
+    });
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(webLinksAddon);
 
     // 5. Attach and Fit
     xterm.open(terminalDiv);
@@ -414,6 +441,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       fitAddon,
       userScrolledUp: false
     };
+
+    this.attachTerminalEventListeners(xterm, instance);
 
     this.terminals = [...this.terminals, instance];
     this.activeTerminalId = id;
@@ -504,21 +533,60 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     this.terminalWrapper?.querySelector(`#${instance.id}`)?.remove();
   }
 
+  private attachTerminalEventListeners(xterm: Terminal, instance: TerminalInstance): void {
+    // Context menu
+    xterm.element?.addEventListener('contextmenu', (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.contextMenuTerminalId = instance.id;
+      const rect = this.getBoundingClientRect();
+      this.contextMenuPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      this.contextMenuVisible = true;
+    });
+
+    // Keyboard paste (Cmd+V / Ctrl+V)
+    xterm.element?.addEventListener('keydown', async (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+      if (modifierKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[TerminalPane] Paste keystroke detected');
+        try {
+          const text = await readText();
+          console.log('[TerminalPane] Clipboard text:', text);
+          if (instance.terminalId !== null) {
+            await invoke('terminal_write', { id: instance.terminalId, data: text });
+            console.log('[TerminalPane] Text written to terminal');
+          }
+        } catch (err) {
+          console.error('[TerminalPane] Keyboard paste failed:', err);
+          xterm.write('\r\n\x1b[31m[Paste failed: ' + String(err) + ']\x1b[0m\r\n');
+        }
+      }
+    });
+  }
+
   private async copySelection(): Promise<void> {
     const instance = this.terminals.find(t => t.id === this.contextMenuTerminalId);
     if (instance?.xterm) {
       const selectedText = instance.xterm.getSelection();
       if (selectedText) {
-        await navigator.clipboard.writeText(selectedText);
+        await writeText(selectedText);
       }
     }
   }
 
   private async paste(): Promise<void> {
     const instance = this.terminals.find(t => t.id === this.contextMenuTerminalId);
-    if (instance?.xterm && instance.terminalId !== null) {
-      const text = await navigator.clipboard.readText();
+    if (!instance?.xterm || instance.terminalId === null) return;
+
+    try {
+      const text = await readText();
       await invoke('terminal_write', { id: instance.terminalId, data: text });
+    } catch (err) {
+      console.error('[TerminalPane] Paste failed:', err);
+      instance.xterm.write('\r\n\x1b[31m[Paste failed]\x1b[0m\r\n');
     }
   }
 
@@ -581,16 +649,21 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     terminalDiv.className = 'terminal-instance';
     this.terminalWrapper.appendChild(terminalDiv);
 
+    const theme = this.getTerminalTheme();
     const xterm = new Terminal({
       cursorBlink: true,
       fontSize: 13,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      theme: { background: '#ffffff', foreground: '#24292f' },
+      theme: { background: theme.background, foreground: theme.foreground },
       convertEol: true
     });
 
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      window.open(uri, '_blank');
+    });
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(webLinksAddon);
     xterm.open(terminalDiv);
 
     const instance: TerminalInstance = {
@@ -602,6 +675,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       fitAddon,
       userScrolledUp: false
     };
+
+    this.attachTerminalEventListeners(xterm, instance);
 
     this.terminals = [...this.terminals, instance];
     this.activeTerminalId = id;
@@ -665,7 +740,7 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     const filteredOutputs = this.getFilteredOutputs();
 
     return html`
-      <div class="flex flex-col h-full w-full bg-white">
+      <div class="flex flex-col h-full w-full" style="background-color: var(--terminal-background);">
         <!-- Unified tab bar: Terminal instances + App Console -->
         <div class="flex items-center justify-between h-[36px] px-2 shrink-0" style="background-color: var(--app-tab-inactive);">
           <div class="flex items-center gap-0.5 h-full">
@@ -685,21 +760,21 @@ export class TerminalPane extends TailwindElement(componentStyles) {
                     @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                     title="Close terminal"
                   >
-                    <os-icon name="x" size="12"></os-icon>
+                    <iconify-icon icon="mdi:close" width="12"></iconify-icon>
                   </button>
                 </div>
               `;
             })}
             <!-- App Console tab -->
             <button
-              class="px-3 h-full text-[13px] cursor-pointer transition-colors border-t-2"
+              class="relative px-3 h-full text-[13px] cursor-pointer transition-colors border-t-2"
               style="background-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${this.activeBottomTab === 'app-console' ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active-border)' : 'transparent'};"
               @mouseenter=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
               @mouseleave=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
               @click=${() => { this.activeBottomTab = 'app-console'; this.consoleHasNewOutput = false; }}>
               App Console
               ${this.consoleHasNewOutput && this.activeBottomTab !== 'app-console'
-                ? html`<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
+                ? html`<span class="absolute top-1 right-1 w-2 h-2 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
                 : ''}
             </button>
           </div>
@@ -722,56 +797,64 @@ export class TerminalPane extends TailwindElement(componentStyles) {
           <!-- App Console panel -->
           <div class="absolute inset-0 w-full h-full flex flex-col ${this.activeBottomTab === 'terminal' ? 'hidden' : ''}">
             <!-- Console toolbar -->
-            <div class="flex items-center gap-1 px-2 py-1 bg-[#fafbfc] border-b border-[#d0d7de]">
-              <span class="text-[10px] font-semibold uppercase tracking-wide text-[#57606a] mr-1">Filter:</span>
+            <div class="flex items-center gap-1 px-2 py-1 border-b" style="background-color: var(--app-bg); border-color: var(--app-border);">
+              <span class="text-[10px] font-semibold uppercase tracking-wide mr-1" style="color: var(--app-disabled-foreground);">Filter:</span>
               <button
-                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? '!bg-indigo-100 !text-indigo-700 !border-indigo-300 hover:!bg-indigo-200' : ''}"
+                style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'all'; this.requestUpdate(); }}>
                 All
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? '!bg-green-100 !text-green-700 !border-green-300 hover:!bg-green-200' : ''}"
+                style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'stdout'; this.requestUpdate(); }}>
                 Stdout
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? '!bg-red-100 !text-red-700 !border-red-300 hover:!bg-red-200' : ''}"
+                style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'stderr'; this.requestUpdate(); }}>
                 Stderr
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border border-[#d0d7de] rounded bg-transparent text-[#57606a] cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? '!bg-blue-100 !text-blue-700 !border-blue-300 hover:!bg-blue-200' : ''}"
+                style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'info'; this.requestUpdate(); }}>
                 Info
               </button>
-              <div class="w-px h-4 bg-[#d0d7de] mx-1"></div>
+              <div class="w-px h-4 mx-1" style="background-color: var(--app-border);"></div>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
+                style="color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleSearchVisible = !this.consoleSearchVisible; this.requestUpdate(); }}
                 title="Search (Ctrl+F)">
-                <iconify-icon icon="mdi:magnify" width="14"></iconify-icon>
+                <iconify-icon icon="mdi:magnify" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
+                style="color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleAutoScroll = !this.consoleAutoScroll; this.requestUpdate(); }}
                 title="Toggle auto-scroll">
-                <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14"></iconify-icon>
+                <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent text-[#57606a] cursor-pointer transition-colors hover:bg-red-50 hover:text-red-600"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb]"
+                style="color: var(--app-disabled-foreground);"
                 @click=${() => this.clearConsole()}
                 title="Clear console">
-                <iconify-icon icon="mdi:delete-outline" width="14"></iconify-icon>
+                <iconify-icon icon="mdi:delete-outline" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
             </div>
 
             <!-- Search bar -->
             ${this.consoleSearchVisible ? html`
-              <div class="flex items-center gap-1 px-2 py-1 bg-white border-b border-[#d0d7de]">
-                <iconify-icon icon="mdi:magnify" width="14" class="text-[#57606a]"></iconify-icon>
+              <div class="flex items-center gap-1 px-2 py-1 border-b" style="background-color: var(--app-bg); border-color: var(--app-border);">
+                <iconify-icon icon="mdi:magnify" width="14" style="color: var(--app-disabled-foreground);"></iconify-icon>
                 <input
                   type="text"
-                  class="flex-1 px-1 py-0.5 text-[11px] border-none bg-transparent outline-none text-[#24292f]"
+                  class="flex-1 px-1 py-0.5 text-[11px] border-none bg-transparent outline-none"
+                  style="color: var(--app-foreground);"
                   placeholder="Search console output..."
                   .value=${this.consoleSearchQuery}
                   @input=${(e: Event) => { this.consoleSearchQuery = (e.target as HTMLInputElement).value; this.requestUpdate(); }}
@@ -796,13 +879,13 @@ export class TerminalPane extends TailwindElement(componentStyles) {
 
             <!-- Console output -->
             <div
-              class="console-output font-mono text-xs flex-1 overflow-auto bg-white"
-              style="height: calc(100% - 40px);">
+              class="console-output font-mono text-xs flex-1 overflow-auto"
+              style="height: calc(100% - 40px); background-color: var(--app-bg);">
               ${filteredOutputs.length === 0
                 ? html`
-                    <div class="flex flex-col items-center justify-center h-full text-[#57606a] gap-2">
-                      <iconify-icon class="text-3xl opacity-50" icon="mdi:console-outline"></iconify-icon>
-                      <span class="text-xs">No output</span>
+                    <div class="flex flex-col items-center justify-center h-full gap-2">
+                      <iconify-icon class="text-3xl opacity-50" icon="mdi:console-outline" style="color: var(--app-disabled-foreground);"></iconify-icon>
+                      <span class="text-xs" style="color: var(--app-disabled-foreground);">No output</span>
                     </div>
                   `
                 : filteredOutputs.map((output) => {
@@ -811,8 +894,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
                     const prefix = output.output_type === 'stdout' ? '▶' : output.output_type === 'stderr' ? '✖' : '●';
 
                     return html`
-                      <div class="px-3 py-0.5 border-b border-[#f0f0f0] whitespace-pre-wrap break-words flex items-start gap-2 ${bgClass} ${textClass}">
-                        <span class="text-[#9ca3af] font-bold flex-shrink-0 select-none">${prefix}</span>
+                      <div class="px-3 py-0.5 border-b whitespace-pre-wrap break-words flex items-start gap-2 ${bgClass} ${textClass}" style="border-color: var(--app-border);">
+                        <span class="font-bold flex-shrink-0 select-none" style="color: var(--app-disabled-foreground);">${prefix}</span>
                         <span class="flex-1">${this.highlightSearch(output.data)}</span>
                       </div>
                     `;
@@ -825,18 +908,22 @@ export class TerminalPane extends TailwindElement(componentStyles) {
         ${this.showCloseConfirm ? html`
           <div class="absolute inset-0 bg-black/40 flex items-center justify-center z-50"
             @click=${() => { this.showCloseConfirm = false; this.terminalToClose = null; }}>
-            <div class="bg-white rounded-md shadow-2xl w-[380px] border border-[#d0d0d0] overflow-hidden"
+            <div class="rounded-md shadow-2xl w-[380px] border overflow-hidden"
+              style="background-color: var(--app-bg); border-color: var(--app-border);"
               @click=${(e: Event) => e.stopPropagation()}>
-              <div class="px-4 py-3 bg-[#f0f0f0] border-b border-[#d0d0d0]">
-                <h3 class="text-[13px] font-semibold text-[#1a1a1a]">Close Terminal?</h3>
+              <div class="px-4 py-3 border-b" style="background-color: var(--app-toolbar-hover); border-color: var(--app-border);">
+                <h3 class="text-[13px] font-semibold" style="color: var(--app-foreground);">Close Terminal?</h3>
               </div>
               <div class="px-4 py-3">
-                <p class="text-[13px] text-[#24292f] mb-4">
+                <p class="text-[13px] mb-4" style="color: var(--app-foreground);">
                   This will terminate the running process. Are you sure?
                 </p>
                 <div class="flex justify-end gap-2">
                   <button @click=${() => { this.showCloseConfirm = false; this.terminalToClose = null; }}
-                    class="px-3 py-1.5 text-[13px] bg-[#e5e7eb] text-[#57606a] rounded hover:bg-[#d0d7de]">
+                    class="px-3 py-1.5 text-[13px] rounded"
+                    style="background-color: var(--app-bg); color: var(--app-disabled-foreground); border-color: var(--app-border);"
+                    @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                    @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-bg)'; }}>
                     Cancel
                   </button>
                   <button @click=${async () => {
@@ -844,7 +931,7 @@ export class TerminalPane extends TailwindElement(componentStyles) {
                     this.showCloseConfirm = false;
                     this.terminalToClose = null;
                   }}
-                    class="px-3 py-1.5 text-[13px] bg-[#cf222e] text-white rounded hover:bg-[#a40e22]">
+                    class="px-3 py-1.5 text-[13px] text-white bg-[#cf222e] rounded hover:bg-[#a40e22]">
                     Close Terminal
                   </button>
                 </div>
@@ -855,11 +942,14 @@ export class TerminalPane extends TailwindElement(componentStyles) {
 
         <!-- Context Menu -->
         ${this.contextMenuVisible ? html`
-          <div class="absolute z-40 bg-white border border-[#d0d7de] rounded-md shadow-lg py-1 min-w-[160px]"
-            style="left: ${this.contextMenuPosition.x}px; top: ${this.contextMenuPosition.y}px;"
+          <div class="absolute z-40 border rounded-md shadow-lg py-1 min-w-[160px]"
+            style="left: ${this.contextMenuPosition.x}px; top: ${this.contextMenuPosition.y}px; background-color: var(--app-bg); border-color: var(--app-border);"
             @click=${() => { this.contextMenuVisible = false; }}>
             <button @click=${() => this.copySelection()}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#24292f] hover:bg-[#f6f8fa] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: var(--app-foreground);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
@@ -867,25 +957,34 @@ export class TerminalPane extends TailwindElement(componentStyles) {
               Copy
             </button>
             <button @click=${() => this.paste()}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#24292f] hover:bg-[#f6f8fa] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: var(--app-foreground);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
                 <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
               </svg>
               Paste
             </button>
-            <div class="border-t border-[#d0d7de] my-1"></div>
+            <div class="border-t my-1" style="border-color: var(--app-border);"></div>
             <button @click=${() => this.clearTerminal()}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#24292f] hover:bg-[#f6f8fa] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: var(--app-foreground);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <polyline points="3 6 5 6 21 6"></polyline>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
               </svg>
               Clear
             </button>
-            <div class="border-t border-[#d0d7de] my-1"></div>
+            <div class="border-t my-1" style="border-color: var(--app-border);"></div>
             <button @click=${() => this.splitHorizontal()}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#24292f] hover:bg-[#f6f8fa] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: var(--app-foreground);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                 <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -893,16 +992,22 @@ export class TerminalPane extends TailwindElement(componentStyles) {
               Split Down
             </button>
             <button @click=${() => this.splitVertical()}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#24292f] hover:bg-[#f6f8fa] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: var(--app-foreground);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2"></rect>
                 <line x1="12" y1="3" x2="12" y2="21"></line>
               </svg>
               Split Right
             </button>
-            <div class="border-t border-[#d0d7de] my-1"></div>
+            <div class="border-t my-1" style="border-color: var(--app-border);"></div>
             <button @click=${() => { if (this.contextMenuTerminalId) this.requestCloseTerminal(this.contextMenuTerminalId); }}
-              class="w-full px-3 py-1.5 text-left text-[13px] text-[#cf222e] hover:bg-[#ffeef0] flex items-center gap-2">
+              class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
+              style="color: #cf222e;"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'rgba(207, 34, 46, 0.1)'; }}
+              @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>
                 <line x1="6" y1="6" x2="18" y2="18"></line>

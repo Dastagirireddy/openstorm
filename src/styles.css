@@ -2,7 +2,8 @@
 
 @source "**/*.{ts,html}";
 
-/* Theme Variables - IntelliJ Classic Light Theme (Default) */
+/* Theme Variables - Default to OpenStorm Light Theme */
+/* These are overridden by ThemeService when themes are loaded/applied */
 :root {
   /* Application */
   --app-bg: #ffffff;
@@ -107,7 +108,7 @@
   --file-dockerfile: #2496ed;
   --file-gitignore: #f44d27;
 
-  /* Folder type colors (IntelliJ-style) */
+  /* Folder type colors */
   --folder-build-color: #cc6600;
   --folder-build-bg: #fff0e0;
   --folder-tmp-color: #8a8a8a;
@@ -167,7 +168,7 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar for webkit - IntelliJ Classic Light */
+/* Custom scrollbar for webkit */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;

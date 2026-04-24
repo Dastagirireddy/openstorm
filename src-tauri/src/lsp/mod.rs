@@ -17,6 +17,7 @@
 /// - `pool` - Connection pool for managing multiple persistent connections
 /// - `commands` - Tauri commands (thin wrappers)
 /// - `fallbacks` - Command-line formatter fallbacks (rustfmt, gofmt, etc.)
+/// - `markdown` - Markdown to HTML conversion with syntax highlighting
 
 pub mod protocol;
 pub mod client;
@@ -26,6 +27,7 @@ pub mod helpers;
 pub mod pool;
 pub mod commands;
 pub mod fallbacks;
+pub mod markdown;
 
 // Re-export Tauri commands and types needed by main.rs
 pub use commands::*;

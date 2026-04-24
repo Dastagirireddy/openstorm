@@ -132,7 +132,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       width: 100%;
       padding: 8px 12px;
       font-size: 13px;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
       border: 1px solid #d0d0d0;
       border-radius: 4px;
       background: #ffffff;
@@ -182,7 +182,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       background: #f3f4f6;
       padding: 2px 6px;
       border-radius: 3px;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-family: 'Fira Code', 'JetBrains Mono', monospace;
       font-size: 10px;
       color: #c41e3a;
     }

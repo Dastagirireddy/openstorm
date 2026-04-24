@@ -3,18 +3,12 @@
  *
  * Provides programmatic access to theme variables and supports:
  * - Dynamic theme switching
- * - Plugin-provided themes
- * - Per-component theme overrides
+ * - Separate workbench and editor themes
+ * - Plugin-provided themes via JSON
  * - Theme persistence
  */
 
-export interface ThemeDefinition {
-  id: string;
-  name: string;
-  colors: ThemeColors;
-}
-
-export interface ThemeColors {
+export interface WorkbenchColors {
   // Application
   'app-bg': string;
   'app-foreground': string;
@@ -60,6 +54,59 @@ export interface ThemeColors {
   'app-pinned-background': string;
   'app-toast-background': string;
 
+  // Status bar
+  'statusbar-background': string;
+  'statusbar-foreground': string;
+  'statusbar-hover-background': string;
+  'statusbar-hover-foreground': string;
+  'statusbar-border': string;
+
+  // Activity bar
+  'activitybar-background': string;
+  'activitybar-border': string;
+  'activitybar-active-background': string;
+  'activitybar-inactive-foreground': string;
+  'activitybar-active-foreground': string;
+
+  // Terminal
+  'terminal-background': string;
+
+  // Folder types
+  'folder-build-color': string;
+  'folder-build-bg': string;
+  'folder-tmp-color': string;
+  'folder-tmp-bg': string;
+  'folder-node-modules-color': string;
+  'folder-node-modules-bg': string;
+  'folder-vcs-color': string;
+  'folder-vcs-bg': string;
+  'folder-ide-color': string;
+  'folder-ide-bg': string;
+
+  // Project types
+  'project-rust': string;
+  'project-node': string;
+  'project-python': string;
+  'project-go': string;
+  'project-java': string;
+  'project-typescript': string;
+  'project-react': string;
+  'project-vue': string;
+  'project-angular': string;
+  'project-docker': string;
+  'project-database': string;
+  'project-generic': string;
+}
+
+export interface EditorColors {
+  // Editor
+  'editor-background': string;
+  'editor-gutter-background': string;
+  'editor-gutter-border': string;
+  'editor-active-line': string;
+  'editor-selection': string;
+  'editor-line-numbers': string;
+
   // Syntax highlighting
   'app-keyword': string;
   'app-type': string;
@@ -79,15 +126,7 @@ export interface ThemeColors {
   'app-breakpoint-disabled': string;
   'app-breakpoint-conditional': string;
 
-  // Editor
-  'editor-background': string;
-  'editor-gutter-background': string;
-  'editor-gutter-border': string;
-  'editor-active-line': string;
-  'editor-selection': string;
-  'editor-line-numbers': string;
-
-  // File icons (IntelliJ-style)
+  // File icons
   'file-rs': string;
   'file-go': string;
   'file-ts': string;
@@ -117,359 +156,15 @@ export interface ThemeColors {
   'file-txt': string;
   'file-dockerfile': string;
   'file-gitignore': string;
-
-  // Folder types (IntelliJ-style)
-  'folder-build-color': string;
-  'folder-build-bg': string;
-  'folder-tmp-color': string;
-  'folder-tmp-bg': string;
-  'folder-node-modules-color': string;
-  'folder-node-modules-bg': string;
-  'folder-vcs-color': string;
-  'folder-vcs-bg': string;
-  'folder-ide-color': string;
-  'folder-ide-bg': string;
-
-  // Project types
-  'project-rust': string;
-  'project-node': string;
-  'project-python': string;
-  'project-go': string;
-  'project-java': string;
-  'project-typescript': string;
-  'project-react': string;
-  'project-vue': string;
-  'project-angular': string;
-  'project-docker': string;
-  'project-database': string;
-  'project-generic': string;
-
-  // Status bar
-  'statusbar-background': string;
-  'statusbar-foreground': string;
-  'statusbar-hover-background': string;
-  'statusbar-hover-foreground': string;
-  'statusbar-border': string;
-
-  // Activity bar
-  'activitybar-background': string;
-  'activitybar-border': string;
-  'activitybar-active-background': string;
-  'activitybar-inactive-foreground': string;
-  'activitybar-active-foreground': string;
-
-  // Terminal
-  'terminal-background': string;
 }
 
-/**
- * Built-in theme definitions
- */
-export const BUILTIN_THEMES: Record<string, ThemeDefinition> = {
-  'light': {
-    id: 'light',
-    name: 'IntelliJ Light',
-    colors: {
-      // Application
-      'app-bg': '#ffffff',
-      'app-foreground': '#1a1a1a',
-      'app-disabled-foreground': '#8a8a8a',
-      'app-border': '#e5e7eb',
-      'app-focus-border': '#6366f1',
-      'app-hover-background': '#f3f4f6',
-      'app-selection-background': '#e8e0f5',
-      'app-input-background': '#ffffff',
-      'app-input-foreground': '#1a1a1a',
-      'app-input-border': '#d0d0d0',
-      'app-input-placeholder': '#9ca3af',
-      'app-button-background': '#6366f1',
-      'app-button-foreground': '#ffffff',
-      'app-button-hover': '#4f46e5',
-      'app-toolbar-hover': '#e8e8e8',
-      'app-toolbar-active': '#d0d0d0',
-      'app-tab-active': '#ffffff',
-      'app-tab-inactive': '#f3f4f6',
-      'app-tab-border': '#e5e7eb',
-      'app-tab-active-border': '#6366f1',
-      'app-scrollbar': '#c1c1c1',
-      'app-scrollbar-hover': '#a8a8a8',
-
-      // Debug panel
-      'app-continue-color': '#22c55e',
-      'app-step-color': '#0078d4',
-      'app-stop-color': '#f44336',
-      'app-pause-color': '#d97706',
-      'app-status-running': '#16825d',
-      'app-status-stopped': '#d97706',
-      'app-tab-variables': '#8b5cf6',
-      'app-tab-watch': '#06b6d4',
-      'app-tab-callstack': '#d97706',
-      'app-tab-threads': '#ea580c',
-      'app-tab-breakpoints': '#f44336',
-      'app-tab-console': '#16825d',
-      'app-running-state': '#22c55e',
-      'app-stopped-state': '#d97706',
-      'app-exited-state': '#6b7280',
-      'app-unknown-state': '#9ca3af',
-      'app-error-background': '#fef2f2',
-      'app-pinned-background': '#fefce8',
-      'app-toast-background': '#3c3c3c',
-
-      // Syntax highlighting
-      'app-keyword': '#0033b3',
-      'app-type': '#00627a',
-      'app-string': '#067d17',
-      'app-number': '#1750eb',
-      'app-boolean': '#0033b3',
-      'app-null': '#808080',
-
-      // Console
-      'app-console-info': '#3c3c3c',
-      'app-console-warning': '#cca700',
-      'app-console-error': '#f44336',
-      'app-console-success': '#16825d',
-
-      // Breakpoints
-      'app-breakpoint': '#f44336',
-      'app-breakpoint-disabled': '#9ca3af',
-      'app-breakpoint-conditional': '#ffd700',
-
-      // Editor
-      'editor-background': '#ffffff',
-      'editor-gutter-background': '#f0f0f0',
-      'editor-gutter-border': '#d1d1d1',
-      'editor-active-line': '#e4ffaf7a',
-      'editor-selection': '#2142832e',
-      'editor-line-numbers': '#adadad',
-
-      // File icons
-      'file-rs': '#dea584',
-      'file-go': '#00add8',
-      'file-ts': '#3178c6',
-      'file-tsx': '#3178c6',
-      'file-js': '#f7df1e',
-      'file-jsx': '#f7df1e',
-      'file-json': '#f7df1e',
-      'file-yaml': '#cb171e',
-      'file-toml': '#9c4221',
-      'file-css': '#42a5f5',
-      'file-scss': '#c6538c',
-      'file-less': '#1d365d',
-      'file-html': '#e34c26',
-      'file-xml': '#f1662a',
-      'file-sql': '#4479a1',
-      'file-py': '#3776ab',
-      'file-java': '#f89820',
-      'file-kt': '#7f52ff',
-      'file-swift': '#f05138',
-      'file-c': '#519aba',
-      'file-cpp': '#519aba',
-      'file-cs': '#239120',
-      'file-php': '#777bb4',
-      'file-rb': '#cc342d',
-      'file-sh': '#4eaa25',
-      'file-md': '#519aba',
-      'file-txt': '#5a5a5a',
-      'file-dockerfile': '#2496ed',
-      'file-gitignore': '#f44d27',
-
-      // Folder types
-      'folder-build-color': '#cc6600',
-      'folder-build-bg': '#fff0e0',
-      'folder-tmp-color': '#8a8a8a',
-      'folder-tmp-bg': '#f5f5f5',
-      'folder-node-modules-color': '#7c5bbf',
-      'folder-node-modules-bg': '#f3e8ff',
-      'folder-vcs-color': '#008040',
-      'folder-vcs-bg': '#e6f6ed',
-      'folder-ide-color': '#0078d4',
-      'folder-ide-bg': '#e6f2ff',
-
-      // Project types
-      'project-rust': '#ea580c',
-      'project-node': '#22c55e',
-      'project-python': '#3b82f6',
-      'project-go': '#06b6d4',
-      'project-java': '#dc2626',
-      'project-typescript': '#2563eb',
-      'project-react': '#0891b2',
-      'project-vue': '#42b883',
-      'project-angular': '#dd0031',
-      'project-docker': '#0db7ed',
-      'project-database': '#a855f7',
-      'project-generic': '#4f46e5',
-
-      // Status bar
-      'statusbar-background': '#f6f8fa',
-      'statusbar-foreground': '#57606a',
-      'statusbar-hover-background': '#eaeef2',
-      'statusbar-hover-foreground': '#24292f',
-      'statusbar-border': '#d0d7de',
-
-      // Activity bar
-      'activitybar-background': '#f7f7f7',
-      'activitybar-border': '#c7c7c7',
-      'activitybar-active-background': '#e0e0e0',
-      'activitybar-inactive-foreground': '#5a5a5a',
-      'activitybar-active-foreground': '#1a1a1a',
-
-      // Terminal
-      'terminal-background': '#ffffff',
-    },
-  },
-
-  'dark': {
-    id: 'dark',
-    name: 'IntelliJ Dark',
-    colors: {
-      // Application
-      'app-bg': '#2b2b2b',
-      'app-foreground': '#a9b7c6',
-      'app-disabled-foreground': '#6a6a6a',
-      'app-border': '#3c3f41',
-      'app-focus-border': '#7c7cff',
-      'app-hover-background': '#3c3f41',
-      'app-selection-background': '#2d3a4a',
-      'app-input-background': '#3c3f41',
-      'app-input-foreground': '#a9b7c6',
-      'app-input-border': '#5c5c5c',
-      'app-input-placeholder': '#7a7a7a',
-      'app-button-background': '#7c7cff',
-      'app-button-foreground': '#2b2b2b',
-      'app-button-hover': '#8b8bff',
-      'app-toolbar-hover': '#3c3f41',
-      'app-toolbar-active': '#4c4f51',
-      'app-tab-active': '#2b2b2b',
-      'app-tab-inactive': '#3c3f41',
-      'app-tab-border': '#3c3f41',
-      'app-tab-active-border': '#7c7cff',
-      'app-scrollbar': '#5c5c5c',
-      'app-scrollbar-hover': '#7a7a7a',
-
-      // Debug panel
-      'app-continue-color': '#57c957',
-      'app-step-color': '#5fa4e8',
-      'app-stop-color': '#f44336',
-      'app-pause-color': '#e8a857',
-      'app-status-running': '#57c957',
-      'app-status-stopped': '#e8a857',
-      'app-tab-variables': '#b388ff',
-      'app-tab-watch': '#57d9e8',
-      'app-tab-callstack': '#e8a857',
-      'app-tab-threads': '#ff8a57',
-      'app-tab-breakpoints': '#f44336',
-      'app-tab-console': '#57c957',
-      'app-running-state': '#57c957',
-      'app-stopped-state': '#e8a857',
-      'app-exited-state': '#8a8a8a',
-      'app-unknown-state': '#6a6a6a',
-      'app-error-background': '#3d2b2b',
-      'app-pinned-background': '#3d3a2b',
-      'app-toast-background': '#5c5c5c',
-
-      // Syntax highlighting
-      'app-keyword': '#cc7832',
-      'app-type': '#a9b7c6',
-      'app-string': '#6a8759',
-      'app-number': '#6897bb',
-      'app-boolean': '#cc7832',
-      'app-null': '#808080',
-
-      // Console
-      'app-console-info': '#a9b7c6',
-      'app-console-warning': '#e8a857',
-      'app-console-error': '#f44336',
-      'app-console-success': '#57c957',
-
-      // Breakpoints
-      'app-breakpoint': '#f44336',
-      'app-breakpoint-disabled': '#6a6a6a',
-      'app-breakpoint-conditional': '#ffd700',
-
-      // Editor
-      'editor-background': '#2b2b2b',
-      'editor-gutter-background': '#313335',
-      'editor-gutter-border': '#3c3f41',
-      'editor-active-line': '#e4ffaf2a',
-      'editor-selection': '#2142835e',
-      'editor-line-numbers': '#8a8a8a',
-
-      // File icons (adjusted for dark)
-      'file-rs': '#dea584',
-      'file-go': '#00add8',
-      'file-ts': '#3178c6',
-      'file-tsx': '#3178c6',
-      'file-js': '#f7df1e',
-      'file-jsx': '#f7df1e',
-      'file-json': '#f7df1e',
-      'file-yaml': '#cb171e',
-      'file-toml': '#9c4221',
-      'file-css': '#42a5f5',
-      'file-scss': '#c6538c',
-      'file-less': '#1d365d',
-      'file-html': '#e34c26',
-      'file-xml': '#f1662a',
-      'file-sql': '#4479a1',
-      'file-py': '#3776ab',
-      'file-java': '#f89820',
-      'file-kt': '#7f52ff',
-      'file-swift': '#f05138',
-      'file-c': '#519aba',
-      'file-cpp': '#519aba',
-      'file-cs': '#239120',
-      'file-php': '#777bb4',
-      'file-rb': '#cc342d',
-      'file-sh': '#4eaa25',
-      'file-md': '#519aba',
-      'file-txt': '#8a8a8a',
-      'file-dockerfile': '#2496ed',
-      'file-gitignore': '#f44d27',
-
-      // Folder types
-      'folder-build-color': '#cc6600',
-      'folder-build-bg': '#3d2b1a',
-      'folder-tmp-color': '#8a8a8a',
-      'folder-tmp-bg': '#3d3d3d',
-      'folder-node-modules-color': '#7c5bbf',
-      'folder-node-modules-bg': '#2d1a4a',
-      'folder-vcs-color': '#008040',
-      'folder-vcs-bg': '#1a3d2b',
-      'folder-ide-color': '#0078d4',
-      'folder-ide-bg': '#1a2b3d',
-
-      // Project types
-      'project-rust': '#ea580c',
-      'project-node': '#22c55e',
-      'project-python': '#3b82f6',
-      'project-go': '#06b6d4',
-      'project-java': '#dc2626',
-      'project-typescript': '#2563eb',
-      'project-react': '#0891b2',
-      'project-vue': '#42b883',
-      'project-angular': '#dd0031',
-      'project-docker': '#0db7ed',
-      'project-database': '#a855f7',
-      'project-generic': '#7c7cff',
-
-      // Status bar
-      'statusbar-background': '#3c3f41',
-      'statusbar-foreground': '#a9b7c6',
-      'statusbar-hover-background': '#4c4f51',
-      'statusbar-hover-foreground': '#a9b7c6',
-      'statusbar-border': '#3c3f41',
-
-      // Activity bar
-      'activitybar-background': '#313335',
-      'activitybar-border': '#3c3f41',
-      'activitybar-active-background': '#4c4f51',
-      'activitybar-inactive-foreground': '#8a8a8a',
-      'activitybar-active-foreground': '#a9b7c6',
-
-      // Terminal
-      'terminal-background': '#2b2b2b',
-    },
-  },
-};
+export interface ThemeDefinition {
+  id: string;
+  name: string;
+  type: 'light' | 'dark';
+  workbench: WorkbenchColors;
+  editor: EditorColors;
+}
 
 /**
  * Theme change event detail
@@ -479,27 +174,28 @@ export interface ThemeChangeEvent {
   theme: ThemeDefinition;
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 /**
  * Theme Service singleton
  *
  * Usage:
  *   const theme = ThemeService.getInstance();
- *   theme.setTheme('dark');
- *   const color = theme.getColor('app-bg');
+ *   theme.setWorkbenchTheme('dark');
+ *   theme.setEditorTheme('dracula');
  */
 export class ThemeService {
   private static instance: ThemeService;
-  private currentThemeId: string = 'light';
   private themes: Map<string, ThemeDefinition> = new Map();
+  private currentWorkbenchThemeId: string = 'openstorm-light';
+  private currentEditorThemeId: string = 'openstorm-light';
+  private themeMode: ThemeMode = 'system'; // 'system' | 'light' | 'dark'
   private listeners: Set<(event: ThemeChangeEvent) => void> = new Set();
   private initialized: boolean = false;
+  private themesLoaded: boolean = false;
+  private systemThemeQuery: MediaQueryList | null = null;
 
-  private constructor() {
-    // Register built-in themes
-    Object.values(BUILTIN_THEMES).forEach((theme) => {
-      this.themes.set(theme.id, theme);
-    });
-  }
+  private constructor() {}
 
   static getInstance(): ThemeService {
     if (!ThemeService.instance) {
@@ -510,91 +206,236 @@ export class ThemeService {
 
   /**
    * Initialize theme service
-   * Loads saved theme from localStorage or defaults to light
+   * Loads themes from JSON files and applies saved preference
    */
-  initialize(): void {
+  async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    // Try to load saved theme
-    const savedTheme = localStorage.getItem('openstorm-theme');
-    if (savedTheme && this.themes.has(savedTheme)) {
-      this.currentThemeId = savedTheme;
+    console.log('[Theme] Initializing theme service...');
+    await this.loadThemesFromJson();
+
+    // Ensure we have at least the default theme
+    if (!this.themes.has('openstorm-light')) {
+      console.error('[Theme] Critical: openstorm-light theme not loaded!');
     }
 
-    this.applyTheme(this.currentThemeId);
+    // Try to load saved theme preference
+    const savedWorkbenchTheme = localStorage.getItem('openstorm-workbench-theme');
+    const savedEditorTheme = localStorage.getItem('openstorm-editor-theme');
+    const savedThemeMode = localStorage.getItem('openstorm-theme-mode') as ThemeMode | null;
+
+    console.log('[Theme] Saved preferences:', { savedWorkbenchTheme, savedEditorTheme, savedThemeMode });
+
+    // Restore theme mode (system/light/dark)
+    if (savedThemeMode && ['system', 'light', 'dark'].includes(savedThemeMode)) {
+      this.themeMode = savedThemeMode;
+    }
+
+    // Use saved theme only if it exists, otherwise default to openstorm-light
+    if (savedWorkbenchTheme && this.themes.has(savedWorkbenchTheme)) {
+      this.currentWorkbenchThemeId = savedWorkbenchTheme;
+    } else {
+      if (savedWorkbenchTheme) {
+        console.warn(`[Theme] Saved theme "${savedWorkbenchTheme}" not found, using default`);
+      }
+      this.currentWorkbenchThemeId = 'openstorm-light';
+    }
+
+    if (savedEditorTheme && this.themes.has(savedEditorTheme)) {
+      this.currentEditorThemeId = savedEditorTheme;
+    } else {
+      this.currentEditorThemeId = this.currentWorkbenchThemeId;
+    }
+
+    console.log('[Theme] Selected themes:', { workbench: this.currentWorkbenchThemeId, editor: this.currentEditorThemeId, mode: this.themeMode });
+
+    // Set up system theme listener
+    this.setupSystemThemeListener();
+
+    // Apply themes (will use system theme if mode is 'system')
+    this.applyThemes();
     this.initialized = true;
+    console.log('[Theme] Theme service initialized');
   }
 
   /**
-   * Get all registered themes
+   * Load theme definitions from JSON files
    */
-  getThemes(): ThemeDefinition[] {
-    return Array.from(this.themes.values());
+  private async loadThemesFromJson(): Promise<void> {
+    if (this.themesLoaded) return;
+
+    // Import theme JSON files directly (Vite handles JSON imports)
+    const openstormLight = await import('../themes/openstorm-light.json' as string);
+    const openstormDark = await import('../themes/openstorm-dark.json' as string);
+    const vscodeDark = await import('../themes/vscode-dark.json' as string);
+
+    const themes = [openstormLight.default, openstormDark.default, vscodeDark.default];
+
+    for (const theme of themes) {
+      if (theme?.id && theme.workbench && theme.editor) {
+        this.themes.set(theme.id, theme as ThemeDefinition);
+        console.log(`[Theme] Loaded theme: ${theme.name} (${theme.id})`);
+      }
+    }
+
+    this.themesLoaded = true;
+    console.log(`[Theme] Loaded ${this.themes.size} themes`);
   }
 
   /**
-   * Get current theme
+   * Fallback: register built-in themes manually
    */
-  getCurrentTheme(): ThemeDefinition {
-    return this.themes.get(this.currentThemeId)!;
+  private registerBuiltinThemes(): void {
+    // This is a fallback if glob import fails
+    // Themes should be loaded from JSON files
   }
 
   /**
-   * Get current theme ID
-   */
-  getCurrentThemeId(): string {
-    return this.currentThemeId;
-  }
-
-  /**
-   * Register a new theme
+   * Register a theme programmatically (for plugins)
    */
   registerTheme(theme: ThemeDefinition): void {
     this.themes.set(theme.id, theme);
   }
 
   /**
-   * Set active theme
+   * Get all available themes
    */
-  setTheme(themeId: string): boolean {
+  getThemes(): ThemeDefinition[] {
+    return Array.from(this.themes.values());
+  }
+
+  /**
+   * Get theme by ID
+   */
+  getTheme(themeId: string): ThemeDefinition | undefined {
+    return this.themes.get(themeId);
+  }
+
+  /**
+   * Get current workbench theme
+   */
+  getCurrentWorkbenchTheme(): ThemeDefinition {
+    return this.themes.get(this.currentWorkbenchThemeId)!;
+  }
+
+  /**
+   * Get current editor theme
+   */
+  getCurrentEditorTheme(): ThemeDefinition {
+    return this.themes.get(this.currentEditorThemeId)!;
+  }
+
+  /**
+   * Set workbench theme
+   */
+  setWorkbenchTheme(themeId: string): boolean {
     if (!this.themes.has(themeId)) {
-      console.warn(`Theme "${themeId}" not found`);
+      console.warn(`[Theme] Workbench theme "${themeId}" not found`);
       return false;
     }
 
-    this.currentThemeId = themeId;
-    this.applyTheme(themeId);
+    this.currentWorkbenchThemeId = themeId;
+    this.applyThemes();
+    localStorage.setItem('openstorm-workbench-theme', themeId);
 
-    // Save preference
-    localStorage.setItem('openstorm-theme', themeId);
-
-    // Notify listeners
-    this.notifyListeners({ themeId, theme: this.themes.get(themeId)! });
+    const theme = this.themes.get(themeId)!;
+    this.notifyListeners({ themeId, theme });
 
     return true;
   }
 
   /**
-   * Get a theme color value
+   * Set editor theme
    */
-  getColor(key: keyof ThemeColors): string {
-    const theme = this.themes.get(this.currentThemeId);
-    if (!theme) {
-      console.warn(`Current theme "${this.currentThemeId}" not found`);
-      return BUILTIN_THEMES['light'].colors[key];
+  setEditorTheme(themeId: string): boolean {
+    if (!this.themes.has(themeId)) {
+      console.warn(`[Theme] Editor theme "${themeId}" not found`);
+      return false;
     }
-    return theme.colors[key];
+
+    this.currentEditorThemeId = themeId;
+    this.applyThemes();
+    localStorage.setItem('openstorm-editor-theme', themeId);
+
+    const theme = this.themes.get(themeId)!;
+    this.notifyListeners({ themeId, theme });
+
+    return true;
   }
 
   /**
-   * Get all colors from current theme
+   * Set both workbench and editor theme (linked mode)
    */
-  getAllColors(): ThemeColors {
-    const theme = this.themes.get(this.currentThemeId);
-    if (!theme) {
-      return BUILTIN_THEMES['light'].colors;
+  setTheme(themeId: string): boolean {
+    if (!this.themes.has(themeId)) {
+      console.warn(`[Theme] Theme "${themeId}" not found`);
+      return false;
     }
-    return theme.colors;
+
+    this.currentWorkbenchThemeId = themeId;
+    this.currentEditorThemeId = themeId;
+    this.applyThemes();
+    localStorage.setItem('openstorm-workbench-theme', themeId);
+    localStorage.setItem('openstorm-editor-theme', themeId);
+
+    const theme = this.themes.get(themeId)!;
+    this.notifyListeners({ themeId, theme });
+
+    return true;
+  }
+
+  /**
+   * Get current theme IDs
+   */
+  getCurrentThemeIds(): { workbench: string; editor: string } {
+    return {
+      workbench: this.currentWorkbenchThemeId,
+      editor: this.currentEditorThemeId,
+    };
+  }
+
+  /**
+   * Get a color value from the appropriate theme
+   */
+  getColor(key: keyof (WorkbenchColors | EditorColors)): string {
+    // Determine which theme to use based on the color key
+    const workbenchKeys = new Set<keyof WorkbenchColors>([
+      'app-bg', 'app-foreground', 'app-disabled-foreground', 'app-border',
+      'app-focus-border', 'app-hover-background', 'app-selection-background',
+      'app-input-background', 'app-input-foreground', 'app-input-border',
+      'app-input-placeholder', 'app-button-background', 'app-button-foreground',
+      'app-button-hover', 'app-toolbar-hover', 'app-toolbar-active',
+      'app-tab-active', 'app-tab-inactive', 'app-tab-border', 'app-tab-active-border',
+      'app-scrollbar', 'app-scrollbar-hover', 'app-continue-color', 'app-step-color',
+      'app-stop-color', 'app-pause-color', 'app-status-running', 'app-status-stopped',
+      'app-tab-variables', 'app-tab-watch', 'app-tab-callstack', 'app-tab-threads',
+      'app-tab-breakpoints', 'app-tab-console', 'app-running-state', 'app-stopped-state',
+      'app-exited-state', 'app-unknown-state', 'app-error-background',
+      'app-pinned-background', 'app-toast-background', 'statusbar-background',
+      'statusbar-foreground', 'statusbar-hover-background', 'statusbar-hover-foreground',
+      'statusbar-border', 'activitybar-background', 'activitybar-border',
+      'activitybar-active-background', 'activitybar-inactive-foreground',
+      'activitybar-active-foreground', 'terminal-background', 'folder-build-color',
+      'folder-build-bg', 'folder-tmp-color', 'folder-tmp-bg', 'folder-node-modules-color',
+      'folder-node-modules-bg', 'folder-vcs-color', 'folder-vcs-bg', 'folder-ide-color',
+      'folder-ide-bg', 'project-rust', 'project-node', 'project-python', 'project-go',
+      'project-java', 'project-typescript', 'project-react', 'project-vue',
+      'project-angular', 'project-docker', 'project-database', 'project-generic',
+    ]);
+
+    const themeToUse = workbenchKeys.has(key as keyof WorkbenchColors)
+      ? this.themes.get(this.currentWorkbenchThemeId)
+      : this.themes.get(this.currentEditorThemeId);
+
+    if (!themeToUse) {
+      const fallback = this.themes.get('openstorm-light');
+      return (fallback!.workbench as any)[key] || (fallback!.editor as any)[key] || '#ffffff';
+    }
+
+    const workbenchTheme = themeToUse.workbench as any;
+    const editorTheme = themeToUse.editor as any;
+
+    return workbenchTheme[key] || editorTheme[key] || '#ffffff';
   }
 
   /**
@@ -606,21 +447,108 @@ export class ThemeService {
   }
 
   /**
+   * Set up listener for system theme changes
+   */
+  private setupSystemThemeListener(): void {
+    // Listen for CSS media query changes
+    this.systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      if (this.themeMode === 'system') {
+        console.log('[Theme] System theme changed:', e.matches ? 'dark' : 'light');
+        this.applyThemes();
+      }
+    };
+
+    this.systemThemeQuery.addEventListener('change', handleSystemThemeChange);
+    console.log('[Theme] System theme listener registered');
+  }
+
+  /**
+   * Get current system theme (light or dark)
+   */
+  private getSystemTheme(): 'light' | 'dark' {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light'; // Default fallback
+  }
+
+  /**
+   * Get effective theme ID based on mode
+   */
+  private getEffectiveThemeId(): string {
+    if (this.themeMode === 'system') {
+      const systemTheme = this.getSystemTheme();
+      // Map system theme to available theme
+      // You can customize this mapping based on available themes
+      return systemTheme === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+    }
+    return this.themeMode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+  }
+
+  /**
+   * Set theme mode (system/light/dark)
+   */
+  setThemeMode(mode: ThemeMode): void {
+    this.themeMode = mode;
+    localStorage.setItem('openstorm-theme-mode', mode);
+
+    if (mode === 'system') {
+      // When switching to system, immediately apply based on current system theme
+      const systemTheme = this.getSystemTheme();
+      const effectiveThemeId = systemTheme === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+      this.currentWorkbenchThemeId = effectiveThemeId;
+      this.currentEditorThemeId = effectiveThemeId;
+    } else {
+      this.currentWorkbenchThemeId = mode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+      this.currentEditorThemeId = mode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+    }
+
+    this.applyThemes();
+
+    const theme = this.themes.get(this.currentWorkbenchThemeId)!;
+    this.notifyListeners({ themeId: this.currentWorkbenchThemeId, theme });
+
+    console.log('[Theme] Theme mode set to:', mode);
+  }
+
+  /**
+   * Get current theme mode
+   */
+  getThemeMode(): ThemeMode {
+    return this.themeMode;
+  }
+
+  /**
    * Apply theme CSS variables to document
    */
-  private applyTheme(themeId: string): void {
-    const theme = this.themes.get(themeId);
-    if (!theme) return;
+  private applyThemes(): void {
+    // Determine effective theme IDs based on mode
+    const effectiveThemeId = this.getEffectiveThemeId();
+    const theme = this.themes.get(effectiveThemeId);
+
+    if (!theme) {
+      console.warn('[Theme] Cannot apply themes - effective theme not loaded yet');
+      return;
+    }
 
     const root = document.documentElement;
-    const colors = theme.colors;
 
-    // Apply all theme colors as CSS custom properties
-    Object.entries(colors).forEach(([key, value]) => {
+    // Apply workbench colors
+    Object.entries(theme.workbench).forEach(([key, value]) => {
       root.style.setProperty(`--${key}`, value);
     });
 
-    console.log(`[Theme] Applied theme: ${theme.name}`);
+    // Apply editor colors
+    Object.entries(theme.editor).forEach(([key, value]) => {
+      root.style.setProperty(`--${key}`, value);
+    });
+
+    console.log(`[Theme] Applied theme: ${theme.name} (${effectiveThemeId}), mode: ${this.themeMode}`);
+
+    // Verify a key variable was set
+    console.log('[Theme] Verification: --app-bg =', root.style.getPropertyValue('--app-bg'));
   }
 
   /**
@@ -634,14 +562,30 @@ export class ThemeService {
         console.error('[Theme] Listener error:', error);
       }
     });
+
+    // Dispatch DOM event for components to listen to
+    dispatch('theme-changed', { themeId: event.themeId, themeName: event.theme.name });
   }
+}
+
+/**
+ * Dispatch a custom event (internal use within theme service)
+ */
+function dispatch(eventName: string, detail?: any): void {
+  document.dispatchEvent(
+    new CustomEvent(eventName, {
+      detail,
+      bubbles: true,
+      composed: true,
+    })
+  );
 }
 
 /**
  * Get theme color for use in components
  * Falls back to CSS variable if theme service not initialized
  */
-export function getThemeColor(key: keyof ThemeColors): string {
+export function getThemeColor(key: keyof (WorkbenchColors | EditorColors)): string {
   return ThemeService.getInstance().getColor(key);
 }
 

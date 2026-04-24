@@ -1,5 +1,5 @@
 /**
- * Editor Extensions - Core extension stack for IntelliJ look and feel
+ * Editor Extensions - Core extension stack
  *
  * Provides the common extension configuration used by CodeMirror 6
  */
@@ -18,11 +18,11 @@ import {
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
 import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
-import { intellijLightHighlight } from './editor-syntax.js';
+import { openStormHighlight } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
 
 /**
- * Generates the core extension stack for IntelliJ look and feel
+ * Generates the core extension stack
  * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
  * @param onBreakpointClick - Callback for breakpoint clicks
  */
@@ -60,7 +60,7 @@ export function getCommonExtensions(
         activeDark: '#707070',
       },
     }),
-    syntaxHighlighting(intellijLightHighlight),
+    syntaxHighlighting(openStormHighlight),
     // Keymap order matters - historyKeymap must come before defaultKeymap
     // so undo/redo takes precedence
     // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z

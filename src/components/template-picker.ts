@@ -210,19 +210,22 @@ export class TemplatePicker extends TailwindElement() {
 
   private renderSidebar() {
     return html`
-      <div class="flex flex-col h-full bg-[#f9fafb]">
-        <div class="flex items-center justify-between px-3 py-2.5 border-b border-[#e5e7eb]">
-          <h2 class="text-[11px] font-medium text-[#6b7280] uppercase tracking-wide">Categories</h2>
+      <div class="flex flex-col h-full" style="background-color: var(--app-tab-inactive);">
+        <div class="flex items-center justify-between px-3 py-2.5 border-b" style="border-color: var(--app-border);">
+          <h2 class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--app-disabled-foreground);">Categories</h2>
           <button
             @click=${this.handleClose}
-            class="p-1 hover:bg-[#f3f4f6] rounded transition-colors"
+            class="p-1 rounded transition-colors"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+            @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
           >
-            <os-icon name="x" size="14" color="#6b7280"></os-icon>
+            <os-icon name="x" size="14"></os-icon>
           </button>
         </div>
 
         ${this.loading
-          ? html`<div class="flex-1 flex items-center justify-center"><div class="text-[#9ca3af] text-xs">Loading...</div></div>`
+          ? html`<div class="flex-1 flex items-center justify-center"><div class="text-xs" style="color: var(--app-disabled-foreground);">Loading...</div></div>`
           : html`
               <div class="flex-1 overflow-y-auto p-1.5">
                 <div class="flex flex-col gap-0.5">
@@ -230,14 +233,14 @@ export class TemplatePicker extends TailwindElement() {
                     const isSelected = this.selectedCategory === cat.id;
                     return html`
                       <div
-                        class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-[#e0e7ff] text-[#4f46e5]' : 'hover:bg-[#f3f4f6] text-[#374151]'}"
+                        class="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md cursor-pointer transition-colors ${isSelected ? 'bg-[#e0e7ff] text-[#4f46e5]' : 'hover:bg-[#f3f4f6]'}"
                         @click=${() => { this.selectedCategory = cat.id; this.selectedTemplate = null; }}
                       >
                         <div class="flex items-center gap-2">
-                          <os-icon name="${cat.icon}" size="14" color="${isSelected ? '#4f46e5' : '#6b7280'}"></os-icon>
-                          <span class="text-[12px] font-medium">${cat.name}</span>
+                          <os-icon name="${cat.icon}" size="14" color="${isSelected ? '#4f46e5' : 'var(--app-disabled-foreground)'}"></os-icon>
+                          <span class="text-[12px] font-medium" style="color: ${isSelected ? '#4f46e5' : 'var(--app-foreground)'};">${cat.name}</span>
                         </div>
-                        <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-[#e5e7eb] text-[#6b7280]">${cat.count}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-md" style="background-color: var(--app-toolbar-hover); color: var(--app-disabled-foreground);">${cat.count}</span>
                       </div>
                     `;
                   })}
@@ -275,8 +278,8 @@ export class TemplatePicker extends TailwindElement() {
     return html`
       <div class="flex flex-col h-full">
         <div class="flex items-center justify-between mb-3">
-          <h2 class="text-[11px] font-medium text-[#6b7280] uppercase tracking-wide">${categoryInfo?.name || 'Templates'}</h2>
-          <span class="text-[10px] text-[#9ca3af]">${templates.length} templates</span>
+          <h2 class="text-[11px] font-medium uppercase tracking-wide" style="color: var(--app-disabled-foreground);">${categoryInfo?.name || 'Templates'}</h2>
+          <span class="text-[10px]" style="color: var(--app-disabled-foreground);">${templates.length} templates</span>
         </div>
 
         <div class="flex-1 overflow-y-auto -mr-2 pr-2">
@@ -285,24 +288,25 @@ export class TemplatePicker extends TailwindElement() {
               const isSelected = this.selectedTemplate?.id === template.id;
               return html`
                 <div
-                  class="group p-2.5 bg-white border border-[#e5e7eb] rounded-md cursor-pointer transition-all ${isSelected ? 'border-[#4f46e5] bg-[#e0e7ff]' : 'hover:border-[#4f46e5] hover:bg-[#f9fafb]'}"
+                  class="group p-2.5 border rounded-md cursor-pointer transition-all ${isSelected ? 'border-[#4f46e5] bg-[#e0e7ff]' : 'hover:border-[#4f46e5]'}"
+                  style="background-color: var(--app-bg); border-color: var(--app-border);"
                   @click=${() => this.handleTemplateSelect(template)}
                 >
                   <div class="flex items-start gap-2">
-                    <div class="w-8 h-8 rounded bg-[#f9fafb] border border-[#e5e7eb] flex items-center justify-center flex-shrink-0">
+                    <div class="w-8 h-8 rounded border flex items-center justify-center flex-shrink-0" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
                       <os-icon name="${template.icon}" size="16" color="${template.icon_color}"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[12px] font-medium text-[#111827] truncate">
+                      <div class="text-[12px] font-medium truncate" style="color: var(--app-foreground);">
                         ${template.name}
                       </div>
                       <div class="flex items-center gap-1.5 mt-0.5">
                         ${this.renderLanguageIcon(template.language)}
-                        <span class="text-[9px] text-[#6b7280] capitalize">${template.language}</span>
+                        <span class="text-[9px] capitalize" style="color: var(--app-disabled-foreground);">${template.language}</span>
                       </div>
                     </div>
                   </div>
-                  <div class="text-[10px] text-[#6b7280] mt-1 line-clamp-2">
+                  <div class="text-[10px] mt-1 line-clamp-2" style="color: var(--app-disabled-foreground);">
                     ${template.description}
                   </div>
                 </div>
@@ -320,33 +324,37 @@ export class TemplatePicker extends TailwindElement() {
     return html`
       <div class="flex flex-col h-full">
         <!-- Header -->
-        <div class="flex items-center gap-3 px-4 py-3 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <div class="w-10 h-10 rounded-md bg-white border border-[#e5e7eb] shadow-sm flex items-center justify-center flex-shrink-0">
+        <div class="flex items-center gap-3 px-4 py-3 border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
+          <div class="w-10 h-10 rounded-md border shadow-sm flex items-center justify-center flex-shrink-0" style="background-color: var(--app-bg); border-color: var(--app-border);">
             <os-icon name="${this.selectedTemplate.icon}" size="20" color="${this.selectedTemplate.icon_color}"></os-icon>
           </div>
           <div class="flex-1 min-w-0">
-            <h2 class="text-[14px] font-semibold text-[#111827] truncate">${this.selectedTemplate.name}</h2>
-            <p class="text-[12px] text-[#6b7280] truncate">${this.selectedTemplate.description}</p>
+            <h2 class="text-[14px] font-semibold truncate" style="color: var(--app-foreground);">${this.selectedTemplate.name}</h2>
+            <p class="text-[12px] truncate" style="color: var(--app-disabled-foreground);">${this.selectedTemplate.description}</p>
           </div>
           <button
             @click=${this.handleBack}
-            class="p-2 hover:bg-[#f3f4f6] rounded-md transition-colors"
+            class="p-2 rounded-md transition-colors"
+            style="color: var(--app-disabled-foreground);"
+            @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+            @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
           >
-            <os-icon name="chevron-right" size="18" color="#6b7280" style="transform: rotate(180deg);"></os-icon>
+            <os-icon name="chevron-right" size="18" style="transform: rotate(180deg);"></os-icon>
           </button>
         </div>
 
         <!-- Form fields -->
-        <div class="space-y-4 px-4 py-4 flex-1 overflow-y-auto bg-white">
+        <div class="space-y-4 px-4 py-4 flex-1 overflow-y-auto" style="background-color: var(--app-bg);">
           <div>
-            <label class="block text-[12px] font-medium text-[#374151] mb-1.5">
+            <label class="block text-[12px] font-medium mb-1.5" style="color: var(--app-foreground);">
               Project name
               <span class="text-red-500 ml-0.5">*</span>
             </label>
             <input
               id="project-name-input"
               type="text"
-              class="w-full px-3 py-2 bg-white border border-[#d1d5db] rounded-md text-[13px] text-[#111827] focus:outline-none focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5] placeholder-[#9ca3af]"
+              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]"
+              style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
               placeholder="my-project"
               .value=${this.projectName}
               @input=${(e: Event) => this.projectName = (e.target as HTMLInputElement).value}
@@ -357,15 +365,16 @@ export class TemplatePicker extends TailwindElement() {
           </div>
 
           <div>
-            <label class="block text-[12px] font-medium text-[#374151] mb-1.5">
+            <label class="block text-[12px] font-medium mb-1.5" style="color: var(--app-foreground);">
               Location
-              <span class="text-[#9ca3af] font-normal">(optional)</span>
+              <span class="font-normal" style="color: var(--app-disabled-foreground);">(optional)</span>
             </label>
             <!-- Single unified field with integrated browse button -->
-            <div class="flex items-center border border-[#d1d5db] rounded-md overflow-hidden focus-within:border-[#4f46e5] focus-within:ring-1 focus-within:ring-[#4f46e5]">
+            <div class="flex items-center border rounded-md overflow-hidden focus-within:border-[#4f46e5] focus-within:ring-1 focus-within:ring-[#4f46e5]" style="border-color: var(--app-input-border);">
               <input
                 type="text"
-                class="flex-1 px-3 py-2 bg-white text-[13px] text-[#111827] focus:outline-none placeholder-[#9ca3af] min-w-0"
+                class="flex-1 px-3 py-2 text-[13px] focus:outline-none min-w-0"
+                style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
                 placeholder="~/projects"
                 .value=${this.projectPath}
                 @input=${(e: Event) => this.projectPath = (e.target as HTMLInputElement).value}
@@ -373,10 +382,13 @@ export class TemplatePicker extends TailwindElement() {
               <button
                 type="button"
                 @click=${this.openFolderDialog}
-                class="px-3 py-2 bg-[#f9fafb] border-l border-[#d1d5db] hover:bg-[#f3f4f6] transition-colors flex items-center gap-2"
+                class="px-3 py-2 border-l transition-colors flex items-center gap-2"
+                style="background-color: var(--app-tab-inactive); border-color: var(--app-border);"
                 title="Browse folders"
+                @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
               >
-                <os-icon name="folder" size="15" color="#6b7280"></os-icon>
+                <os-icon name="folder" size="15" style="color: var(--app-disabled-foreground);"></os-icon>
               </button>
             </div>
           </div>
@@ -411,10 +423,13 @@ export class TemplatePicker extends TailwindElement() {
         </div>
 
         <!-- Actions -->
-        <div class="flex items-center justify-end gap-2 px-4 py-3 bg-[#f9fafb] border-t border-[#e5e7eb]">
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
           <button
             @click=${this.handleClose}
-            class="px-4 py-2 bg-white border border-[#d1d5db] text-[#374151] text-[13px] font-medium rounded-md hover:bg-[#f9fafb] hover:border-[#9ca3af] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            class="px-4 py-2 border text-[13px] font-medium rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            style="background-color: var(--app-bg); color: var(--app-foreground); border-color: var(--app-border);"
+            @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+            @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-bg)'; }}
             ?disabled=${this.loading}
           >
             Cancel
@@ -442,8 +457,8 @@ export class TemplatePicker extends TailwindElement() {
         ></div>
 
         <div
-          class="relative bg-white rounded-lg shadow-xl w-full max-w-[700px] mx-4 overflow-hidden flex flex-col"
-          style="animation: scaleIn 0.12s ease-out;"
+          class="relative rounded-lg shadow-xl w-full max-w-[700px] mx-4 overflow-hidden flex flex-col"
+          style="background-color: var(--app-bg); border-color: var(--app-border); animation: scaleIn 0.12s ease-out;"
         >
           ${this.selectedTemplate
             ? this.renderTemplateDetails()

@@ -3,6 +3,7 @@ import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
+import { dispatch } from "./lib/events.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/theme-service.js";
@@ -51,6 +52,9 @@ import "./components/template-picker.js";
 import "./components/run-toolbar.js";
 import "./components/debug-toolbar.js";
 import "./components/debug-panel.js";
+import "./components/settings-panel.js";
+import "./components/theme-palette.js";
+import "./components/hover-tooltip.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -73,6 +77,8 @@ export class OpenStormApp extends TailwindElement() {
   @state() private debugSidebarVisible = false;
   @state() private isDebugging = false;
   @state() private debugPanelHeight = 250;
+  @state() private appConsoleVisible = false;
+  @state() private appConsoleHeight = 200;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -80,7 +86,47 @@ export class OpenStormApp extends TailwindElement() {
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
+    this.setupMenuHandler();
+
+    // Listen for theme changes to trigger re-render
+    document.addEventListener('theme-changed', () => {
+      this.requestUpdate();
+    });
+
     // Terminal will be auto-created when project is opened
+  }
+
+  private async setupMenuHandler(): Promise<void> {
+    const { listen } = await import("@tauri-apps/api/event");
+    listen("menu-item-clicked", (event: any) => {
+      const menuId = event.payload;
+      console.log("[Menu] Menu item clicked:", menuId);
+
+      switch (menuId) {
+        case "theme-picker":
+          dispatch("open-theme-palette");
+          break;
+        case "toggle-terminal":
+          dispatch("toggle-terminal");
+          break;
+        case "toggle-debug":
+          dispatch("set-active-activity", { activity: "debug" });
+          break;
+        case "new-file":
+          dispatch("new-file");
+          break;
+        case "open-file":
+          dispatch("open-file-dialog");
+          break;
+        case "save":
+          dispatch("save-file");
+          break;
+        case "find":
+          dispatch("quick-search");
+          break;
+        // Add more menu handlers as needed
+      }
+    }).catch(console.error);
   }
 
   private async setupFileChangeHandler(): Promise<void> {
@@ -88,14 +134,7 @@ export class OpenStormApp extends TailwindElement() {
     const { listen } = await import("@tauri-apps/api/event");
     listen("file-change", (event: any) => {
       console.log("File change detected:", event.payload);
-      // Dispatch event to refresh file explorer
-      document.dispatchEvent(
-        new CustomEvent("refresh-explorer", {
-          detail: event.payload,
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("refresh-explorer", event.payload);
     }).catch(console.error);
 
     // Listen for DAP debug events from backend
@@ -104,68 +143,39 @@ export class OpenStormApp extends TailwindElement() {
       this.isDebugging = true;
       console.log("[DAP] isDebugging set to:", this.isDebugging);
       this.requestUpdate();
-      document.dispatchEvent(
-        new CustomEvent("debug-session-started", {
-          detail: {},
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-session-started");
     }).catch(console.error);
 
     listen("debug-stopped", (event: any) => {
       console.log("[DAP] debug-stopped event received:", event.payload);
-      // isDebugging should already be true from debug-initialized
-      // Just update the UI to show debug panel
       this.requestUpdate();
-      document.dispatchEvent(
-        new CustomEvent("debug-stopped", {
-          detail: event.payload,
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-stopped", event.payload);
     }).catch(console.error);
 
     listen("debug-continued", () => {
       console.log("[DAP] debug-continued event received");
-      // isDebugging should already be true from debug-initialized
-      // Just update the UI to show debug panel
       this.requestUpdate();
-      document.dispatchEvent(
-        new CustomEvent("debug-continued", {
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-continued");
     }).catch(console.error);
 
     listen("debug-terminated", () => {
       console.log("[DAP] debug-terminated event received");
       this.isDebugging = false;
       this.requestUpdate();
-      document.dispatchEvent(
-        new CustomEvent("debug-session-ended", {
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-session-ended");
     }).catch(console.error);
+
+    // Listen for close-settings event
+    document.addEventListener("close-settings", () => {
+      this.activeActivity = "explorer";
+    });
 
     // Also listen for direct debug-session-ended events from backend
     listen("debug-session-ended", (event) => {
       console.log("[main.ts] debug-session-ended event received from backend!", event);
-      console.log("[main.ts] isDebugging before:", this.isDebugging);
       this.isDebugging = false;
       this.requestUpdate();
-      console.log("[main.ts] isDebugging after:", this.isDebugging);
-      document.dispatchEvent(
-        new CustomEvent("debug-session-ended", {
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      console.log("[main.ts] DOM event dispatched");
+      dispatch("debug-session-ended");
     }).catch(console.error);
 
     // Handle debug-exited event (when process exits)
@@ -173,23 +183,12 @@ export class OpenStormApp extends TailwindElement() {
       console.log("[main.ts] debug-exited event received");
       this.isDebugging = false;
       this.requestUpdate();
-      document.dispatchEvent(
-        new CustomEvent("debug-session-ended", {
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-session-ended");
     }).catch(console.error);
 
     listen("debug-output", (event: any) => {
       console.log("[DAP] debug-output event received:", event.payload);
-      document.dispatchEvent(
-        new CustomEvent("debug-output", {
-          detail: event.payload,
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("debug-output", event.payload);
     }).catch(console.error);
   }
 
@@ -215,13 +214,7 @@ export class OpenStormApp extends TailwindElement() {
 
   private handleLocateFile = (): void => {
     if (this.activeFilePath) {
-      document.dispatchEvent(
-        new CustomEvent("locate-file-external", {
-          detail: { path: this.activeFilePath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("locate-file-external", { path: this.activeFilePath });
     }
   };
 
@@ -266,13 +259,7 @@ export class OpenStormApp extends TailwindElement() {
         this.enforceTabLimit();
 
         // Dispatch event for editor-pane to update its view
-        document.dispatchEvent(
-          new CustomEvent("open-file-external", {
-            detail: { path: targetPath, content },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        dispatch("open-file-external", { path: targetPath, content });
       } catch (error) {
         console.error("Failed to open target file:", error);
         return;
@@ -284,13 +271,7 @@ export class OpenStormApp extends TailwindElement() {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         // Dispatch cursor position for the editor to restore
-        document.dispatchEvent(
-          new CustomEvent("restore-cursor-position", {
-            detail: { line: line + 1, column: column + 1 },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        dispatch("restore-cursor-position", { line: line + 1, column: column + 1 });
       });
     });
   };
@@ -313,13 +294,7 @@ export class OpenStormApp extends TailwindElement() {
       detail: { path: newProjectPath },
     } as CustomEvent<{ path: string }>);
 
-    document.dispatchEvent(
-      new CustomEvent("project-opened", {
-        detail: { path: this.projectPath },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dispatch("project-opened", { path: this.projectPath });
   };
 
   private handleOpenFolder = async (): Promise<void> => {
@@ -344,13 +319,7 @@ export class OpenStormApp extends TailwindElement() {
           detail: { path: newProjectPath },
         } as CustomEvent<{ path: string }>);
 
-        document.dispatchEvent(
-          new CustomEvent("project-opened", {
-            detail: { path: this.projectPath },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        dispatch("project-opened", { path: this.projectPath });
       }
     } catch (error) {
       console.error("Failed to open folder:", error);
@@ -397,13 +366,7 @@ export class OpenStormApp extends TailwindElement() {
         }
 
         // Dispatch event only for editor-pane to update its view
-        document.dispatchEvent(
-          new CustomEvent("open-file-external", {
-            detail: { path: filePath, content },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        dispatch("open-file-external", { path: filePath, content });
       }
     } catch (error) {
       console.error("Failed to open file:", error);
@@ -414,7 +377,7 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "p") {
         e.preventDefault();
-        document.dispatchEvent(new CustomEvent("quick-search"));
+        dispatch("quick-search");
       }
       if ((e.ctrlKey || e.metaKey) && e.key === "s" && !e.shiftKey) {
         e.preventDefault();
@@ -438,7 +401,7 @@ export class OpenStormApp extends TailwindElement() {
 
   private async formatActiveFile(): Promise<void> {
     // Dispatch event to editor-pane to format code
-    document.dispatchEvent(new CustomEvent('format-code'));
+    dispatch('format-code');
   }
 
   private async saveActiveFile(): Promise<void> {
@@ -458,11 +421,7 @@ export class OpenStormApp extends TailwindElement() {
         t.path === activeTab.path ? { ...t, modified: false } : t,
       );
       // Notify editor-pane to update saved content
-      document.dispatchEvent(new CustomEvent('file-saved', {
-        detail: { path: activeTab.path, content: activeTab.content },
-        bubbles: true,
-        composed: true,
-      }));
+      dispatch('file-saved', { path: activeTab.path, content: activeTab.content });
     } catch (error) {
       console.error("Failed to save file:", error);
       this.saveStatus = "error";
@@ -511,6 +470,10 @@ export class OpenStormApp extends TailwindElement() {
     this.activeActivity = e.detail.item;
   };
 
+  private handleCloseSettings = (): void => {
+    this.activeActivity = "explorer";
+  };
+
   private handleFileSelect = async (
     e: CustomEvent<{ path: string }>,
   ): Promise<void> => {
@@ -548,13 +511,7 @@ export class OpenStormApp extends TailwindElement() {
 
       // Dispatch open-file for editor-pane to update its view
       // Use open-file-external instead to avoid triggering the global open-file handler
-      document.dispatchEvent(
-        new CustomEvent("open-file-external", {
-          detail: { path, content },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("open-file-external", { path, content });
     } catch (error) {
       console.error("Failed to read file:", error);
     }
@@ -583,13 +540,7 @@ export class OpenStormApp extends TailwindElement() {
       this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
       // Use open-file-external to avoid triggering the global open-file handler
-      document.dispatchEvent(
-        new CustomEvent("open-file-external", {
-          detail: { path: tab.path, content: tab.content },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("open-file-external", { path: tab.path, content: tab.content });
     }
   };
 
@@ -620,13 +571,7 @@ export class OpenStormApp extends TailwindElement() {
       console.log("LSP connection pool initialized for:", this.projectPath);
 
       // Dispatch project-opened event for run-toolbar to detect configurations
-      document.dispatchEvent(
-        new CustomEvent("project-opened", {
-          detail: { path: this.projectPath },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+      dispatch("project-opened", { path: this.projectPath });
     } catch (error) {
       console.error("Failed to start file watcher:", error);
     }
@@ -647,19 +592,13 @@ export class OpenStormApp extends TailwindElement() {
         const newActiveIndex = Math.min(tabIndex, this.tabs.length - 1);
         this.activeTabId = this.tabs[newActiveIndex].id;
         // Use open-file-external to avoid triggering the global open-file handler (which opens the file dialog)
-        document.dispatchEvent(
-          new CustomEvent("open-file-external", {
-            detail: {
-              path: this.tabs[newActiveIndex].path,
-              content: this.tabs[newActiveIndex].content,
-            },
-            bubbles: true,
-            composed: true,
-          }),
-        );
+        dispatch("open-file-external", {
+          path: this.tabs[newActiveIndex].path,
+          content: this.tabs[newActiveIndex].content,
+        });
       } else {
         this.activeTabId = "";
-        document.dispatchEvent(new CustomEvent("clear-editor"));
+        dispatch("clear-editor");
       }
     }
   }
@@ -692,7 +631,7 @@ export class OpenStormApp extends TailwindElement() {
     // Show full-window welcome screen when no project is open AND no files are open
     if (!this.projectPath && this.tabs.length === 0) {
       return html`
-        <div class="flex flex-col h-screen w-screen overflow-hidden bg-white">
+        <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg);">
           <welcome-screen></welcome-screen>
         </div>
       `;
@@ -708,11 +647,12 @@ export class OpenStormApp extends TailwindElement() {
 
     // In single-file mode, hide explorer and terminal by default
     const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
+    const showSettings = !isSingleFileMode && this.activeActivity === "settings";
     const showTerminal = !isSingleFileMode && this.terminalVisible && !this.isDebugging;
     const showDebugPanel = this.isDebugging;
 
     return html`
-      <div class="flex flex-col h-screen w-screen overflow-hidden bg-white">
+      <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
         <!-- Header -->
         <app-header
           class="shrink-0"
@@ -741,7 +681,11 @@ export class OpenStormApp extends TailwindElement() {
           <div class="flex flex-col flex-1 overflow-hidden min-h-0 relative">
             <!-- Editor Area -->
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
-              ${showExplorer
+              ${showSettings
+                ? html`
+                    <settings-panel class="flex-1"></settings-panel>
+                  `
+                : showExplorer
                 ? html`
                     <resizable-container
                       direction="horizontal"
@@ -755,19 +699,19 @@ export class OpenStormApp extends TailwindElement() {
                     >
                       <div slot="first" class="h-full w-full">
                         <project-explorer
-                          class="flex flex-col overflow-hidden bg-[#f7f7f7] border-r border-[#c7c7c7] h-full"
-                          style="width: ${this.sidebarWidth}px;"
+                          class="flex flex-col overflow-hidden border-r h-full"
+                          style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
                           .projectPath=${this.projectPath}
                           .selectedPath=${this.activeFilePath}
                           @file-selected=${this.handleFileSelect}
-                          @open-folder=${() =>
-                            document.dispatchEvent(new CustomEvent("open-folder"))}
+                          @open-folder=${() => dispatch("open-folder")}
                         >
                         </project-explorer>
                       </div>
                       <div
                         slot="second"
-                        class="flex flex-col overflow-hidden min-w-0 bg-white w-full h-full"
+                        class="flex flex-col overflow-hidden min-w-0 w-full h-full"
+                        style="background-color: var(--app-bg);"
                       >
                         <!-- Tab Bar -->
                         ${this.tabs.length > 0
@@ -791,10 +735,8 @@ export class OpenStormApp extends TailwindElement() {
                           .activeTabId=${this.activeTabId}
                           @folder-opened=${this.handleFolderOpened}
                           @content-changed=${this.handleContentChanged}
-                          @open-folder=${() =>
-                            document.dispatchEvent(new CustomEvent("open-folder"))}
-                          @quick-search=${() =>
-                            document.dispatchEvent(new CustomEvent("quick-search"))}
+                          @open-folder=${() => dispatch("open-folder")}
+                          @quick-search=${() => dispatch("quick-search")}
                         >
                         </editor-pane>
                       </div>
@@ -803,7 +745,8 @@ export class OpenStormApp extends TailwindElement() {
                 : html`
                     <!-- Editor only (explorer hidden or single-file mode) -->
                     <div
-                      class="flex flex-col flex-1 overflow-hidden bg-white h-full w-full"
+                      class="flex flex-col flex-1 overflow-hidden h-full w-full"
+                      style="background-color: var(--app-bg);"
                     >
                       ${this.tabs.length > 0
                         ? html`
@@ -825,10 +768,8 @@ export class OpenStormApp extends TailwindElement() {
                         .activeTabId=${this.activeTabId}
                         @folder-opened=${this.handleFolderOpened}
                         @content-changed=${this.handleContentChanged}
-                        @open-folder=${() =>
-                          document.dispatchEvent(new CustomEvent("open-folder"))}
-                        @quick-search=${() =>
-                          document.dispatchEvent(new CustomEvent("quick-search"))}
+                        @open-folder=${() => dispatch("open-folder")}
+                        @quick-search=${() => dispatch("quick-search")}
                       >
                       </editor-pane>
                     </div>
@@ -903,6 +844,12 @@ export class OpenStormApp extends TailwindElement() {
           @file-selected=${this.handleFileSelect}
         >
         </search-overlay>
+
+        <!-- Theme Palette -->
+        <theme-palette></theme-palette>
+
+        <!-- Hover Tooltip -->
+        <hover-tooltip></hover-tooltip>
       </div>
     `;
   }

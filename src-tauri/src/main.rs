@@ -11,8 +11,9 @@ mod process;
 mod run_config;
 mod terminal;
 mod templates;
+mod theme;
 
-use tauri::{Manager, RunEvent, Emitter};
+use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tokio::sync::Mutex;
 
 /// Poll DAP events and emit them to the frontend
@@ -164,6 +165,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(terminal::PtyManager::new())
         .manage(file_watcher::FileWatcher::new())
         .manage(process::ProcessManager::new())
@@ -177,6 +179,133 @@ fn main() {
             let config = config::AppConfig::new();
             if let Err(e) = config.create_directories() {
                 eprintln!("Failed to create configuration directories: {}", e);
+            }
+
+            // Create native menu bar
+            #[cfg(target_os = "macos")]
+            let menu = Menu::with_items(app, &[
+                &Submenu::with_items(app, "OpenStorm", true, &[
+                    &MenuItem::with_id(app, "about", "About OpenStorm", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "check-updates", "Check for Updates...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "settings", "Settings", true, Some("Cmd+,")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "services", "Services", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "hide", "Hide OpenStorm", true, Some("Cmd+H")).unwrap(),
+                    &MenuItem::with_id(app, "hide-others", "Hide Others", true, Some("Cmd+Shift+H")).unwrap(),
+                    &MenuItem::with_id(app, "quit", "Quit OpenStorm", true, Some("Cmd+Q")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "File", true, &[
+                    &MenuItem::with_id(app, "new-file", "New File", true, Some("Cmd+N")).unwrap(),
+                    &MenuItem::with_id(app, "new-project", "New Project...", true, Some("Cmd+Shift+N")).unwrap(),
+                    &MenuItem::with_id(app, "open-file", "Open File...", true, Some("Cmd+O")).unwrap(),
+                    &MenuItem::with_id(app, "open-folder", "Open Folder...", true, Some("Cmd+Shift+O")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "save", "Save", true, Some("Cmd+S")).unwrap(),
+                    &MenuItem::with_id(app, "save-as", "Save As...", true, Some("Cmd+Shift+S")).unwrap(),
+                    &MenuItem::with_id(app, "save-all", "Save All", true, Some("Cmd+Option+S")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("Cmd+W")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Edit", true, &[
+                    &MenuItem::with_id(app, "undo", "Undo", true, Some("Cmd+Z")).unwrap(),
+                    &MenuItem::with_id(app, "redo", "Redo", true, Some("Cmd+Shift+Z")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "cut", "Cut", true, Some("Cmd+X")).unwrap(),
+                    &MenuItem::with_id(app, "copy", "Copy", true, Some("Cmd+C")).unwrap(),
+                    &MenuItem::with_id(app, "paste", "Paste", true, Some("Cmd+V")).unwrap(),
+                    &MenuItem::with_id(app, "select-all", "Select All", true, Some("Cmd+A")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "find", "Find", true, Some("Cmd+F")).unwrap(),
+                    &MenuItem::with_id(app, "replace", "Find and Replace", true, Some("Cmd+Option+F")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "View", true, &[
+                    &MenuItem::with_id(app, "command-palette", "Command Palette", true, Some("Cmd+Shift+P")).unwrap(),
+                    &MenuItem::with_id(app, "theme-picker", "Theme Picker", true, Some("Cmd+Shift+T")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "toggle-sidebar", "Toggle Sidebar", true, Some("Cmd+B")).unwrap(),
+                    &MenuItem::with_id(app, "toggle-terminal", "Toggle Terminal", true, Some("Cmd+`")).unwrap(),
+                    &MenuItem::with_id(app, "toggle-debug", "Toggle Debug Panel", true, Some("Cmd+Shift+D")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "zoom-in", "Zoom In", true, Some("Cmd+")).unwrap(),
+                    &MenuItem::with_id(app, "zoom-out", "Zoom Out", true, Some("Cmd+-")).unwrap(),
+                    &MenuItem::with_id(app, "reset-zoom", "Reset Zoom", true, Some("Cmd+0")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Run", true, &[
+                    &MenuItem::with_id(app, "run", "Run", true, Some("Cmd+R")).unwrap(),
+                    &MenuItem::with_id(app, "debug", "Debug", true, Some("Cmd+Shift+R")).unwrap(),
+                    &MenuItem::with_id(app, "stop", "Stop", true, Some("Cmd+Shift+K")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "step-over", "Step Over", true, Some("F10")).unwrap(),
+                    &MenuItem::with_id(app, "step-into", "Step Into", true, Some("F11")).unwrap(),
+                    &MenuItem::with_id(app, "step-out", "Step Out", true, Some("Shift+F11")).unwrap(),
+                    &MenuItem::with_id(app, "continue", "Continue", true, Some("F5")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Help", true, &[
+                    &MenuItem::with_id(app, "documentation", "Documentation", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "report-issue", "Report Issue", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "about", "About OpenStorm", true, None::<&str>).unwrap(),
+                ]).unwrap(),
+            ]).ok();
+
+            #[cfg(not(target_os = "macos"))]
+            let menu = Menu::with_items(app, &[
+                &Submenu::with_items(app, "File", true, &[
+                    &MenuItem::with_id(app, "new-file", "New File", true, Some("Ctrl+N")).unwrap(),
+                    &MenuItem::with_id(app, "new-project", "New Project...", true, Some("Ctrl+Shift+N")).unwrap(),
+                    &MenuItem::with_id(app, "open-file", "Open File...", true, Some("Ctrl+O")).unwrap(),
+                    &MenuItem::with_id(app, "open-folder", "Open Folder...", true, Some("Ctrl+Shift+O")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "save", "Save", true, Some("Ctrl+S")).unwrap(),
+                    &MenuItem::with_id(app, "save-as", "Save As...", true, Some("Ctrl+Shift+S")).unwrap(),
+                    &MenuItem::with_id(app, "save-all", "Save All", true, Some("Ctrl+Alt+S")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("Ctrl+W")).unwrap(),
+                    &MenuItem::with_id(app, "quit", "Quit OpenStorm", true, Some("Alt+F4")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Edit", true, &[
+                    &MenuItem::with_id(app, "undo", "Undo", true, Some("Ctrl+Z")).unwrap(),
+                    &MenuItem::with_id(app, "redo", "Redo", true, Some("Ctrl+Y")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "cut", "Cut", true, Some("Ctrl+X")).unwrap(),
+                    &MenuItem::with_id(app, "copy", "Copy", true, Some("Ctrl+C")).unwrap(),
+                    &MenuItem::with_id(app, "paste", "Paste", true, Some("Ctrl+V")).unwrap(),
+                    &MenuItem::with_id(app, "select-all", "Select All", true, Some("Ctrl+A")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "find", "Find", true, Some("Ctrl+F")).unwrap(),
+                    &MenuItem::with_id(app, "replace", "Find and Replace", true, Some("Ctrl+H")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "View", true, &[
+                    &MenuItem::with_id(app, "command-palette", "Command Palette", true, Some("Ctrl+Shift+P")).unwrap(),
+                    &MenuItem::with_id(app, "theme-picker", "Theme Picker", true, Some("Ctrl+Shift+T")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "toggle-sidebar", "Toggle Sidebar", true, Some("Ctrl+B")).unwrap(),
+                    &MenuItem::with_id(app, "toggle-terminal", "Toggle Terminal", true, Some("Ctrl+`")).unwrap(),
+                    &MenuItem::with_id(app, "toggle-debug", "Toggle Debug Panel", true, Some("Ctrl+Shift+D")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Run", true, &[
+                    &MenuItem::with_id(app, "run", "Run", true, Some("Ctrl+R")).unwrap(),
+                    &MenuItem::with_id(app, "debug", "Debug", true, Some("Ctrl+Shift+R")).unwrap(),
+                    &MenuItem::with_id(app, "stop", "Stop", true, Some("Ctrl+Shift+K")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "step-over", "Step Over", true, Some("F10")).unwrap(),
+                    &MenuItem::with_id(app, "step-into", "Step Into", true, Some("F11")).unwrap(),
+                    &MenuItem::with_id(app, "step-out", "Step Out", true, Some("Shift+F11")).unwrap(),
+                    &MenuItem::with_id(app, "continue", "Continue", true, Some("F5")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Help", true, &[
+                    &MenuItem::with_id(app, "documentation", "Documentation", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "report-issue", "Report Issue", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "about", "About OpenStorm", true, None::<&str>).unwrap(),
+                ]).unwrap(),
+            ]).ok();
+
+            // Set the menu
+            if let Some(menu) = menu {
+                app.set_menu(menu).ok();
             }
 
             // Set app handle for terminal manager
@@ -198,6 +327,12 @@ fn main() {
             spawn_process_output_listener(handle.clone());
 
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            // Handle menu item clicks
+            println!("[Menu] Event: {}", event.id.0);
+            // Forward menu events to frontend via custom events
+            app.emit("menu-item-clicked", event.id.0.to_string()).ok();
         })
         .invoke_handler(tauri::generate_handler![
             // === File Operations ===
@@ -269,6 +404,9 @@ fn main() {
             lsp::notify_document_changed,
             lsp::notify_document_closed,
             lsp::notify_document_saved,
+
+            // === Theme ===
+            theme::get_system_theme,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

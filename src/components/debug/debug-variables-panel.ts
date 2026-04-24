@@ -257,9 +257,10 @@ export class DebugVariablesPanel extends TailwindElement() {
         ${isEditing
           ? html`
               <input
-                class="variable-edit-input flex-1 px-1.5 py-0.5 text-xs font-mono border border-indigo-500 rounded bg-white outline-none"
+                class="variable-edit-input flex-1 px-1.5 py-0.5 text-xs font-mono border border-indigo-500 rounded outline-none"
                 type="text"
                 value=${this.editingVariable.value}
+                style="background-color: var(--app-input-background); color: var(--app-input-foreground);"
                 @keydown=${(e: KeyboardEvent) => this.handleVariableEditKeydown(e, currentPath)}
                 @blur=${() => this.saveVariableEdit(currentPath)}
                 @click=${(e: Event) => e.stopPropagation()}
@@ -363,23 +364,24 @@ export class DebugVariablesPanel extends TailwindElement() {
         .variable-expand { transition: transform 0.15s ease; }
         .variable-expand.expanded { transform: rotate(90deg); }
       </style>
-      <div class="flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider bg-gray-50 border-b border-gray-200">
-        <span>Variables</span>
+      <div class="flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
+        <span style="color: var(--app-foreground);">Variables</span>
         <div class="flex items-center gap-2 max-w-[200px] flex-1">
           <input type="text"
-                 class="flex-1 px-2 py-0.5 text-xs border border-gray-300 rounded bg-white outline-none focus:border-indigo-500 font-sans"
+                 class="flex-1 px-2 py-0.5 text-xs border rounded outline-none focus:border-indigo-500 font-sans"
+                 style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-border);"
                  placeholder="Filter variables..."
                  .value=${this.variableFilter}
                  @input=${(e: Event) => { this.variableFilter = (e.target as HTMLInputElement).value; this.requestUpdate(); }}/>
         </div>
         <div class="flex gap-0.5">
-          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-110" @click=${() => this.expandAllVariables()} title="Expand All">
+          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-110" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }} @click=${() => this.expandAllVariables()} title="Expand All">
             <iconify-icon icon="mdi:arrow-expand-all" width="14"></iconify-icon>
           </button>
-          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-110" @click=${() => this.collapseAllVariables()} title="Collapse All">
+          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-110" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }} @click=${() => this.collapseAllVariables()} title="Collapse All">
             <iconify-icon icon="mdi:arrow-collapse-all" width="14"></iconify-icon>
           </button>
-          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-110" @click=${() => this.refresh()} title="Refresh">
+          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-110" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }} @click=${() => this.refresh()} title="Refresh">
             <iconify-icon icon="mdi:refresh" width="14"></iconify-icon>
           </button>
         </div>
@@ -387,16 +389,16 @@ export class DebugVariablesPanel extends TailwindElement() {
       <div>
         ${this.isLoading ? html`
           <div class="p-2">
-            <div class="h-5 bg-gray-200 rounded animate-pulse mb-1 w-2/5"></div>
-            <div class="h-5 bg-gray-200 rounded animate-pulse mb-1 w-3/5"></div>
-            <div class="h-5 bg-gray-200 rounded animate-pulse mb-1 w-4/5"></div>
-            <div class="h-5 bg-gray-200 rounded animate-pulse w-3/5"></div>
+            <div class="h-5 rounded animate-pulse mb-1 w-2/5" style="background-color: var(--app-toolbar-hover);"></div>
+            <div class="h-5 rounded animate-pulse mb-1 w-3/5" style="background-color: var(--app-toolbar-hover);"></div>
+            <div class="h-5 rounded animate-pulse mb-1 w-4/5" style="background-color: var(--app-toolbar-hover);"></div>
+            <div class="h-5 rounded animate-pulse w-3/5" style="background-color: var(--app-toolbar-hover);"></div>
           </div>
         ` : html`
           ${pinnedVars.length > 0 ? pinnedVars.map(v => this.renderVariable(v)) : ''}
           ${unpinnedVars.map(v => this.renderVariable(v))}
           ${filteredVars.length === 0 ? html`
-            <div class="flex flex-col items-center justify-center min-h-[60px] px-3 py-2 text-gray-500 text-xs font-sans">
+            <div class="flex flex-col items-center justify-center min-h-[60px] px-3 py-2 text-xs font-sans" style="color: var(--app-disabled-foreground);">
               ${this.variableFilter ? 'No matching variables' : 'No variables in scope'}
             </div>
           ` : ''}

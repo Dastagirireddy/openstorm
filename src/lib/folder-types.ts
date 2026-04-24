@@ -1,5 +1,5 @@
 /**
- * Folder type detection for IntelliJ-style folder coloring
+ * Folder type detection for folder coloring
  */
 
 export type FolderType =
@@ -64,7 +64,7 @@ export function detectFolderType(folderName: string, folderPath: string = ''): F
 }
 
 /**
- * Get color for folder type (IntelliJ-style)
+ * Get color for folder type
  * Only folders NOT committed to git get special coloring.
  * Background colors are subtle tints of the icon color.
  *
