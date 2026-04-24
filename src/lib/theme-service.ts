@@ -174,6 +174,8 @@ export interface ThemeChangeEvent {
   theme: ThemeDefinition;
 }
 
+export type ThemeMode = 'system' | 'light' | 'dark';
+
 /**
  * Theme Service singleton
  *
@@ -187,9 +189,11 @@ export class ThemeService {
   private themes: Map<string, ThemeDefinition> = new Map();
   private currentWorkbenchThemeId: string = 'openstorm-light';
   private currentEditorThemeId: string = 'openstorm-light';
+  private themeMode: ThemeMode = 'system'; // 'system' | 'light' | 'dark'
   private listeners: Set<(event: ThemeChangeEvent) => void> = new Set();
   private initialized: boolean = false;
   private themesLoaded: boolean = false;
+  private systemThemeQuery: MediaQueryList | null = null;
 
   private constructor() {}
 
@@ -218,8 +222,14 @@ export class ThemeService {
     // Try to load saved theme preference
     const savedWorkbenchTheme = localStorage.getItem('openstorm-workbench-theme');
     const savedEditorTheme = localStorage.getItem('openstorm-editor-theme');
+    const savedThemeMode = localStorage.getItem('openstorm-theme-mode') as ThemeMode | null;
 
-    console.log('[Theme] Saved preferences:', { savedWorkbenchTheme, savedEditorTheme });
+    console.log('[Theme] Saved preferences:', { savedWorkbenchTheme, savedEditorTheme, savedThemeMode });
+
+    // Restore theme mode (system/light/dark)
+    if (savedThemeMode && ['system', 'light', 'dark'].includes(savedThemeMode)) {
+      this.themeMode = savedThemeMode;
+    }
 
     // Use saved theme only if it exists, otherwise default to openstorm-light
     if (savedWorkbenchTheme && this.themes.has(savedWorkbenchTheme)) {
@@ -237,7 +247,12 @@ export class ThemeService {
       this.currentEditorThemeId = this.currentWorkbenchThemeId;
     }
 
-    console.log('[Theme] Selected themes:', { workbench: this.currentWorkbenchThemeId, editor: this.currentEditorThemeId });
+    console.log('[Theme] Selected themes:', { workbench: this.currentWorkbenchThemeId, editor: this.currentEditorThemeId, mode: this.themeMode });
+
+    // Set up system theme listener
+    this.setupSystemThemeListener();
+
+    // Apply themes (will use system theme if mode is 'system')
     this.applyThemes();
     this.initialized = true;
     console.log('[Theme] Theme service initialized');
@@ -432,31 +447,105 @@ export class ThemeService {
   }
 
   /**
+   * Set up listener for system theme changes
+   */
+  private setupSystemThemeListener(): void {
+    // Listen for CSS media query changes
+    this.systemThemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+      if (this.themeMode === 'system') {
+        console.log('[Theme] System theme changed:', e.matches ? 'dark' : 'light');
+        this.applyThemes();
+      }
+    };
+
+    this.systemThemeQuery.addEventListener('change', handleSystemThemeChange);
+    console.log('[Theme] System theme listener registered');
+  }
+
+  /**
+   * Get current system theme (light or dark)
+   */
+  private getSystemTheme(): 'light' | 'dark' {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return 'light'; // Default fallback
+  }
+
+  /**
+   * Get effective theme ID based on mode
+   */
+  private getEffectiveThemeId(): string {
+    if (this.themeMode === 'system') {
+      const systemTheme = this.getSystemTheme();
+      // Map system theme to available theme
+      // You can customize this mapping based on available themes
+      return systemTheme === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+    }
+    return this.themeMode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+  }
+
+  /**
+   * Set theme mode (system/light/dark)
+   */
+  setThemeMode(mode: ThemeMode): void {
+    this.themeMode = mode;
+    localStorage.setItem('openstorm-theme-mode', mode);
+
+    if (mode === 'system') {
+      // When switching to system, immediately apply based on current system theme
+      const systemTheme = this.getSystemTheme();
+      const effectiveThemeId = systemTheme === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+      this.currentWorkbenchThemeId = effectiveThemeId;
+      this.currentEditorThemeId = effectiveThemeId;
+    } else {
+      this.currentWorkbenchThemeId = mode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+      this.currentEditorThemeId = mode === 'dark' ? 'openstorm-dark' : 'openstorm-light';
+    }
+
+    this.applyThemes();
+
+    const theme = this.themes.get(this.currentWorkbenchThemeId)!;
+    this.notifyListeners({ themeId: this.currentWorkbenchThemeId, theme });
+
+    console.log('[Theme] Theme mode set to:', mode);
+  }
+
+  /**
+   * Get current theme mode
+   */
+  getThemeMode(): ThemeMode {
+    return this.themeMode;
+  }
+
+  /**
    * Apply theme CSS variables to document
    */
   private applyThemes(): void {
-    const workbenchTheme = this.themes.get(this.currentWorkbenchThemeId);
-    const editorTheme = this.themes.get(this.currentEditorThemeId);
+    // Determine effective theme IDs based on mode
+    const effectiveThemeId = this.getEffectiveThemeId();
+    const theme = this.themes.get(effectiveThemeId);
 
-    if (!workbenchTheme || !editorTheme) {
-      console.warn('[Theme] Cannot apply themes - themes not loaded yet');
+    if (!theme) {
+      console.warn('[Theme] Cannot apply themes - effective theme not loaded yet');
       return;
     }
 
     const root = document.documentElement;
 
     // Apply workbench colors
-    Object.entries(workbenchTheme.workbench).forEach(([key, value]) => {
+    Object.entries(theme.workbench).forEach(([key, value]) => {
       root.style.setProperty(`--${key}`, value);
-      console.log(`[Theme] Set --${key} = ${value}`);
     });
 
     // Apply editor colors
-    Object.entries(editorTheme.editor).forEach(([key, value]) => {
+    Object.entries(theme.editor).forEach(([key, value]) => {
       root.style.setProperty(`--${key}`, value);
     });
 
-    console.log(`[Theme] Applied workbench: ${workbenchTheme.name} (${this.currentWorkbenchThemeId}), editor: ${editorTheme.name} (${this.currentEditorThemeId})`);
+    console.log(`[Theme] Applied theme: ${theme.name} (${effectiveThemeId}), mode: ${this.themeMode}`);
 
     // Verify a key variable was set
     console.log('[Theme] Verification: --app-bg =', root.style.getPropertyValue('--app-bg'));

@@ -4,7 +4,7 @@ import { TailwindElement } from '../tailwind-element.js';
 import { dispatch } from '../lib/events.js';
 import './icon.js';
 
-import type { ThemeDefinition } from '../lib/theme-service.js';
+import type { ThemeDefinition, ThemeMode } from '../lib/theme-service.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends TailwindElement() {
@@ -12,6 +12,7 @@ export class SettingsPanel extends TailwindElement() {
   @state() private themes: ThemeDefinition[] = [];
   @state() private currentWorkbenchTheme: string = '';
   @state() private currentEditorTheme: string = '';
+  @state() private currentThemeMode: ThemeMode = 'system';
   @state() private previewTheme: string | null = null;
 
   async connectedCallback(): Promise<void> {
@@ -26,6 +27,7 @@ export class SettingsPanel extends TailwindElement() {
       const ids = themeService.getCurrentThemeIds();
       this.currentWorkbenchTheme = ids.workbench;
       this.currentEditorTheme = ids.editor;
+      this.currentThemeMode = themeService.getThemeMode();
       this.requestUpdate();
     };
 
@@ -71,6 +73,14 @@ export class SettingsPanel extends TailwindElement() {
     const { ThemeService } = await import('../lib/theme-service.js');
     const themeService = ThemeService.getInstance();
     themeService.setEditorTheme(themeId);
+  }
+
+  private async setThemeMode(mode: ThemeMode): Promise<void> {
+    const { ThemeService } = await import('../lib/theme-service.js');
+    const themeService = ThemeService.getInstance();
+    themeService.setThemeMode(mode);
+    this.currentThemeMode = mode;
+    this.requestUpdate();
   }
 
   private async previewThemeHover(themeId: string | null): Promise<void> {
@@ -156,7 +166,53 @@ export class SettingsPanel extends TailwindElement() {
   private renderThemesTab() {
     return html`
       <div class="space-y-4">
+        <h3 class="text-sm font-semibold mb-3">Theme Mode</h3>
+        <div class="flex gap-2 mb-4">
+          <button
+            class="px-3 py-1.5 text-sm rounded border transition-all"
+            style="
+              background-color: ${this.currentThemeMode === 'system' ? 'var(--app-button-background)' : 'transparent'};
+              color: ${this.currentThemeMode === 'system' ? 'var(--app-button-foreground, #fff)' : 'var(--app-foreground)'};
+              border-color: ${this.currentThemeMode === 'system' ? 'var(--app-button-background)' : 'var(--app-border)'};
+            "
+            @click=${() => this.setThemeMode('system')}>
+            <span class="flex items-center gap-2">
+              <os-icon name="monitor" size="14"></os-icon>
+              System
+            </span>
+          </button>
+          <button
+            class="px-3 py-1.5 text-sm rounded border transition-all"
+            style="
+              background-color: ${this.currentThemeMode === 'light' ? 'var(--app-button-background)' : 'transparent'};
+              color: ${this.currentThemeMode === 'light' ? 'var(--app-button-foreground, #fff)' : 'var(--app-foreground)'};
+              border-color: ${this.currentThemeMode === 'light' ? 'var(--app-button-background)' : 'var(--app-border)'};
+            "
+            @click=${() => this.setThemeMode('light')}>
+            <span class="flex items-center gap-2">
+              <os-icon name="sun" size="14"></os-icon>
+              Light
+            </span>
+          </button>
+          <button
+            class="px-3 py-1.5 text-sm rounded border transition-all"
+            style="
+              background-color: ${this.currentThemeMode === 'dark' ? 'var(--app-button-background)' : 'transparent'};
+              color: ${this.currentThemeMode === 'dark' ? 'var(--app-button-foreground, #fff)' : 'var(--app-foreground)'};
+              border-color: ${this.currentThemeMode === 'dark' ? 'var(--app-button-background)' : 'var(--app-border)'};
+            "
+            @click=${() => this.setThemeMode('dark')}>
+            <span class="flex items-center gap-2">
+              <os-icon name="moon" size="14"></os-icon>
+              Dark
+            </span>
+          </button>
+        </div>
+
         <h3 class="text-sm font-semibold mb-3">Color Theme</h3>
+        <p class="text-xs text-[var(--app-disabled-foreground)] mb-2">
+          ${this.currentThemeMode === 'system' ? 'Theme follows your system appearance.' : 'Select a color theme to use.'}
+        </p>
         <div class="grid grid-cols-2 gap-3">
           ${this.themes.map((theme: any) => {
             const isSelected = theme.id === this.currentWorkbenchTheme;

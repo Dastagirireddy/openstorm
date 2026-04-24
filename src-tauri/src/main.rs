@@ -11,6 +11,7 @@ mod process;
 mod run_config;
 mod terminal;
 mod templates;
+mod theme;
 
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tokio::sync::Mutex;
@@ -403,6 +404,9 @@ fn main() {
             lsp::notify_document_changed,
             lsp::notify_document_closed,
             lsp::notify_document_saved,
+
+            // === Theme ===
+            theme::get_system_theme,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
