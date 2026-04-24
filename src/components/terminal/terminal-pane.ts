@@ -4,8 +4,10 @@ import { TailwindElement } from '../../tailwind-element.js';
 import type { TerminalTabType } from '../../lib/file-types.js';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
 interface TerminalInstance {
@@ -67,6 +69,7 @@ const componentStyles = css`
     right: 5px;
     bottom: 40px;
     background: var(--terminal-background, #1e1e1e);
+    overflow: hidden;
   }
 
   .terminal-instance[hidden] {
@@ -135,6 +138,17 @@ const componentStyles = css`
 
   .xterm-selection div {
     background-color: var(--app-selection-background, #4f46e5) !important;
+  }
+
+  /* Hyperlink hover effect */
+  .xterm .xterm-rows a {
+    color: #4da6ff !important;
+    text-decoration: none;
+  }
+
+  .xterm .xterm-rows a:hover {
+    text-decoration: underline !important;
+    cursor: pointer;
   }
 `;
 
@@ -247,16 +261,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       });
     });
 
-    // Listen for process termination
+    // Listen for process termination - App Console only (no terminal output)
     listen<{ process_id: number }>('process-terminated', (event) => {
-      const activeTerminal = this.terminals.find(t => t.terminalId !== null);
-      if (activeTerminal?.xterm) {
-        activeTerminal.xterm.write('\r\n\x1b[32m[Process exited]\x1b[0m\r\n');
-        requestAnimationFrame(() => {
-          if (!activeTerminal.userScrolledUp) activeTerminal.xterm.scrollToBottom();
-        });
-      }
-      // Also add to App Console
       this.addConsoleOutput({
         source: 'run',
         output_type: 'info',
@@ -300,25 +306,9 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       }, 50);
     });
 
-    // Handle right-click context menu
-    this.addEventListener('contextmenu', this.handleContextMenu);
+    // Handle document click to close context menu
     document.addEventListener('click', this.handleDocumentClick);
   }
-
-  private handleContextMenu = (e: MouseEvent): void => {
-    e.preventDefault();
-    e.stopPropagation();
-    const terminal = (e.target as HTMLElement).closest('.terminal-instance') as HTMLElement;
-    if (terminal) {
-      const instance = this.terminals.find(t => t.id === terminal.id);
-      if (instance) {
-        this.contextMenuTerminalId = instance.id;
-        const rect = this.getBoundingClientRect();
-        this.contextMenuPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-        this.contextMenuVisible = true;
-      }
-    }
-  };
 
   private handleDocumentClick = (): void => {
     this.contextMenuVisible = false;
@@ -346,10 +336,13 @@ export class TerminalPane extends TailwindElement(componentStyles) {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.terminals.forEach(t => this.disposeTerminal(t));
+    this.terminals.forEach(t => {
+      // Remove context menu listener from xterm element
+      t.xterm?.element?.removeEventListener('contextmenu', () => {});
+      this.disposeTerminal(t);
+    });
     this.resizeObserver?.disconnect();
     if (this.globalOutputUnlisten) this.globalOutputUnlisten();
-    this.removeEventListener('contextmenu', this.handleContextMenu);
     document.removeEventListener('click', this.handleDocumentClick);
   }
 
@@ -424,7 +417,11 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     });
 
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      window.open(uri, '_blank');
+    });
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(webLinksAddon);
 
     // 5. Attach and Fit
     xterm.open(terminalDiv);
@@ -440,6 +437,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       fitAddon,
       userScrolledUp: false
     };
+
+    this.attachTerminalEventListeners(xterm, instance);
 
     this.terminals = [...this.terminals, instance];
     this.activeTerminalId = id;
@@ -530,21 +529,60 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     this.terminalWrapper?.querySelector(`#${instance.id}`)?.remove();
   }
 
+  private attachTerminalEventListeners(xterm: Terminal, instance: TerminalInstance): void {
+    // Context menu
+    xterm.element?.addEventListener('contextmenu', (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.contextMenuTerminalId = instance.id;
+      const rect = this.getBoundingClientRect();
+      this.contextMenuPosition = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      this.contextMenuVisible = true;
+    });
+
+    // Keyboard paste (Cmd+V / Ctrl+V)
+    xterm.element?.addEventListener('keydown', async (e: KeyboardEvent) => {
+      const isMac = navigator.platform.toLowerCase().includes('mac');
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+      if (modifierKey && e.key.toLowerCase() === 'v') {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('[TerminalPane] Paste keystroke detected');
+        try {
+          const text = await readText();
+          console.log('[TerminalPane] Clipboard text:', text);
+          if (instance.terminalId !== null) {
+            await invoke('terminal_write', { id: instance.terminalId, data: text });
+            console.log('[TerminalPane] Text written to terminal');
+          }
+        } catch (err) {
+          console.error('[TerminalPane] Keyboard paste failed:', err);
+          xterm.write('\r\n\x1b[31m[Paste failed: ' + String(err) + ']\x1b[0m\r\n');
+        }
+      }
+    });
+  }
+
   private async copySelection(): Promise<void> {
     const instance = this.terminals.find(t => t.id === this.contextMenuTerminalId);
     if (instance?.xterm) {
       const selectedText = instance.xterm.getSelection();
       if (selectedText) {
-        await navigator.clipboard.writeText(selectedText);
+        await writeText(selectedText);
       }
     }
   }
 
   private async paste(): Promise<void> {
     const instance = this.terminals.find(t => t.id === this.contextMenuTerminalId);
-    if (instance?.xterm && instance.terminalId !== null) {
-      const text = await navigator.clipboard.readText();
+    if (!instance?.xterm || instance.terminalId === null) return;
+
+    try {
+      const text = await readText();
       await invoke('terminal_write', { id: instance.terminalId, data: text });
+    } catch (err) {
+      console.error('[TerminalPane] Paste failed:', err);
+      instance.xterm.write('\r\n\x1b[31m[Paste failed]\x1b[0m\r\n');
     }
   }
 
@@ -617,7 +655,11 @@ export class TerminalPane extends TailwindElement(componentStyles) {
     });
 
     const fitAddon = new FitAddon();
+    const webLinksAddon = new WebLinksAddon((event, uri) => {
+      window.open(uri, '_blank');
+    });
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(webLinksAddon);
     xterm.open(terminalDiv);
 
     const instance: TerminalInstance = {
@@ -629,6 +671,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
       fitAddon,
       userScrolledUp: false
     };
+
+    this.attachTerminalEventListeners(xterm, instance);
 
     this.terminals = [...this.terminals, instance];
     this.activeTerminalId = id;
@@ -712,21 +756,21 @@ export class TerminalPane extends TailwindElement(componentStyles) {
                     @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                     title="Close terminal"
                   >
-                    <os-icon name="x" size="12"></os-icon>
+                    <iconify-icon icon="mdi:close" width="12"></iconify-icon>
                   </button>
                 </div>
               `;
             })}
             <!-- App Console tab -->
             <button
-              class="px-3 h-full text-[13px] cursor-pointer transition-colors border-t-2"
+              class="relative px-3 h-full text-[13px] cursor-pointer transition-colors border-t-2"
               style="background-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${this.activeBottomTab === 'app-console' ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${this.activeBottomTab === 'app-console' ? 'var(--app-tab-active-border)' : 'transparent'};"
               @mouseenter=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
               @mouseleave=${(e: Event) => { if (this.activeBottomTab !== 'app-console') (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
               @click=${() => { this.activeBottomTab = 'app-console'; this.consoleHasNewOutput = false; }}>
               App Console
               ${this.consoleHasNewOutput && this.activeBottomTab !== 'app-console'
-                ? html`<span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
+                ? html`<span class="absolute top-1 right-1 w-2 h-2 rounded-full animate-pulse" style="background-color: var(--app-continue-color);"></span>`
                 : ''}
             </button>
           </div>
@@ -752,50 +796,50 @@ export class TerminalPane extends TailwindElement(componentStyles) {
             <div class="flex items-center gap-1 px-2 py-1 border-b" style="background-color: var(--app-bg); border-color: var(--app-border);">
               <span class="text-[10px] font-semibold uppercase tracking-wide mr-1" style="color: var(--app-disabled-foreground);">Filter:</span>
               <button
-                class="px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? '!bg-indigo-100 !text-indigo-700 !border-indigo-300 hover:!bg-indigo-200' : ''}"
                 style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'all'; this.requestUpdate(); }}>
                 All
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? 'bg-green-100 text-green-700 border-green-300 hover:bg-green-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? '!bg-green-100 !text-green-700 !border-green-300 hover:!bg-green-200' : ''}"
                 style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'stdout'; this.requestUpdate(); }}>
                 Stdout
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? 'bg-red-100 text-red-700 border-red-300 hover:bg-red-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? '!bg-red-100 !text-red-700 !border-red-300 hover:!bg-red-200' : ''}"
                 style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'stderr'; this.requestUpdate(); }}>
                 Stderr
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? '!bg-blue-100 !text-blue-700 !border-blue-300 hover:!bg-blue-200' : ''}"
                 style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleFilter = 'info'; this.requestUpdate(); }}>
                 Info
               </button>
               <div class="w-px h-4 mx-1" style="background-color: var(--app-border);"></div>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
                 style="color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleSearchVisible = !this.consoleSearchVisible; this.requestUpdate(); }}
                 title="Search (Ctrl+F)">
-                <iconify-icon icon="mdi:magnify" width="14"></iconify-icon>
+                <iconify-icon icon="mdi:magnify" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] hover:text-indigo-600 ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
                 style="color: var(--app-disabled-foreground);"
                 @click=${() => { this.consoleAutoScroll = !this.consoleAutoScroll; this.requestUpdate(); }}
                 title="Toggle auto-scroll">
-                <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14"></iconify-icon>
+                <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
               <button
-                class="px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-red-50 hover:text-red-600"
+                class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb]"
                 style="color: var(--app-disabled-foreground);"
                 @click=${() => this.clearConsole()}
                 title="Clear console">
-                <iconify-icon icon="mdi:delete-outline" width="14"></iconify-icon>
+                <iconify-icon icon="mdi:delete-outline" width="14" style="display: inline-flex;"></iconify-icon>
               </button>
             </div>
 

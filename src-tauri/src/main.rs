@@ -164,6 +164,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(terminal::PtyManager::new())
         .manage(file_watcher::FileWatcher::new())
         .manage(process::ProcessManager::new())

@@ -135,29 +135,29 @@ export class DebugConsolePanel extends TailwindElement() {
 
     return html`
       <div class="flex items-center gap-1 px-3 py-1 bg-gray-50 border-b border-gray-200">
-        <button class="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'all' ? 'bg-indigo-500 text-white border-indigo-500' : ''}"
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'all' ? '!bg-indigo-500 !text-white !border-indigo-500' : ''}"
                 @click=${() => { this.consoleFilter = 'all'; this.requestUpdate(); }}>
           All
         </button>
-        <button class="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'stdout' ? 'bg-indigo-500 text-white border-indigo-500' : ''}"
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'stdout' ? '!bg-indigo-500 !text-white !border-indigo-500' : ''}"
                 @click=${() => { this.consoleFilter = 'stdout'; this.requestUpdate(); }}>
           Stdout
         </button>
-        <button class="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'stderr' ? 'bg-indigo-500 text-white border-indigo-500' : ''}"
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'stderr' ? '!bg-indigo-500 !text-white !border-indigo-500' : ''}"
                 @click=${() => { this.consoleFilter = 'stderr'; this.requestUpdate(); }}>
           Stderr
         </button>
-        <button class="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'log' ? 'bg-indigo-500 text-white border-indigo-500' : ''}"
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'log' ? '!bg-indigo-500 !text-white !border-indigo-500' : ''}"
                 @click=${() => { this.consoleFilter = 'log'; this.requestUpdate(); }}>
           Log
         </button>
-        <button class="px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'console' ? 'bg-indigo-500 text-white border-indigo-500' : ''}"
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border border-gray-200 rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900 ${this.consoleFilter === 'console' ? '!bg-indigo-500 !text-white !border-indigo-500' : ''}"
                 @click=${() => { this.consoleFilter = 'console'; this.requestUpdate(); }}>
           Console
         </button>
         <div class="flex-1"></div>
-        <button class="px-2 py-0.5 text-[10px] border-none rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900" @click=${() => this.clear()} title="Clear Console">
-          <iconify-icon icon="mdi:delete-outline" width="12"></iconify-icon>
+        <button class="flex items-center justify-center px-2 py-0.5 text-[10px] border-none rounded bg-transparent text-gray-500 cursor-pointer transition-colors hover:bg-gray-200 hover:text-gray-900" @click=${() => this.clear()} title="Clear Console">
+          <iconify-icon icon="mdi:delete-outline" width="12" style="display: inline-flex; align-items: center;"></iconify-icon>
         </button>
       </div>
       <div class="font-mono text-xs flex-1 overflow-auto console-output">
