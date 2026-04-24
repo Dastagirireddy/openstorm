@@ -64,10 +64,12 @@ const componentStyles = css`
   /* Top: -16px and bottom: 40px offset needed to keep terminal cursor within viewport area */
   .terminal-instance {
     position: absolute;
-    top: -16px;
-    left: 5px;
-    right: 5px;
-    bottom: 40px;
+    /*top: -16px;*/
+    top: 6px;
+    left: 6px;
+    right: 6px;
+    /*bottom: 40px;*/
+    bottom: 6px;
     background: var(--terminal-background, #1e1e1e);
     overflow: hidden;
   }
@@ -93,6 +95,11 @@ const componentStyles = css`
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
+    z-index: 1 !important;
+  }
+
+  .xterm-selection {
+    z-index: 1 !important;
   }
 
   .xterm-rows {
@@ -103,6 +110,8 @@ const componentStyles = css`
   .xterm-helpers {
     opacity: 0 !important;
     pointer-events: none !important;
+    height: 0 !important;
+    /*display: none;*/
   }
 
   /* Make cursor visible - override default white outline */
@@ -126,18 +135,13 @@ const componentStyles = css`
     }
   }
 
-  /* Make text selection visible */
-  .xterm .xterm-rows ::selection {
-    background-color: var(--app-selection-background, #4f46e5) !important;
-    color: var(--app-foreground, #ffffff) !important;
-  }
-
   .xterm-selection {
     pointer-events: none !important;
   }
 
   .xterm-selection div {
     background-color: var(--app-selection-background, #4f46e5) !important;
+    opacity: 0.4 !important;
   }
 
   /* Hyperlink hover effect */
