@@ -35,37 +35,6 @@ export class GitPanel extends TailwindElement() {
         height: 100%;
         overflow: hidden;
       }
-      .section-header {
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-      .commit-row {
-        transition: background-color 0.1s ease;
-      }
-      .commit-row:hover {
-        background-color: var(--app-hover-background);
-      }
-      .commit-row.selected {
-        background-color: var(--brand-primary);
-        color: white;
-      }
-      .tab-button {
-        transition: all 0.15s ease;
-      }
-      .tab-button:hover {
-        background-color: var(--app-toolbar-hover);
-      }
-      .tab-button.active {
-        background-color: var(--brand-primary);
-        color: white;
-      }
-      .pane-header {
-        font-size: 11px;
-        font-weight: 600;
-        color: var(--app-foreground);
-      }
     `,
   ];
 
@@ -191,17 +160,15 @@ export class GitPanel extends TailwindElement() {
       <div class="flex items-center justify-between px-2 py-1.5 border-b" style="border-color: var(--app-border); background-color: var(--app-toolbar-background);">
         <div class="flex items-center gap-1">
           <button
-            class="w-7 h-7 flex items-center justify-center rounded transition-colors"
+            class="w-7 h-7 flex items-center justify-center rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
             title="Refresh"
-            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
-            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
             @click=${() => this.refreshData()}>
             <os-icon name="rotate-ccw" size="14" color="var(--app-foreground)"></os-icon>
           </button>
           <button
             class="w-7 h-7 flex items-center justify-center rounded transition-colors"
-            title="Toggle Graph"
             style="background-color: ${this.showGraph ? 'var(--brand-primary)' : 'transparent'}; color: ${this.showGraph ? 'white' : 'var(--app-foreground)'};"
+            title="Toggle Graph"
             @click=${() => { this.showGraph = !this.showGraph; this.requestUpdate(); }}>
             <os-icon name="git-branch" size="14"></os-icon>
           </button>
@@ -211,10 +178,8 @@ export class GitPanel extends TailwindElement() {
             ${this.currentBranch ? `on ${this.currentBranch}` : ''}
           </span>
           <button
-            class="px-2 py-1 text-[11px] rounded border transition-colors"
-            style="border-color: var(--app-border); color: var(--app-foreground);"
-            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
-            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            class="px-2 py-1 text-[11px] rounded border transition-colors hover:bg-[var(--app-toolbar-hover)]"
+            style="border-color: var(--app-border); color: var(--app-foreground);">
             <os-icon name="list-filter" size="12"></os-icon>
           </button>
         </div>
@@ -226,16 +191,14 @@ export class GitPanel extends TailwindElement() {
     return html`
       <div class="flex items-center gap-1 px-2 py-1 border-b" style="border-color: var(--app-border);">
         <button
-          class="tab-button px-3 py-1 text-[11px] font-medium rounded"
-          class="${this.activeTab === 'log' ? 'active' : ''}"
-          style="color: ${this.activeTab === 'log' ? 'white' : 'var(--app-foreground)'};"
+          class="px-3 py-1 text-[11px] font-medium rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
+          style="background-color: ${this.activeTab === 'log' ? 'var(--brand-primary)' : 'transparent'}; color: ${this.activeTab === 'log' ? 'white' : 'var(--app-foreground)'};"
           @click=${() => { this.activeTab = 'log'; this.requestUpdate(); }}>
           Log
         </button>
         <button
-          class="tab-button px-3 py-1 text-[11px] font-medium rounded"
-          class="${this.activeTab === 'branches' ? 'active' : ''}"
-          style="color: ${this.activeTab === 'branches' ? 'white' : 'var(--app-foreground)'};"
+          class="px-3 py-1 text-[11px] font-medium rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
+          style="background-color: ${this.activeTab === 'branches' ? 'var(--brand-primary)' : 'transparent'}; color: ${this.activeTab === 'branches' ? 'white' : 'var(--app-foreground)'};"
           @click=${() => { this.activeTab = 'branches'; this.requestUpdate(); }}>
           Branches
         </button>
@@ -269,7 +232,7 @@ export class GitPanel extends TailwindElement() {
       <div class="flex-1 overflow-y-auto">
         ${this.commits.map(commit => html`
           <div
-            class="commit-row flex items-center gap-2 px-3 py-2 cursor-pointer border-b"
+            class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b transition-colors hover:bg-[var(--app-hover-background)] ${this.selectedCommit?.hash === commit.hash ? 'bg-[var(--brand-primary)] text-white' : ''}"
             style="border-bottom-color: var(--app-border);"
             @click=${() => this.selectCommit(commit)}>
 
@@ -309,10 +272,8 @@ export class GitPanel extends TailwindElement() {
       <div class="flex-1 overflow-y-auto">
         ${this.branches.map(branch => html`
           <div
-            class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b"
-            style="border-bottom-color: var(--app-border);"
-            @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-hover-background)'}
-            @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}>
+            class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b hover:bg-[var(--app-hover-background)]"
+            style="border-bottom-color: var(--app-border);">
 
             <os-icon name="git-branch" size="14" color="var(--brand-primary)"></os-icon>
 
