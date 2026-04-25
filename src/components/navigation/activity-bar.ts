@@ -1,6 +1,7 @@
 import { html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
+import '../icon.js';
 
 export type ActivityItem = 'explorer' | 'search' | 'commits' | 'pull-requests' | 'settings';
 
@@ -19,26 +20,26 @@ export class ActivityBar extends TailwindElement() {
     {
       id: 'explorer',
       label: 'Explorer',
-      icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>`,
-      filledIcon: html`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>`,
+      icon: html`<os-icon name="folder" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="folder-check" size="16"></os-icon>`,
     },
     {
       id: 'search',
       label: 'Search',
-      icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
-      filledIcon: html`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
+      icon: html`<os-icon name="search" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="search" size="16"></os-icon>`,
     },
     {
       id: 'commits',
-      label: 'Commits',
-      icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="3"/><path d="M12 2v7M12 15v7M5 12h7"/></svg>`,
-      filledIcon: html`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="2" r="2"/><circle cx="12" cy="22" r="2"/><circle cx="5" cy="12" r="2"/></svg>`,
+      label: 'Commit',
+      icon: html`<os-icon name="git-commit-vertical" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="git-commit-vertical" size="16"></os-icon>`,
     },
     {
       id: 'pull-requests',
       label: 'Pull Requests',
-      icon: html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/></svg>`,
-      filledIcon: html`<svg viewBox="0 0 24 24" fill="currentColor" stroke="none" width="16" height="16"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7h-2V8h-3V6zM6 9h2v12H6V9z"/></svg>`,
+      icon: html`<os-icon name="git-pull-request" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="git-pull-request" size="16"></os-icon>`,
     },
   ];
 
@@ -95,10 +96,7 @@ export class ActivityBar extends TailwindElement() {
           Settings
         </span>
         <div style="color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'};">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
+          <os-icon name="settings" size="16"></os-icon>
         </div>
       </div>
     `;

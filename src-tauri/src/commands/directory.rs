@@ -26,6 +26,11 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, String> {
             let file_name = entry.file_name().to_string_lossy().to_string();
             let file_path = entry.path().to_string_lossy().to_string();
 
+            // Filter out hidden files and folders (starting with '.')
+            if file_name.starts_with('.') {
+                return None;
+            }
+
             #[cfg(unix)]
             let is_executable = !metadata.is_dir() && {
                 let mode = metadata.permissions().mode();

@@ -5,6 +5,7 @@ mod config;
 mod dap;
 pub mod dap_installer;
 mod file_watcher;
+mod git;
 mod lsp;
 mod lsp_installer;
 mod process;
@@ -174,6 +175,14 @@ fn main() {
         .setup(|app| {
             let handle = app.handle().clone();
             println!("OpenStorm IDE starting up...");
+
+            // Check if git is installed
+            let git_available = git::check_git_installed();
+            if !git_available {
+                println!("[Git] Git binary not found in PATH");
+                // Emit event to notify frontend
+                handle.emit("git-not-found", ()).ok();
+            }
 
             // Initialize configuration and create directories
             let config = config::AppConfig::new();
@@ -407,6 +416,41 @@ fn main() {
 
             // === Theme ===
             theme::get_system_theme,
+
+            // === Git ===
+            commands::git::git_check_installed,
+            commands::git::git_check_repository,
+            commands::git::git_init,
+            commands::git::git_get_branch,
+            commands::git::git_get_status,
+            commands::git::git_list_branches,
+            commands::git::git_list_remote_branches,
+            commands::git::git_create_branch,
+            commands::git::git_delete_branch,
+            commands::git::git_checkout_branch,
+            commands::git::git_stage_file,
+            commands::git::git_stage_all,
+            commands::git::git_unstage_file,
+            commands::git::git_unstage_all,
+            commands::git::git_commit,
+            commands::git::git_amend_commit,
+            commands::git::git_discard_file,
+            commands::git::git_discard_all,
+            commands::git::git_get_file_diff,
+            commands::git::git_get_diff_stats,
+            commands::git::git_fetch,
+            commands::git::git_pull,
+            commands::git::git_push,
+            commands::git::git_list_remotes,
+            commands::git::git_add_remote,
+            commands::git::git_remove_remote,
+            commands::git::git_get_log,
+            commands::git::git_get_commit,
+            commands::git::git_get_commit_diff,
+            commands::git::git_get_last_commit,
+            commands::git::git_search_commits,
+            commands::git::git_get_file_history,
+            commands::git::git_get_pull_requests,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

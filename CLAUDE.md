@@ -19,6 +19,27 @@ cargo tauri dev                 # Alternative dev command
 cargo tauri build               # Alternative build command
 ```
 
+## Strict Development Protocols
+
+### 1. Theming & Styling (Tailwind 4)
+- **Zero Custom CSS:** Use ONLY Tailwind 4 utility classes.
+- **Semantic Colors:** Use color variables only (e.g., `bg-workbench`, `text-main`). NEVER hardcode hex/RGB or default Tailwind shades (e.g., `bg-blue-500`).
+- **Icons:** STRICTLY use Iconify. NO inline SVGs. Use `icon="icon-set:name"` and style via Tailwind `text-*` classes.
+
+### 2. Architectural Rigor (SOLID)
+- **Strict SOLID:** Adhere to Single Responsibility and Interface Segregation.
+- **File Length:** Maximum 250-300 lines per file. Break logic into Services/Modules if exceeded.
+- **Clean Naming:** Standardized naming (PascalCase for Components, snake_case for Rust).
+
+### 3. Performance & Modern Enterprise Standards
+- **Lazy Loading:** Use dynamic `import()` for all non-essential modules (Terminal, Search, Settings) to ensure fast initialization.
+- **Native Experience:** UI must be high-density, compact, and match modern enterprise desktop apps (macOS/Windows style).
+- **Efficiency:** Minimize IPC overhead between Rust and Lit.js. Prefer zero-copy patterns in Rust.
+
+### 4. Implementation Workflow
+- **Research First:** Align with modern IDE benchmarks (VS Code/JetBrains) before building major UI features.
+- **Refactoring:** If a file becomes "generic" or messy, prioritize refactoring to follow the internal style guide over adding new features.
+
 ## Architecture
 
 OpenStorm is a Tauri-based IDE with a Rust backend and Lit.js frontend:

@@ -55,6 +55,11 @@ import "./components/debug-panel.js";
 import "./components/settings-panel.js";
 import "./components/theme-palette.js";
 import "./components/hover-tooltip.js";
+import "./components/git-not-found-banner.js";
+import "./components/git-panel.js";
+import "./components/commit-panel.js";
+import "./components/pull-requests-panel.js";
+import "./components/app-console-panel.js";
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -66,7 +71,6 @@ export class OpenStormApp extends TailwindElement() {
   @state() private saveStatus: SaveStatus = "saved";
   @state() private tabLimit = 10;
   @state() private activeActivity: ActivityItem = "explorer";
-  @state() private terminalVisible = true;
   @state() private terminalCreated = false;
   @state() private sidebarWidth = 250;
   @state() private terminalHeight = 200;
@@ -79,6 +83,17 @@ export class OpenStormApp extends TailwindElement() {
   @state() private debugPanelHeight = 250;
   @state() private appConsoleVisible = false;
   @state() private appConsoleHeight = 200;
+  @state() private gitPanelVisible = false;
+  @state() private activeStatusBarPanel: 'terminal' | 'app-console' | null = 'terminal';
+  @state() private gitBranch = 'main';
+  @state() private gitPanelHeight = 300;
+  @state() private isGitPanelResizing = false;
+  @state() private gitPanelResizeStartY = 0;
+  @state() private gitPanelResizeStartHeight = 0;
+  @state() private commitPanelVisible = false;
+  @state() private commitPanelWidth = 400;
+  @state() private showTerminalNotification = false;
+  @state() private showConsoleNotification = false;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -133,8 +148,12 @@ export class OpenStormApp extends TailwindElement() {
     // Listen for file system changes from backend
     const { listen } = await import("@tauri-apps/api/event");
     listen("file-change", (event: any) => {
-      console.log("File change detected:", event.payload);
       dispatch("refresh-explorer", event.payload);
+    }).catch(console.error);
+
+    // Listen for git repository changes (when .git is created/removed)
+    listen("git-repo-changed", (event: any) => {
+      dispatch("git-refresh");
     }).catch(console.error);
 
     // Listen for DAP debug events from backend
@@ -169,6 +188,53 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("close-settings", () => {
       this.activeActivity = "explorer";
     });
+
+    // Listen for status bar tab clicks
+    document.addEventListener("statusbar-tab-click", (e: Event) => {
+      const customEvent = e as CustomEvent<{ tab: string }>;
+      const tab = customEvent.detail.tab;
+
+      if (tab === 'git') {
+        this.gitPanelVisible = !this.gitPanelVisible;
+        // Close terminal/console when opening git panel
+        if (this.gitPanelVisible && this.activeStatusBarPanel !== null) {
+          this.activeStatusBarPanel = null;
+        }
+        dispatch('toggle-git-log', { visible: this.gitPanelVisible });
+      } else if (tab === 'terminal' || tab === 'app-console') {
+        // Toggle: if already active, close it; otherwise switch to it
+        this.activeStatusBarPanel = this.activeStatusBarPanel === tab ? null : tab;
+
+        // Close git panel when opening terminal/console
+        if (this.activeStatusBarPanel !== null && this.gitPanelVisible) {
+          this.gitPanelVisible = false;
+          dispatch('toggle-git-log', { visible: false });
+        }
+
+        // Clear notification dots
+        if (tab === 'app-console') this.showConsoleNotification = false;
+        if (tab === 'terminal') this.showTerminalNotification = false;
+      }
+
+      this.requestUpdate();
+    });
+
+    // Listen for output notifications
+    document.addEventListener("app-console-output", () => {
+      this.showConsoleNotification = true;
+      // Auto-switch to app-console panel
+      this.activeStatusBarPanel = 'app-console';
+      this.requestUpdate();
+    });
+
+    // Listen for terminal output (for notification dot)
+    const { listen: listenTauri } = await import('@tauri-apps/api/event');
+    listenTauri('terminal-output', () => {
+      if (this.activeStatusBarPanel !== 'terminal') {
+        this.showTerminalNotification = true;
+        this.requestUpdate();
+      }
+    }).catch(console.error);
 
     // Also listen for direct debug-session-ended events from backend
     listen("debug-session-ended", (event) => {
@@ -429,7 +495,13 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   private toggleTerminal(): void {
-    this.terminalVisible = !this.terminalVisible;
+    // Toggle: if terminal is active, close it; otherwise open it
+    this.activeStatusBarPanel = this.activeStatusBarPanel === 'terminal' ? null : 'terminal';
+  }
+
+  private toggleAppConsole(): void {
+    // Toggle app-console panel
+    this.activeStatusBarPanel = this.activeStatusBarPanel === 'app-console' ? null : 'app-console';
   }
 
   private handleTerminalResizeStart = (e: MouseEvent): void => {
@@ -461,13 +533,64 @@ export class OpenStormApp extends TailwindElement() {
     window.addEventListener('mouseup', handleMouseUp);
   };
 
+  private handleGitPanelResizeStart = (e: MouseEvent): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    this.isGitPanelResizing = true;
+    this.gitPanelResizeStartY = e.clientY;
+    this.gitPanelResizeStartHeight = this.gitPanelHeight;
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!this.isGitPanelResizing) return;
+      const deltaY = this.gitPanelResizeStartY - moveEvent.clientY;
+      let newHeight = this.gitPanelResizeStartHeight + deltaY;
+      newHeight = Math.max(150, Math.min(600, newHeight));
+      this.gitPanelHeight = newHeight;
+    };
+
+    const handleMouseUp = () => {
+      this.isGitPanelResizing = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
   private toggleActivityBar(): void {
     const wasExplorer = this.activeActivity === "explorer";
     this.activeActivity = wasExplorer ? ("" as ActivityItem) : "explorer";
   }
 
   private handleActivityChange = (e: CustomEvent<{ item: ActivityItem }>): void => {
-    this.activeActivity = e.detail.item;
+    const newItem = e.detail.item;
+
+    if (newItem === 'commits') {
+      this.commitPanelVisible = true;
+      this.gitPanelVisible = false;
+      this.activeActivity = 'commits';
+    } else if (newItem === 'pull-requests') {
+      this.commitPanelVisible = true;
+      this.gitPanelVisible = false;
+      this.activeActivity = 'pull-requests';
+    } else if (newItem === 'explorer') {
+      this.gitPanelVisible = false;
+      this.commitPanelVisible = false;
+      this.activeActivity = 'explorer';
+    } else if (newItem === 'search') {
+      this.gitPanelVisible = false;
+      this.commitPanelVisible = false;
+      this.activeActivity = 'search';
+    } else {
+      this.activeActivity = newItem;
+      this.gitPanelVisible = false;
+      this.commitPanelVisible = false;
+    }
   };
 
   private handleCloseSettings = (): void => {
@@ -572,6 +695,14 @@ export class OpenStormApp extends TailwindElement() {
 
       // Dispatch project-opened event for run-toolbar to detect configurations
       dispatch("project-opened", { path: this.projectPath });
+
+      // Fetch git branch
+      try {
+        const { getGitBranch } = await import('./lib/git-status.js');
+        this.gitBranch = await getGitBranch(this.projectPath);
+      } catch (e) {
+        console.error('Failed to get git branch:', e);
+      }
     } catch (error) {
       console.error("Failed to start file watcher:", error);
     }
@@ -648,8 +779,11 @@ export class OpenStormApp extends TailwindElement() {
     // In single-file mode, hide explorer and terminal by default
     const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
     const showSettings = !isSingleFileMode && this.activeActivity === "settings";
-    const showTerminal = !isSingleFileMode && this.terminalVisible && !this.isDebugging;
+    const showCommitPanel = !isSingleFileMode && (this.activeActivity === 'commits' || this.activeActivity === 'pull-requests');
+    const showGitPanel = !isSingleFileMode && this.gitPanelVisible;
+    const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
     const showDebugPanel = this.isDebugging;
+    const showAppConsole = !isSingleFileMode && this.activeStatusBarPanel === 'app-console';
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
@@ -662,6 +796,9 @@ export class OpenStormApp extends TailwindElement() {
           .isSingleFileMode=${isSingleFileMode}
         >
         </app-header>
+
+        <!-- Git Not Found Banner -->
+        <git-not-found-banner></git-not-found-banner>
 
         <!-- Main Content Area (Editor + Terminal) -->
         <div class="flex flex-1 overflow-hidden">
@@ -707,6 +844,70 @@ export class OpenStormApp extends TailwindElement() {
                           @open-folder=${() => dispatch("open-folder")}
                         >
                         </project-explorer>
+                      </div>
+                      <div
+                        slot="second"
+                        class="flex flex-col overflow-hidden min-w-0 w-full h-full"
+                        style="background-color: var(--app-bg);"
+                      >
+                        <!-- Tab Bar -->
+                        ${this.tabs.length > 0
+                          ? html`
+                              <tab-bar
+                                class="h-[35px] shrink-0"
+                                .tabs=${this.tabs}
+                                .activeTab=${this.activeTabId}
+                                @tab-select=${this.handleTabSelect}
+                                @tab-close=${this.handleTabClose}
+                                @tab-pin-toggle=${this.handleTabPinToggle}
+                              >
+                              </tab-bar>
+                            `
+                          : ""}
+                        <!-- Editor Pane -->
+                        <editor-pane
+                          id="editor"
+                          class="flex-1 flex flex-col overflow-hidden"
+                          .tabs=${this.tabs}
+                          .activeTabId=${this.activeTabId}
+                          @folder-opened=${this.handleFolderOpened}
+                          @content-changed=${this.handleContentChanged}
+                          @open-folder=${() => dispatch("open-folder")}
+                          @quick-search=${() => dispatch("quick-search")}
+                        >
+                        </editor-pane>
+                      </div>
+                    </resizable-container>
+                  `
+                : showCommitPanel
+                ? html`
+                    <resizable-container
+                      direction="horizontal"
+                      class="flex-1"
+                      .initialSize=${this.commitPanelWidth}
+                      .minSize=${200}
+                      .maxSize=${600}
+                      @size-change=${(e: CustomEvent<{ size: number }>) => {
+                        this.commitPanelWidth = e.detail.size;
+                      }}
+                    >
+                      <div slot="first" class="h-full w-full">
+                        ${this.activeActivity === 'pull-requests'
+                          ? html`
+                              <pull-requests-panel
+                                class="flex flex-col overflow-hidden border-r h-full w-full"
+                                style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
+                                .projectPath=${this.projectPath}>
+                              </pull-requests-panel>
+                            `
+                          : html`
+                              <commit-panel
+                                class="flex flex-col overflow-hidden border-r h-full w-full"
+                                style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
+                                .projectPath=${this.projectPath}>
+                              </commit-panel>
+                            `
+                        }
                       </div>
                       <div
                         slot="second"
@@ -796,10 +997,32 @@ export class OpenStormApp extends TailwindElement() {
                         @terminal-create=${() => (this.terminalCreated = true)}
                         @terminal-close=${() => {
                           this.terminalCreated = false;
-                          this.terminalVisible = false;
+                          this.activeStatusBarPanel = null;
                         }}>
                       </terminal-pane>
                     </div>
+                  </div>
+                `
+              : ''}
+
+            <!-- Git Panel (IntelliJ-style bottom panel - Repository/Log view) -->
+            ${showGitPanel
+              ? html`
+                  <!-- Git panel container with resize handle -->
+                  <div
+                    class="relative shrink-0"
+                    style="height: ${this.gitPanelHeight}px;">
+                    <!-- Resize handle at top -->
+                    <div
+                      class="absolute top-0 left-0 right-0 h-[6px] cursor-row-resize z-10 flex items-center justify-center"
+                      @mousedown=${(e: MouseEvent) => this.handleGitPanelResizeStart(e)}>
+                    </div>
+                    <!-- Git panel content -->
+                    <git-panel
+                      .projectPath=${this.projectPath}
+                      .height=${this.gitPanelHeight}
+                      style="background-color: var(--app-bg);">
+                    </git-panel>
                   </div>
                 `
               : ''}
@@ -817,7 +1040,7 @@ export class OpenStormApp extends TailwindElement() {
               : ''}
 
             <!-- App Console Panel (persistent output from Run and Debug) -->
-            ${this.appConsoleVisible
+            ${showAppConsole
               ? html`
                   <!-- App console container -->
                   <div
@@ -831,8 +1054,11 @@ export class OpenStormApp extends TailwindElement() {
             <!-- Status Bar (fixed at bottom) -->
             <status-bar
               class="shrink-0"
-              .terminalVisible=${showTerminal || showDebugPanel || this.appConsoleVisible}
-              @toggle-terminal=${() => this.toggleTerminal()}>
+              .branch=${this.gitBranch}
+              .activePanel=${this.activeStatusBarPanel}
+              .gitPanelVisible=${this.gitPanelVisible}
+              .showTerminalNotification=${this.showTerminalNotification}
+              .showConsoleNotification=${this.showConsoleNotification}>
             </status-bar>
           </div>
         </div>
