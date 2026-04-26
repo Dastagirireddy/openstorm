@@ -10,9 +10,11 @@ import type {
   CommitResult,
   CommitInfo,
   CommitEntry,
+  CommitEntryWithStats,
   DiffStats,
   RemoteInfo,
   PullRequest,
+  ChangedFile,
 } from './git-types.js';
 
 // ============================================================================
@@ -210,12 +212,29 @@ export async function gitRemoveRemote(path: string, name: string): Promise<void>
 // Log & History
 // ============================================================================
 
-/** Get commit log */
+/** Get commit log with filters */
 export async function gitGetLog(
   path: string,
-  limit?: number
+  limit?: number,
+  filters?: {
+    author?: string;
+    since?: string;
+    until?: string;
+    path?: string;
+    mergesOnly?: boolean;
+    noMerges?: boolean;
+  }
 ): Promise<CommitEntry[]> {
-  return invoke('git_get_log', { path, limit });
+  return invoke('git_get_log', {
+    path,
+    limit,
+    author: filters?.author,
+    since: filters?.since,
+    until: filters?.until,
+    pathFilter: filters?.path,
+    mergesOnly: filters?.mergesOnly,
+    noMerges: filters?.noMerges,
+  });
 }
 
 /** Get commit details */
@@ -263,4 +282,167 @@ export async function gitGetFileHistory(
 /** Get GitHub pull requests */
 export async function gitGetPullRequests(path: string): Promise<PullRequest[]> {
   return invoke('git_get_pull_requests', { path });
+}
+
+// ============================================================================
+// Commit Analysis Helpers (Client-side parsing)
+// ============================================================================
+
+/**
+ * Parse commit diff to extract changed files with stats
+ * Format: "diff --git a/path b/path\nindex ...\n--- a/path\n+++ b/path\n@@ -line,count +line,count @@\n+add\n-delete"
+ */
+export async function getCommitChangedFiles(
+  path: string,
+  hash: string
+): Promise<ChangedFile[]> {
+  const diff = await gitGetCommitDiff(path, hash);
+  return parseDiffToChangedFiles(diff);
+}
+
+/**
+ * Get commit stats (additions, deletions, files changed)
+ */
+export async function getCommitStats(
+  path: string,
+  hash: string
+): Promise<{ additions: number; deletions: number; files_changed: number }> {
+  const diff = await gitGetCommitDiff(path, hash);
+  return parseDiffStats(diff);
+}
+
+/**
+ * Parse a unified diff and return changed files with stats
+ */
+function parseDiffToChangedFiles(diff: string): ChangedFile[] {
+  const files: ChangedFile[] = [];
+  const lines = diff.split('\n');
+  let currentFile: Partial<ChangedFile> | null = null;
+  let additions = 0;
+  let deletions = 0;
+
+  for (const line of lines) {
+    // Match "diff --git a/path b/path"
+    const diffMatch = line.match(/^diff --git a\/(.+?) b\/(.+)$/);
+    if (diffMatch) {
+      // Save previous file
+      if (currentFile && currentFile.path) {
+        currentFile.additions = additions;
+        currentFile.deletions = deletions;
+        files.push(currentFile as ChangedFile);
+      }
+      // Start new file
+      currentFile = { path: diffMatch[2], status: 'modified', binary: false };
+      additions = 0;
+      deletions = 0;
+      continue;
+    }
+
+    // Match "--- a/path" (skip, we get path from diff --git line)
+    if (line.startsWith('--- ') || line.startsWith('+++ ')) {
+      continue;
+    }
+
+    // Match "@@ -line,count +line,count @@"
+    const hunkMatch = line.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/);
+    if (hunkMatch && currentFile) {
+      // New file (starts at line 1 with no deletions)
+      if (hunkMatch[1] === '1' && !hunkMatch[2]) {
+        currentFile.status = 'added';
+      }
+      continue;
+    }
+
+    // Match "deleted file mode ..."
+    if (line.startsWith('deleted file mode')) {
+      if (currentFile) currentFile.status = 'deleted';
+      continue;
+    }
+
+    // Match "new file mode ..."
+    if (line.startsWith('new file mode')) {
+      if (currentFile) currentFile.status = 'added';
+      continue;
+    }
+
+    // Match "rename from/to"
+    if (line.startsWith('rename from') || line.startsWith('rename to')) {
+      if (currentFile) currentFile.status = 'renamed';
+      continue;
+    }
+
+    // Binary file marker
+    if (line.startsWith('Binary files')) {
+      if (currentFile) currentFile.binary = true;
+      continue;
+    }
+
+    // Count additions and deletions
+    if (currentFile) {
+      if (line.startsWith('+') && !line.startsWith('+++')) {
+        additions++;
+      } else if (line.startsWith('-') && !line.startsWith('---')) {
+        deletions++;
+      }
+    }
+  }
+
+  // Don't forget the last file
+  if (currentFile && currentFile.path) {
+    currentFile.additions = additions;
+    currentFile.deletions = deletions;
+    files.push(currentFile as ChangedFile);
+  }
+
+  return files;
+}
+
+/**
+ * Parse a unified diff and return stats
+ */
+function parseDiffStats(diff: string): { additions: number; deletions: number; files_changed: number } {
+  const files = parseDiffToChangedFiles(diff);
+  let additions = 0;
+  let deletions = 0;
+
+  for (const file of files) {
+    additions += file.additions;
+    deletions += file.deletions;
+  }
+
+  return {
+    additions,
+    deletions,
+    files_changed: files.length,
+  };
+}
+
+/**
+ * Enhance commit entries with stats for display
+ */
+export async function enrichCommitsWithStats(
+  path: string,
+  entries: CommitEntry[]
+): Promise<CommitEntryWithStats[]> {
+  const results: CommitEntryWithStats[] = [];
+
+  for (const entry of entries) {
+    try {
+      const stats = await getCommitStats(path, entry.hash);
+      results.push({
+        ...entry,
+        ...stats,
+      });
+    } catch {
+      // If stats fetch fails, use zeros
+      results.push({
+        ...entry,
+        files_changed: 0,
+        additions: 0,
+        deletions: 0,
+      });
+    }
+  }
+
+  return results;
 }

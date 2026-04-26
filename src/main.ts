@@ -982,7 +982,7 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- Terminal container with absolute resize handle -->
                   <div
-                    class="relative shrink-0"
+                    class="relative shrink-0 border-t border-[var(--app-border)]"
                     style="height: ${this.terminalHeight}px;">
                     <!-- Resize handle - absolutely positioned at top -->
                     <div
@@ -1010,7 +1010,7 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- Git panel container with resize handle -->
                   <div
-                    class="relative shrink-0"
+                    class="relative shrink-0 border-t border-[var(--app-border)]"
                     style="height: ${this.gitPanelHeight}px;">
                     <!-- Resize handle at top -->
                     <div
@@ -1032,7 +1032,7 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- Debug panel container -->
                   <div
-                    class="shrink-0 border-t border-[#e5e7eb]"
+                    class="shrink-0 border-t border-[var(--app-border)]"
                     style="height: ${this.debugPanelHeight}px;">
                     <debug-panel></debug-panel>
                   </div>
@@ -1044,7 +1044,7 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- App console container -->
                   <div
-                    class="shrink-0 border-t border-[#d0d7de]"
+                    class="shrink-0 border-t border-[var(--app-border)]"
                     style="height: ${this.appConsoleHeight}px;">
                     <app-console-panel></app-console-panel>
                   </div>

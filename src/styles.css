@@ -22,6 +22,7 @@
   --app-button-hover: #4f46e5;
   --app-toolbar-hover: #e8e8e8;
   --app-toolbar-active: #d0d0d0;
+  --app-menu-background: #ffffff;
   --app-tab-active: #ffffff;
   --app-tab-inactive: #f3f4f6;
   --app-tab-border: #e5e7eb;
@@ -154,6 +155,13 @@
   /* Brand colors */
   --brand-primary: #5b47c9;
   --brand-primary-hover: #4a37a8;
+
+  /* Git status colors */
+  --git-added: #84cc16;
+  --git-deleted: #ef4444;
+  --git-modified: #f59e0b;
+  --git-renamed: #8b5cf6;
+  --git-untracked: #6b7280;
 }
 
 /* Global resets */

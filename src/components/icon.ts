@@ -2,7 +2,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { LitElement, svg, css, html } from 'lit';
 
 // Import icons individually (tree-shakeable)
-import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle } from 'lucide';
+import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle, GitMerge, PanelLeft, Copy } from 'lucide';
 
 const iconMap: Record<string, any> = {
   'play': Play,
@@ -12,6 +12,7 @@ const iconMap: Record<string, any> = {
   'git-branch': GitBranch,
   'git-pull-request': GitPullRequest,
   'git-commit-vertical': GitCommitVertical,
+  'git-merge': GitMerge,
   'chevron-down': ChevronDown,
   'chevron-right': ChevronRight,
   'rotate-ccw': RotateCcw,
@@ -55,6 +56,8 @@ const iconMap: Record<string, any> = {
   'moon': Moon,
   'monitor': Monitor,
   'settings': Settings,
+  'sidebar': PanelLeft,
+  'copy': Copy,
 };
 
 // OpenStorm brand logo - modern minimalist monkey face

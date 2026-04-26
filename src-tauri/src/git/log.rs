@@ -17,8 +17,19 @@ pub struct CommitEntry {
     pub parent_hashes: Vec<String>,
 }
 
-/// Get commit log
-pub fn get_log(path: &str, limit: Option<usize>) -> Result<Vec<CommitEntry>, String> {
+/// Filter options for git log
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct LogFilters {
+    pub author: Option<String>,
+    pub since: Option<String>,
+    pub until: Option<String>,
+    pub path: Option<String>,
+    pub merges_only: bool,
+    pub no_merges: bool,
+}
+
+/// Get commit log with filters
+pub fn get_log(path: &str, limit: Option<usize>, filters: Option<LogFilters>) -> Result<Vec<CommitEntry>, String> {
     let mut cmd = Command::new("git");
     cmd.arg("log")
         .arg("--format=%H%x00%h%x00%s%x00%b%x00%an%x00%ae%x00%ct%x00%P")
@@ -27,6 +38,28 @@ pub fn get_log(path: &str, limit: Option<usize>) -> Result<Vec<CommitEntry>, Str
 
     if let Some(n) = limit {
         cmd.arg("-n").arg(n.to_string());
+    }
+
+    // Apply filters
+    if let Some(ref f) = filters {
+        if let Some(ref author) = f.author {
+            cmd.arg("--author").arg(author);
+        }
+        if let Some(ref since) = f.since {
+            cmd.arg("--since").arg(since);
+        }
+        if let Some(ref until) = f.until {
+            cmd.arg("--until").arg(until);
+        }
+        if let Some(ref p) = f.path {
+            cmd.arg("--").arg(p);
+        }
+        if f.merges_only {
+            cmd.arg("--merges");
+        }
+        if f.no_merges {
+            cmd.arg("--no-merges");
+        }
     }
 
     let output = cmd.output()

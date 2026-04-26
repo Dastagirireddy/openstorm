@@ -81,6 +81,22 @@ export interface CommitEntry {
   parent_hashes: string[];
 }
 
+/** Extended commit entry with stats (computed client-side) */
+export interface CommitEntryWithStats extends CommitEntry {
+  files_changed: number;
+  additions: number;
+  deletions: number;
+}
+
+/** A changed file in a commit diff */
+export interface ChangedFile {
+  path: string;
+  status: FileStatus;
+  additions: number;
+  deletions: number;
+  binary: boolean;
+}
+
 /** Diff statistics */
 export interface DiffStats {
   additions: number;

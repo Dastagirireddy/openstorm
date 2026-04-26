@@ -7,7 +7,7 @@ use crate::git::branch::BranchInfo;
 use crate::git::commit::{CommitResult, CommitInfo};
 use crate::git::diff::DiffStats;
 use crate::git::remote::RemoteInfo;
-use crate::git::log::CommitEntry;
+use crate::git::log::{CommitEntry, LogFilters};
 use crate::git::github::{PullRequest, fetch_pull_requests_with_gh, format_relative_time};
 
 /// Check if git is installed on the system
@@ -172,8 +172,25 @@ pub fn git_remove_remote(path: String, name: String) -> Result<(), String> {
 
 /// Get commit log
 #[tauri::command]
-pub fn git_get_log(path: String, limit: Option<usize>) -> Result<Vec<CommitEntry>, String> {
-    git::log::get_log(&path, limit)
+pub fn git_get_log(
+    path: String,
+    limit: Option<usize>,
+    author: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
+    path_filter: Option<String>,
+    merges_only: Option<bool>,
+    no_merges: Option<bool>,
+) -> Result<Vec<CommitEntry>, String> {
+    let filters = LogFilters {
+        author,
+        since,
+        until,
+        path: path_filter,
+        merges_only: merges_only.unwrap_or(false),
+        no_merges: no_merges.unwrap_or(false),
+    };
+    git::log::get_log(&path, limit, Some(filters))
 }
 
 /// Get commit details
