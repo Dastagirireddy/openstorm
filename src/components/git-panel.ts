@@ -93,6 +93,8 @@ export class GitPanel extends TailwindElement() {
 
   @state() private showGraph = true;
 
+  @state() private showCommitDetails = true;
+
   @state() private searchQuery = "";
 
   @state() private filterMergesOnly = false;
@@ -473,17 +475,21 @@ export class GitPanel extends TailwindElement() {
             : ""}
 
           <button
-            class="w-7 h-7 flex items-center justify-center rounded-md transition-colors ${this
-              .showGraph
-              ? "bg-[var(--brand-primary)] text-white"
-              : "text-[var(--app-foreground)] hover:bg-[var(--app-toolbar-hover)]"}"
-            title="Toggle Graph"
+            class="w-7 h-7 flex items-center justify-center rounded-md hover:bg-[var(--app-toolbar-hover)] transition-colors"
+            title="Toggle Commit Details"
             @click=${() => {
-              this.showGraph = !this.showGraph;
+              this.showCommitDetails = !this.showCommitDetails;
               this.requestUpdate();
             }}
           >
-            <os-icon name="git-branch" size="14"></os-icon>
+            <os-icon
+              name="sidebar"
+              size="14"
+              class="rotate-180"
+              color="${this.showCommitDetails
+                ? "var(--brand-primary)"
+                : "var(--app-secondary-foreground)"}"
+            ></os-icon>
           </button>
 
           <div class="w-px h-5 bg-[var(--app-border)] mx-1"></div>
@@ -1075,16 +1081,12 @@ export class GitPanel extends TailwindElement() {
 
       return html`
         <div
-          class="group flex items-center gap-2 px-3 cursor-pointer transition-colors h-9 ${isSelected
-            ? "bg-[var(--brand-primary)]"
-            : "hover:bg-[var(--app-hover-background)]"}"
+          class="group flex items-center gap-2 px-3 cursor-pointer h-9"
           @click=${() => this.selectCommit(commit)}
         >
           <!-- Commit hash label -->
           <span
-            class="text-[10px] font-mono px-2 py-0.5 rounded flex-shrink-0 transition-colors ${isSelected
-              ? "bg-white/20 text-white"
-              : "bg-[var(--app-toolbar-hover)] text-[var(--app-secondary-foreground)]"}"
+            class="text-[10px] font-mono px-2 py-0.5 rounded flex-shrink-0 bg-[var(--app-toolbar-hover)] text-[var(--app-secondary-foreground)]"
           >
             ${commit.shortHash}
           </span>
@@ -1100,8 +1102,8 @@ export class GitPanel extends TailwindElement() {
 
           <!-- Commit subject -->
           <span
-            class="text-[12px] truncate flex-1 font-medium ${isSelected
-              ? "text-white"
+            class="text-[12px] truncate px-2 py-0.5 rounded flex-1 font-medium cursor-pointer ${isSelected
+              ? "bg-[var(--brand-primary)]/20 text-[var(--brand-primary)]"
               : "text-[var(--app-foreground)]"}"
             title="${commit.subject}"
           >
@@ -1114,9 +1116,7 @@ export class GitPanel extends TailwindElement() {
             .map(
               (b) =>
                 html`<span
-                  class="text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium ${isSelected
-                    ? "bg-white/25 text-white"
-                    : "bg-[var(--brand-primary)] text-white"}"
+                  class="text-[9px] px-1.5 py-0.5 rounded-full whitespace-nowrap flex-shrink-0 font-medium bg-[var(--brand-primary)] text-white"
                   >${b}</span
                 >`,
             )}
@@ -1125,18 +1125,16 @@ export class GitPanel extends TailwindElement() {
           ${commit.files_changed > 0
             ? html`
                 <span
-                  class="flex items-center gap-1.5 flex-shrink-0 text-[10px] ${isSelected
-                    ? "text-white/80"
-                    : "text-[var(--app-secondary-foreground)]"}"
+                  class="flex items-center gap-1.5 flex-shrink-0 text-[10px] text-[var(--app-secondary-foreground)]"
                   title="${commit.files_changed} files changed, +${commit.additions} -${commit.deletions}"
                 >
                   <os-icon name="file-diff" size="10"></os-icon>
                   <span>${commit.files_changed}</span>
                   ${commit.additions > 0
-                    ? html`<span class="${isSelected ? "text-white/90" : "text-[var(--git-added)]"}">+${commit.additions}</span>`
+                    ? html`<span class="text-[var(--git-added)]">+${commit.additions}</span>`
                     : ""}
                   ${commit.deletions > 0
-                    ? html`<span class="${isSelected ? "text-white/90" : "text-[var(--git-deleted)]"}">-${commit.deletions}</span>`
+                    ? html`<span class="text-[var(--git-deleted)]">-${commit.deletions}</span>`
                     : ""}
                 </span>
               `
@@ -1144,9 +1142,7 @@ export class GitPanel extends TailwindElement() {
 
           <!-- Date -->
           <span
-            class="text-[10px] flex-shrink-0 px-2 py-0.5 rounded-md ${isSelected
-              ? "text-white/80"
-              : "text-[var(--app-secondary-foreground)] bg-[var(--app-toolbar-hover)]"}"
+            class="text-[10px] flex-shrink-0 px-2 py-0.5 rounded-md text-[var(--app-secondary-foreground)] bg-[var(--app-toolbar-hover)]"
             title="${commit.dateTitle}"
           >
             ${commit.date}
@@ -1650,10 +1646,10 @@ export class GitPanel extends TailwindElement() {
           </div>
 
           <!-- Right: Commit Details -->
-          ${this.activeTab === "log"
+          ${this.activeTab === "log" && this.showCommitDetails
             ? html`
                 <div
-                  class="flex flex-col overflow-hidden w-[360px] min-w-[320px] border-l border-[var(--app-border)]"
+                  class="flex flex-col overflow-hidden w-[340px] min-w-[300px] border-l border-[var(--app-border)]"
                 >
                   ${this.renderCommitDetails()}
                 </div>
