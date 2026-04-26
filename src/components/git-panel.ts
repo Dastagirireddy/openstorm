@@ -14,7 +14,7 @@
 
  */
 
-import { html, css, type CSSResultGroup } from "lit";
+import { html, svg, css, type CSSResultGroup } from "lit";
 
 import { customElement, property, state } from "lit/decorators.js";
 
@@ -922,125 +922,114 @@ export class GitPanel extends TailwindElement() {
         this.filterUntil = "";
     }
   }
-
-  private renderCommitGraph(): ReturnType<typeof html> {
-    if (!this.showGraph || !this.graphData) return html``;
-
-    const { commits, connections } = this.graphData;
-
-    if (commits.length === 0) return html``;
-
-    const commitHeight = 28;
-
-    const laneWidth = 24;
-
-    const dotRadius = 5;
-
-    const padding = 8;
-
-    const maxLane = Math.max(...commits.map((c) => c.lane), 0);
-
-    const totalWidth = (maxLane + 1) * laneWidth + padding * 2;
-
-    const totalHeight = commits.length * commitHeight;
-
-    const hashToIndex = new Map<string, number>();
-
-    commits.forEach((c, i) => hashToIndex.set(c.hash, i));
-
-    // Render connection paths
-
-    const paths = connections
-      .map((conn) => {
-        const fromIdx = hashToIndex.get(conn.fromHash);
-
-        const toIdx = hashToIndex.get(conn.toHash);
-
-        if (fromIdx === undefined || toIdx === undefined) return null;
-
-        const fromCommit = commits[fromIdx];
-
-        const toCommit = commits[toIdx];
-
-        if (!fromCommit || !toCommit) return null;
-
-        const fromX = padding + fromCommit.lane * laneWidth + laneWidth / 2;
-
-        const fromY = fromIdx * commitHeight + commitHeight / 2;
-
-        const toX = padding + toCommit.lane * laneWidth + laneWidth / 2;
-
-        const toY = toIdx * commitHeight + commitHeight / 2;
-
-        const d =
-          fromX === toX
-            ? `M${fromX},${fromY}L${toX},${toY}`
-            : `M${fromX},${fromY}C${fromX},${(fromY + toY) / 2 - 10},${toX},${(fromY + toY) / 2 + 10},${toX},${toY}`;
-
-        return html`<path
-          d="${d}"
-          fill="none"
-          stroke="${conn.color}"
-          stroke-width="2"
-          stroke-linecap="round"
-        />`;
-      })
-      .filter(Boolean);
-
-    // Render commit dots
-
-    const dots = commits.map((c, i) => {
-      const x = padding + c.lane * laneWidth + laneWidth / 2;
-
-      const y = i * commitHeight + commitHeight / 2;
-
-      return html`<circle
-        cx="${x}"
-        cy="${y}"
-        r="${dotRadius}"
-        fill="${c.laneColor}"
-        stroke="var(--app-bg)"
-        stroke-width="2"
-      />`;
+  
+  private renderCommitGraph(filteredCommits: LogEntry[]): ReturnType<typeof html> {
+    if (!this.showGraph || !this.graphData || filteredCommits.length === 0) return html``;
+  
+    const ROW_H = 36;
+    const LANE_W = 24;
+    const DOT_R = 4;
+    const OFFSET_X = 24;
+  
+    // 1. Build the coordinate map
+    const posMap = new Map<string, { x: number; y: number; color: string }>();
+    filteredCommits.forEach((commit, i) => {
+      const laneData = this.graphData!.commits.find(c => c.hash === commit.hash);
+      const lane = laneData?.lane ?? 0;
+      posMap.set(commit.hash, {
+        x: OFFSET_X + (lane * LANE_W),
+        y: (i * ROW_H) + (ROW_H / 2),
+        color: laneData?.laneColor ?? '#999'
+      });
     });
-
+  
+    const elements: any[] = [];
+  
+    // 2. Generate Lines (using svg`...`)
+    filteredCommits.forEach((commit, i) => {
+      const childPos = posMap.get(commit.hash);
+      if (!childPos) return;
+  
+      const commitData = this.graphData!.commits.find(c => c.hash === commit.hash);
+      const parents = commitData?.parent_hashes || [];
+      let connected = false;
+  
+      parents.forEach(pHash => {
+        const parentPos = posMap.get(pHash);
+        if (parentPos) {
+          connected = true;
+          elements.push(this.createSvgLine(childPos, parentPos, childPos.color));
+        }
+      });
+  
+      // Bridge logic for visual continuity
+      if (!connected && i < filteredCommits.length - 1) {
+        const nextPos = posMap.get(filteredCommits[i + 1].hash);
+        if (nextPos) {
+          elements.push(this.createSvgLine(childPos, nextPos, nextPos.color));
+        }
+      }
+    });
+  
+    // 3. Generate Dots (using svg`...`)
+    filteredCommits.forEach(commit => {
+      const pos = posMap.get(commit.hash);
+      if (pos) {
+        elements.push(svg`
+          <circle cx="${pos.x}" cy="${pos.y}" r="${DOT_R}" 
+                  fill="${pos.color}" stroke="var(--app-bg)" stroke-width="2" />
+        `);
+      }
+    });
+  
+    const width = (Math.max(...this.graphData.lanes.map(l => l.id), 0) + 1) * LANE_W + (OFFSET_X * 2);
+  
+    // Parent wrapper uses html`, but children inside <svg> must be from the svg` literal
     return html`
-      <svg
-        width="${totalWidth}"
-        height="${totalHeight}"
-        viewBox="0 0 ${totalWidth} ${totalHeight}"
-        xmlns="http://www.w3.org/2000/svg"
-        style="display: block;"
-      >
-        ${[...paths, ...dots]}
-      </svg>
+      <div class="graph-wrapper" style="position: absolute; left: 0; top: 0; pointer-events: none; z-index: 100;">
+        <svg width="${width}" height="${filteredCommits.length * ROW_H}" style="overflow: visible; display: block;">
+          <g id="graph-content">
+            ${elements}
+          </g>
+        </svg>
+      </div>
     `;
   }
-
-  private generateBezierPath(
-    fromX: number,
-
-    fromY: number,
-
-    toX: number,
-
-    toY: number,
-
-    commitHeight: number,
-  ): string {
-    if (fromX === toX) {
-      // Straight vertical line
-
-      return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+  
+  /**
+   * Generates SVG line/path using the SVG namespace literal
+   */
+  private createSvgLine(start: {x: number, y: number}, end: {x: number, y: number}, color: string) {
+    if (start.x === end.x) {
+      return svg`
+        <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"
+              stroke="${color}" stroke-width="2" />
+      `;
     }
-
-    // Curved bezier path for lane changes
-
-    const midY = (fromY + toY) / 2;
-
-    const controlOffset = Math.abs(toX - fromX) * 0.5;
-
-    return `M ${fromX} ${fromY} C ${fromX} ${midY - controlOffset}, ${toX} ${midY + controlOffset}, ${toX} ${toY}`;
+    
+    const midY = (start.y + end.y) / 2;
+    const d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`;
+    return svg`
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" />
+    `;
+  }
+  
+  /**
+   * Internal helper to create the SVG path string or line
+   */
+  private createPath(start: {x: number, y: number}, end: {x: number, y: number}, color: string) {
+    if (start.x === end.x) {
+      return html`
+        <line x1="${start.x}" y1="${start.y}" x2="${end.x}" y2="${end.y}"
+              stroke="${color}" stroke-width="2" />
+      `;
+    }
+    // Curved transition
+    const midY = (start.y + end.y) / 2;
+    const d = `M ${start.x} ${start.y} C ${start.x} ${midY}, ${end.x} ${midY}, ${end.x} ${end.y}`;
+    return html`
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" />
+    `;
   }
 
   private getGraphWidth(): number {
@@ -1048,11 +1037,10 @@ export class GitPanel extends TailwindElement() {
 
     const maxLane = Math.max(...this.graphData.commits.map((c) => c.lane), 0);
 
-    const laneWidth = 24;
+    const LANE_W = 24;
+    const OFFSET_X = 16;
 
-    const padding = 16;
-
-    return (maxLane + 1) * laneWidth + padding;
+    return (maxLane + 1) * LANE_W + (OFFSET_X * 2);
   }
 
   private renderCommitList(): ReturnType<typeof html> {
@@ -1087,7 +1075,7 @@ export class GitPanel extends TailwindElement() {
 
       return html`
         <div
-          class="group flex items-center gap-2 px-3 cursor-pointer transition-colors h-9 border-b border-[var(--app-border)] last:border-b-0 ${isSelected
+          class="group flex items-center gap-2 px-3 cursor-pointer transition-colors h-9 ${isSelected
             ? "bg-[var(--brand-primary)]"
             : "hover:bg-[var(--app-hover-background)]"}"
           @click=${() => this.selectCommit(commit)}
@@ -1167,57 +1155,24 @@ export class GitPanel extends TailwindElement() {
       `;
     });
 
-    const graphSvg =
-      this.showGraph && this.graphData && this.graphData.commits.length > 0
-        ? html`
-            <div class="flex-shrink-0" style="width: ${graphWidth}px;">
-              <svg
-                width="${graphWidth}"
-                height="${filteredCommits.length * 28}"
-                style="display: block; background: rgba(255,0,0,0.1);"
-              >
-                ${filteredCommits.map((commit, index) => {
-                  const graphCommit = this.graphData.commits.find(
-                    (c) => c.hash === commit.hash,
-                  );
-
-                  const cx = 8 + (graphCommit?.lane ?? 0) * 24 + 12;
-
-                  const cy = index * 28 + 14;
-
-                  const color = graphCommit?.laneColor ?? "#6366f1";
-
-                  return html`
-                    <line
-                      x1="${cx}"
-                      y1="${cy + 5}"
-                      x2="${cx}"
-                      y2="${cy + 28}"
-                      stroke="${color}"
-                      stroke-width="2"
-                    />
-
-                    <circle
-                      cx="${cx}"
-                      cy="${cy}"
-                      r="5"
-                      fill="${color}"
-                      stroke="var(--app-bg)"
-                      stroke-width="2"
-                    />
-                  `;
-                })}
-              </svg>
-            </div>
-          `
-        : html`<div style="width: ${graphWidth}px;"></div>`;
+    const graphColumn = this.showGraph && this.graphData && this.graphData.commits.length > 0
+      ? html`
+          <div class="flex-shrink-0 relative" style="width: ${graphWidth}px;">
+            ${this.renderCommitGraph(filteredCommits)}
+          </div>
+        `
+      : html`<div style="width: ${graphWidth}px;"></div>`;
 
     return html`
       <div class="flex-1 overflow-y-auto">
         <div class="flex">
-          ${graphSvg}
+          ${graphColumn}
 
-          <div class="flex-1" style="min-width: 0;">${commitRows}</div>
+          <div class="flex-1" style="min-width: 0;">
+            <div class="flex flex-col">
+              ${commitRows}
+            </div>
+          </div>
         </div>
       </div>
     `;
