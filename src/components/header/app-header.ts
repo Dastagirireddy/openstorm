@@ -1,10 +1,12 @@
 import { html, type TemplateResult } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../icon.js';
 import '../file-icon.js';
 import '../run-toolbar.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/breadcrumb.js';
+import * as git from '../../lib/git-api.js';
+import { dispatch } from '../../lib/events.js';
 
 export interface HeaderAction {
   id: string;
@@ -33,6 +35,60 @@ export class AppHeader extends TailwindElement() {
   @property() saveStatus: 'saved' | 'unsaved' = 'saved';
   @property() isSingleFileMode = false;
 
+  @state() private gitOperationInProgress = false;
+
+  private async handleGitAction(actionId: string): Promise<void> {
+    if (!this.projectPath || this.gitOperationInProgress) return;
+
+    try {
+      this.gitOperationInProgress = true;
+
+      switch (actionId) {
+        case 'pull': {
+          console.log('[Git] Pulling from remote...');
+          const result = await git.gitPull(this.projectPath);
+          console.log('[Git] Pull result:', result);
+          dispatch('git-refresh');
+          dispatch('status-message', { message: result || 'Pull completed', type: 'success' });
+          break;
+        }
+        case 'commit': {
+          // Open commit panel
+          dispatch('set-active-activity', { activity: 'commits' });
+          break;
+        }
+        case 'push': {
+          console.log('[Git] Pushing to remote...');
+          const result = await git.gitPush(this.projectPath, false);
+          console.log('[Git] Push result:', result);
+          dispatch('git-refresh');
+          dispatch('status-message', { message: result || 'Push completed', type: 'success' });
+          break;
+        }
+        case 'history': {
+          // Toggle git panel
+          dispatch('toggle-git-log', { visible: true });
+          break;
+        }
+        case 'rollback': {
+          const confirmed = confirm('Are you sure you want to discard all local changes? This cannot be undone.');
+          if (confirmed) {
+            await git.gitDiscardAll(this.projectPath);
+            dispatch('git-refresh');
+            dispatch('status-message', { message: 'All local changes discarded', type: 'success' });
+          }
+          break;
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Operation failed';
+      console.error('[Git] Error:', message);
+      dispatch('status-message', { message, type: 'error' });
+    } finally {
+      this.gitOperationInProgress = false;
+    }
+  }
+
   private renderAction(action: HeaderAction): TemplateResult {
     const isLabel = action.id === 'git-label';
     if (isLabel) {
@@ -40,13 +96,23 @@ export class AppHeader extends TailwindElement() {
         <span class="text-[12px] font-medium" style="color: var(--app-disabled-foreground);">${action.label}</span>
       `;
     }
+
+    const isGitAction = ['pull', 'commit', 'push', 'history', 'rollback'].includes(action.id);
+    const disabled = this.gitOperationInProgress && isGitAction;
+
     return html`
       <button
-        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-all"
-        @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
-        @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
+        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+        @mouseenter=${(e: Event) => {
+          if (!disabled) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)';
+        }}
+        @mouseleave=${(e: Event) => {
+          (e.target as HTMLElement).style.backgroundColor = 'transparent';
+        }}
         title="${action.title}"
-        data-action="${action.id}">
+        data-action="${action.id}"
+        ?disabled=${disabled}
+        @click=${() => this.handleGitAction(action.id)}>
         <os-icon
           name="${action.icon}"
           color="${action.color || 'var(--app-disabled-foreground)'}"

@@ -22,6 +22,8 @@ export class StatusBar extends TailwindElement() {
   @state() private activeLanguage: string | null = null;
   @state() private installProgress: LspInstallProgress | null = null;
   @state() private installError: string | null = null;
+  @state() private statusMessage: string | null = null;
+  @state() private statusMessageType: 'success' | 'error' | 'info' = 'info';
 
   private readonly _lspService = LspService.getInstance();
   private _eventCleanups: Array<() => void> = [];
@@ -60,6 +62,17 @@ export class StatusBar extends TailwindElement() {
     on('active-language-changed', (e) => {
       this.activeLanguage = e.detail.languageId;
       this._refreshLspStatus();
+    });
+
+    on('status-message', (e) => {
+      this.statusMessage = e.detail.message;
+      this.statusMessageType = e.detail.type || 'info';
+      // Auto-clear after 5 seconds
+      setTimeout(() => {
+        this.statusMessage = null;
+        this.requestUpdate();
+      }, 5000);
+      this.requestUpdate();
     });
   }
 
@@ -184,8 +197,31 @@ export class StatusBar extends TailwindElement() {
           ${this._renderTab('terminal', 'Terminal', this.activePanel === 'terminal', 'terminal', this.showTerminalNotification)}
         </div>
 
-        <!-- Right: LSP, Branch, Cursor, Encoding -->
+        <!-- Right: Status Messages, LSP, Branch, Cursor, Encoding -->
         <div class="flex items-center gap-4">
+          ${this.statusMessage
+            ? html`
+                <div class="flex items-center gap-1.5 px-2 py-0.5 rounded ${
+                    this.statusMessageType === 'success' ? 'bg-[var(--git-added)]/20' :
+                    this.statusMessageType === 'error' ? 'bg-[var(--git-deleted)]/20' :
+                    'bg-[var(--brand-primary)]/20'
+                  }">
+                  <os-icon name="${
+                    this.statusMessageType === 'success' ? 'check' :
+                    this.statusMessageType === 'error' ? 'circle-alert' :
+                    'info'
+                  }" size="12" color="${
+                    this.statusMessageType === 'success' ? 'var(--git-added)' :
+                    this.statusMessageType === 'error' ? 'var(--git-deleted)' :
+                    'var(--brand-primary)'
+                  }"></os-icon>
+                  <span>${this.statusMessage}</span>
+                  <button @click=${() => { this.statusMessage = null; this.requestUpdate(); }}>
+                    <os-icon name="x" size="10"></os-icon>
+                  </button>
+                </div>
+              `
+            : nothing}
           ${this._renderLspIndicator()}
 
           <div class="flex items-center gap-1 cursor-pointer hover:bg-[var(--statusbar-hover-background)] px-2 py-0.5 rounded">
