@@ -437,6 +437,7 @@ fn main() {
             commands::git::git_discard_file,
             commands::git::git_discard_all,
             commands::git::git_get_file_diff,
+            commands::git::git_get_file_diff_stats,
             commands::git::git_get_diff_stats,
             commands::git::git_fetch,
             commands::git::git_pull,

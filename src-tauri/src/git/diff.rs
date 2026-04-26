@@ -103,6 +103,38 @@ pub fn get_word_diff(path: &str, staged: bool) -> Result<String, String> {
     }
 }
 
+/// Get diff stats for a specific file
+pub fn get_file_diff_stats(path: &str, file_path: &str, staged: bool) -> Result<DiffStats, String> {
+    let diff_arg = if staged { "--cached" } else { "" };
+    let args = if staged {
+        vec!["diff", "--cached", "--stat", "--", file_path]
+    } else {
+        vec!["diff", "--stat", "--", file_path]
+    };
+
+    let output = run_git_command(&args, path)?;
+
+    let mut additions = 0;
+    let mut deletions = 0;
+
+    for line in output.lines() {
+        // Parse stats like: " src/main.rs | 10 +++++-----"
+        if let Some(stats_start) = line.find('|') {
+            let stats_part = &line[stats_start..];
+
+            // Count + and -
+            additions += stats_part.matches('+').count();
+            deletions += stats_part.matches('-').count();
+        }
+    }
+
+    Ok(DiffStats {
+        additions,
+        deletions,
+        files_changed: if additions > 0 || deletions > 0 { 1 } else { 0 },
+    })
+}
+
 /// Check if there are any changes
 pub fn has_changes(path: &str) -> bool {
     // Check for staged changes

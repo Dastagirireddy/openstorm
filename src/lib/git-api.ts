@@ -165,6 +165,15 @@ export async function gitGetFileDiff(
   return invoke('git_get_file_diff', { path, filePath, staged });
 }
 
+/** Get diff stats for a specific file */
+export async function gitGetFileDiffStats(
+  path: string,
+  filePath: string,
+  staged: boolean
+): Promise<DiffStats> {
+  return invoke('git_get_file_diff_stats', { path, filePath, staged });
+}
+
 /** Get repository diff stats */
 export async function gitGetDiffStats(path: string): Promise<DiffStats> {
   return invoke('git_get_diff_stats', { path });

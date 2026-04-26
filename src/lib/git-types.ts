@@ -21,6 +21,8 @@ export interface FileChange {
   status: FileStatus;
   staged: boolean;
   index: number;
+  additions?: number;
+  deletions?: number;
 }
 
 /** Overall repository status */

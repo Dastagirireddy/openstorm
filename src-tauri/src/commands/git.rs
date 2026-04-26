@@ -124,6 +124,12 @@ pub fn git_get_file_diff(path: String, filePath: String, staged: bool) -> Result
     git::status::get_file_diff(&path, &filePath, staged)
 }
 
+/// Get diff stats for a specific file
+#[tauri::command]
+pub fn git_get_file_diff_stats(path: String, filePath: String, staged: bool) -> Result<DiffStats, String> {
+    git::diff::get_file_diff_stats(&path, &filePath, staged)
+}
+
 /// Get repository diff stats
 #[tauri::command]
 pub fn git_get_diff_stats(path: String) -> Result<DiffStats, String> {
