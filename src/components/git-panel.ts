@@ -139,8 +139,6 @@ export class GitPanel extends TailwindElement() {
 
   @state() private graphData: GraphData | null = null;
 
-  @state() private copyJustCopied = false;
-
   connectedCallback(): void {
     super.connectedCallback();
 
@@ -470,7 +468,7 @@ export class GitPanel extends TailwindElement() {
                     size="14"
                     color="${this.showBranchPanel
                       ? "var(--brand-primary)"
-                      : "var(--app-secondary-foreground)"}"
+                      : "var(--app-foreground)"}"
                   ></os-icon>
                 </button>
               `
@@ -1426,15 +1424,9 @@ export class GitPanel extends TailwindElement() {
               @click=${(e: Event) => {
                 e.stopPropagation();
                 navigator.clipboard.writeText(c.hash);
-                this.copyJustCopied = true;
-                setTimeout(() => {
-                  this.copyJustCopied = false;
-                  this.requestUpdate();
-                }, 1500);
-                this.requestUpdate();
               }}
             >
-              <os-icon name="${this.copyJustCopied ? 'check' : 'copy'}" size="12" color="${this.copyJustCopied ? 'var(--git-added)' : 'var(--app-foreground)'}"></os-icon>
+              <os-icon name="copy" size="12" color="var(--app-foreground)"></os-icon>
             </button>
           </div>
         </div>
