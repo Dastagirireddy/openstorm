@@ -1,5 +1,5 @@
 /**
- * Git Panel Component - IntelliJ Style (Bottom Panel)
+ * Git Panel Component - Famous Style (Bottom Panel)
  *
  * Orchestrates sub-components for git log visualization.
  */

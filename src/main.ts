@@ -1058,7 +1058,7 @@ export class OpenStormApp extends TailwindElement() {
                 `
               : ''}
 
-            <!-- Git Panel (IntelliJ-style bottom panel - Repository/Log view) -->
+            <!-- Git Panel (Famous-style bottom panel - Repository/Log view) -->
             ${showGitPanel
               ? html`
                   <!-- Git panel container with resize handle -->

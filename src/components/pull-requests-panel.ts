@@ -1,7 +1,7 @@
 /**
- * Pull Requests Panel Component - IntelliJ Style
+ * Pull Requests Panel Component - Famous Style
  *
- * Follows IntelliJ's Pull Requests tool window layout:
+ * Follows Famous's Pull Requests tool window layout:
  * - Left sidebar panel with PR list
  * - Filters for open/closed/merged PRs
  * - PR details view
