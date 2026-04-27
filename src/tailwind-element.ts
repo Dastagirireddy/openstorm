@@ -7,3 +7,6 @@ export const TailwindElement = (componentStyles: CSSResultGroup | undefined = un
   class extends LitElement {
     static styles = componentStyles ? [tailwindSheet, componentStyles] : [tailwindSheet];
   };
+
+// Helper to get base Tailwind styles for extension
+export const getTailwindStyles = (): CSSResultGroup => tailwindSheet;

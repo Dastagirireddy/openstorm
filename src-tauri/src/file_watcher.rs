@@ -1,5 +1,5 @@
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, State};
 
@@ -9,10 +9,17 @@ pub struct FileWatcher {
     app_handle: Arc<Mutex<Option<AppHandle>>>,
 }
 
+/// Check if a path is a git repository
+fn is_git_repository(path: &Path) -> bool {
+    path.join(".git").exists()
+}
+
 impl FileWatcher {
     pub fn new() -> Self {
         let app_handle = Arc::new(Mutex::new(None::<AppHandle>));
         let app_handle_clone = Arc::clone(&app_handle);
+        let watched_path = Arc::new(Mutex::new(None::<PathBuf>));
+        let watched_path_for_closure = Arc::clone(&watched_path);
 
         let watcher = Arc::new(Mutex::new(
             RecommendedWatcher::new(
@@ -31,17 +38,43 @@ impl FileWatcher {
                                 "paths": paths,
                                 "type": event_type
                             }));
+
+                            // Check if .git folder itself was created or removed (not contents inside it)
+                            let mut git_folder_created = false;
+                            let mut git_folder_removed = false;
+
+                            for path in &paths {
+                                let is_git_folder = path.ends_with("/.git") || path.ends_with("\\.git") || path == ".git";
+
+                                if is_git_folder {
+                                    if matches!(e.kind, EventKind::Create(_)) {
+                                        git_folder_created = true;
+                                    } else if matches!(e.kind, EventKind::Remove(_)) {
+                                        git_folder_removed = true;
+                                    }
+                                }
+                            }
+
+                            // Emit git-repo-changed only when .git folder itself is created/removed
+                            if git_folder_created || git_folder_removed {
+                                let _ = handle.emit("git-repo-changed", serde_json::json!({
+                                    "is_repository": git_folder_created
+                                }));
+                            }
+
+                            // Emit git-refresh for any file changes so frontend re-checks git status
+                            let _ = handle.emit("git-refresh", ());
                         }
                     }
                 },
-                Config::default(),
+                Config::default().with_poll_interval(std::time::Duration::from_secs(2)),
             )
             .expect("Failed to create file watcher"),
         ));
 
         FileWatcher {
             watcher,
-            watched_path: Arc::new(Mutex::new(None)),
+            watched_path,
             app_handle,
         }
     }
@@ -59,8 +92,8 @@ impl FileWatcher {
                 }
             }
 
-            // Watch new path
-            let result = watcher.watch(&path, RecursiveMode::NonRecursive);
+            // Watch new path recursively to detect .git folder creation
+            let result = watcher.watch(&path, RecursiveMode::Recursive);
             if result.is_ok() {
                 *self.watched_path.lock().unwrap() = Some(path);
             }
