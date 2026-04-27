@@ -52,8 +52,8 @@ export class DebugToolbar extends TailwindElement() {
       align-items: center;
       gap: 4px;
       padding: 4px 8px;
-      background: #f9fafb;
-      border-bottom: 1px solid #e5e7eb;
+      background: var(--app-toolbar-hover, #f9fafb);
+      border-bottom: 1px solid var(--app-border, #e5e7eb);
     }
 
     .debug-action {
@@ -65,14 +65,14 @@ export class DebugToolbar extends TailwindElement() {
       border: none;
       border-radius: 4px;
       background: transparent;
-      color: #4b5563;
+      color: var(--app-secondary-foreground, #4b5563);
       cursor: pointer;
       transition: all 0.15s;
     }
 
     .debug-action:hover {
-      background: #e5e7eb;
-      color: #1f2937;
+      background: var(--app-toolbar-hover, #e5e7eb);
+      color: var(--app-foreground, #1f2937);
     }
 
     .debug-action:disabled {
@@ -81,31 +81,31 @@ export class DebugToolbar extends TailwindElement() {
     }
 
     .debug-action.continue {
-      color: #22c55e;
+      color: var(--app-continue-color, #22c55e);
     }
 
     .debug-action.step {
-      color: #6366f1;
+      color: var(--app-step-color, #6366f1);
     }
 
     .debug-action.stop {
-      color: #ef4444;
+      color: var(--app-stop-color, #ef4444);
     }
 
     .debug-action.pause {
-      color: #f59e0b;
+      color: var(--app-pause-color, #f59e0b);
     }
 
     .separator {
       width: 1px;
       height: 20px;
-      background: #e5e7eb;
+      background: var(--app-border, #e5e7eb);
       margin: 0 4px;
     }
 
     .status {
       font-size: 12px;
-      color: #6b7280;
+      color: var(--app-secondary-foreground, #6b7280);
       margin-left: 8px;
     }
 
@@ -123,8 +123,8 @@ export class DebugToolbar extends TailwindElement() {
     }
 
     .install-dialog {
-      background: #ffffff;
-      border: 1px solid #e0e0e0;
+      background: var(--app-bg, #ffffff);
+      border: 1px solid var(--app-border, #e0e0e0);
       border-radius: 8px;
       padding: 20px;
       min-width: 320px;
@@ -135,13 +135,13 @@ export class DebugToolbar extends TailwindElement() {
     .install-dialog-title {
       font-size: 14px;
       font-weight: 600;
-      color: #1a1a1a;
+      color: var(--app-foreground, #1a1a1a);
       margin-bottom: 12px;
     }
 
     .install-dialog-content {
       font-size: 13px;
-      color: #333333;
+      color: var(--app-foreground, #333333);
       margin-bottom: 16px;
       line-height: 1.5;
     }
@@ -151,24 +151,24 @@ export class DebugToolbar extends TailwindElement() {
     }
 
     .adapter-name {
-      color: #6366f1;
+      color: var(--brand-primary, #6366f1);
       font-weight: 500;
     }
 
     .install-dialog-content code {
-      background: #f5f5f5;
+      background: var(--app-toolbar-hover, #f5f5f5);
       padding: 2px 6px;
       border-radius: 3px;
-      color: #c41e3a;
+      color: var(--app-console-error, #c41e3a);
       font-family: monospace;
       font-size: 12px;
     }
 
     .install-command {
-      background: #e8e8e8;
+      background: var(--app-toolbar-hover, #e8e8e8);
       padding: 2px 6px;
       border-radius: 3px;
-      color: #333;
+      color: var(--app-foreground, #333);
       font-family: monospace;
       font-size: 12px;
     }
@@ -189,27 +189,27 @@ export class DebugToolbar extends TailwindElement() {
     }
 
     .install-dialog-button.primary {
-      background: #6366f1;
-      color: #ffffff;
+      background: var(--brand-primary, #6366f1);
+      color: var(--app-button-foreground, #ffffff);
     }
 
     .install-dialog-button.primary:hover {
-      background: #4f46e5;
+      background: var(--brand-primary-hover, #4f46e5);
     }
 
     .install-dialog-button.primary:disabled {
-      background: #cccccc;
-      color: #999999;
+      background: var(--app-disabled-background, #cccccc);
+      color: var(--app-disabled-foreground, #999999);
       cursor: not-allowed;
     }
 
     .install-dialog-button.secondary {
-      background: #f0f0f0;
-      color: #333333;
+      background: var(--app-toolbar-hover, #f0f0f0);
+      color: var(--app-foreground, #333333);
     }
 
     .install-dialog-button.secondary:hover {
-      background: #e0e0e0;
+      background: var(--app-toolbar-hover, #e0e0e0);
     }
 
     .install-progress {
@@ -218,14 +218,14 @@ export class DebugToolbar extends TailwindElement() {
       gap: 8px;
       margin-top: 12px;
       font-size: 12px;
-      color: #666666;
+      color: var(--app-secondary-foreground, #666666);
     }
 
     .spinner {
       width: 14px;
       height: 14px;
-      border: 2px solid #e5e7eb;
-      border-top-color: #6366f1;
+      border: 2px solid var(--app-border, #e5e7eb);
+      border-top-color: var(--brand-primary, #6366f1);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }

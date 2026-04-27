@@ -151,46 +151,46 @@ export class AppConsolePanel extends TailwindElement() {
         <div class="flex items-center gap-1 px-2 py-1 border-b" style="background-color: var(--app-bg); border-color: var(--app-border);">
           <span class="text-[10px] font-semibold uppercase tracking-wide mr-1" style="color: var(--app-disabled-foreground);">Filter:</span>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'all' ? '!bg-indigo-100 !text-indigo-700 !border-indigo-300 hover:!bg-indigo-200' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[var(--app-toolbar-hover)] ${this.consoleFilter === 'all' ? '!bg-[var(--brand-primary)]/10 !text-[var(--brand-primary)] !border-[var(--brand-primary)]/30' : ''}"
             style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleFilter = 'all'; this.requestUpdate(); }}>
             All
           </button>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stdout' ? '!bg-green-100 !text-green-700 !border-green-300 hover:!bg-green-200' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[var(--app-toolbar-hover)] ${this.consoleFilter === 'stdout' ? '!bg-[var(--app-console-success)]/10 !text-[var(--app-console-success)] !border-[var(--app-console-success)]/30' : ''}"
             style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleFilter = 'stdout'; this.requestUpdate(); }}>
             Stdout
           </button>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'stderr' ? '!bg-red-100 !text-red-700 !border-red-300 hover:!bg-red-200' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[var(--app-toolbar-hover)] ${this.consoleFilter === 'stderr' ? '!bg-[var(--app-console-error)]/10 !text-[var(--app-console-error)] !border-[var(--app-console-error)]/30' : ''}"
             style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleFilter = 'stderr'; this.requestUpdate(); }}>
             Stderr
           </button>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[#e5e7eb] hover:border-[#b0b0b0] ${this.consoleFilter === 'info' ? '!bg-blue-100 !text-blue-700 !border-blue-300 hover:!bg-blue-200' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border rounded bg-transparent cursor-pointer transition-all hover:bg-[var(--app-toolbar-hover)] ${this.consoleFilter === 'info' ? '!bg-[var(--app-console-info)]/10 !text-[var(--app-console-info)] !border-[var(--app-console-info)]/30' : ''}"
             style="border-color: var(--app-border); color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleFilter = 'info'; this.requestUpdate(); }}>
             Info
           </button>
           <div class="w-px h-4 mx-1" style="background-color: var(--app-border);"></div>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleSearchVisible ? 'text-indigo-600 bg-indigo-50' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[var(--app-toolbar-hover)] ${this.consoleSearchVisible ? 'text-[var(--brand-primary)] bg-[var(--brand-primary)]/10' : ''}"
             style="color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleSearchVisible = !this.consoleSearchVisible; this.requestUpdate(); }}
             title="Search (Ctrl+F)">
             <iconify-icon icon="mdi:magnify" width="14" style="display: inline-flex;"></iconify-icon>
           </button>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb] ${this.consoleAutoScroll ? 'text-indigo-600 bg-indigo-50' : ''}"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[var(--app-toolbar-hover)] ${this.consoleAutoScroll ? 'text-[var(--brand-primary)] bg-[var(--brand-primary)]/10' : ''}"
             style="color: var(--app-disabled-foreground);"
             @click=${() => { this.consoleAutoScroll = !this.consoleAutoScroll; this.requestUpdate(); }}
             title="Toggle auto-scroll">
             <iconify-icon icon="${this.consoleAutoScroll ? 'mdi:arrow-down-bold' : 'mdi:arrow-down-bold-outline'}" width="14" style="display: inline-flex;"></iconify-icon>
           </button>
           <button
-            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[#e5e7eb]"
+            class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[var(--app-toolbar-hover)]"
             style="color: var(--app-disabled-foreground);"
             @click=${() => this.clearConsole()}
             title="Clear console">
@@ -219,7 +219,7 @@ export class AppConsolePanel extends TailwindElement() {
             />
             ${this.consoleSearchQuery ? html`
               <button
-                class="p-0.5 rounded hover:bg-[#e5e7eb]"
+                class="p-0.5 rounded hover:bg-[var(--app-toolbar-hover)]"
                 @click=${() => { this.consoleSearchQuery = ''; this.requestUpdate(); }}
                 title="Clear search">
                 <iconify-icon icon="mdi:close" width="12"></iconify-icon>

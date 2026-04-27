@@ -4,6 +4,18 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { TailwindElement } from "./tailwind-element.js";
 import { dispatch } from "./lib/events.js";
+import {
+  loadTerminalPane,
+  loadSearchOverlay,
+  loadSettingsPanel,
+  loadGitPanel,
+  loadCommitPanel,
+  loadPullRequestsPanel,
+  loadAppConsolePanel,
+  loadDebugPanel,
+  loadDebugToolbar,
+  loadRunToolbar,
+} from "./lib/lazy-loader.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/theme-service.js";
@@ -31,16 +43,14 @@ addCollection(mdi);
 addCollection(streamlineFlexColor);
 addCollection(lucide);
 
-// Import components
+// Core components (always loaded)
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
 import "./components/navigation/activity-bar.js";
 import "./components/explorer/project-explorer.js";
 import "./components/editor/pane.js";
 import "./components/editor/editor-tab-bar.js";
-import "./components/terminal/terminal-pane.js";
 import "./components/status-bar.js";
-import "./components/search-overlay.js";
 import "./components/icon.js";
 import "./components/resizable-container.js";
 import "./components/dialog.js";
@@ -50,18 +60,12 @@ import "./components/context-menu.js";
 import "./components/rename-dialog.js";
 import "./components/delete-dialog.js";
 import "./components/welcome-screen.js";
-import "./components/template-picker.js";
-import "./components/run-toolbar.js";
-import "./components/debug-toolbar.js";
-import "./components/debug-panel.js";
-import "./components/settings-panel.js";
 import "./components/theme-palette.js";
 import "./components/hover-tooltip.js";
 import "./components/git-not-found-banner.js";
-import "./components/git-panel.js";
-import "./components/commit-panel.js";
-import "./components/pull-requests-panel.js";
-import "./components/app-console-panel.js";
+
+// Lazy-loaded components (loaded on demand via lazy-loader.ts)
+// Terminal, Search, Settings, Git, Commit, Pull Requests, App Console, Debug panels
 
 import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
 
@@ -104,6 +108,53 @@ export class OpenStormApp extends TailwindElement() {
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
     this.setupMenuHandler();
+    this.setupQuickSearchHandler();
+  }
+
+  private setupQuickSearchHandler(): void {
+    document.addEventListener("quick-search", () => {
+      loadSearchOverlay();
+    });
+  }
+
+  // Lazy-load components before they're displayed
+  override willUpdate(changedProperties: Map<string, unknown>): void {
+    super.willUpdate(changedProperties);
+
+    // Pre-load terminal when panel is about to be shown
+    if (changedProperties.has("activeStatusBarPanel") && this.activeStatusBarPanel === "terminal") {
+      loadTerminalPane();
+    }
+
+    // Pre-load settings panel
+    if (changedProperties.has("activeActivity") && this.activeActivity === "settings") {
+      loadSettingsPanel();
+    }
+
+    // Pre-load git panel
+    if (changedProperties.has("gitPanelVisible") && this.gitPanelVisible) {
+      loadGitPanel();
+    }
+
+    // Pre-load commit panel
+    if (changedProperties.has("activeActivity") && (this.activeActivity === "commits" || this.activeActivity === "pull-requests")) {
+      loadCommitPanel();
+      if (this.activeActivity === "pull-requests") {
+        loadPullRequestsPanel();
+      }
+    }
+
+    // Pre-load app console
+    if (changedProperties.has("activeStatusBarPanel") && this.activeStatusBarPanel === "app-console") {
+      loadAppConsolePanel();
+    }
+
+    // Pre-load debug panel and toolbar
+    if (changedProperties.has("isDebugging") && this.isDebugging) {
+      loadDebugPanel();
+      loadDebugToolbar();
+      loadRunToolbar();
+    }
 
     // Listen for theme changes to trigger re-render
     document.addEventListener('theme-changed', () => {
