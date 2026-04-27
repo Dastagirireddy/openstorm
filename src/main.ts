@@ -20,6 +20,7 @@ import * as fileIcons from '@iconify-json/file-icons/icons.json';
 import * as logos from '@iconify-json/logos/icons.json';
 import * as mdi from '@iconify-json/mdi/icons.json';
 import * as streamlineFlexColor from '@iconify-json/streamline-flex-color/icons.json';
+import * as lucide from '@iconify-json/lucide/icons.json';
 addCollection(devicon);
 addCollection(vscodeIcons);
 addCollection(tabler);
@@ -28,6 +29,7 @@ addCollection(fileIcons);
 addCollection(logos);
 addCollection(mdi);
 addCollection(streamlineFlexColor);
+addCollection(lucide);
 
 // Import components
 import "./components/header/app-header.js";

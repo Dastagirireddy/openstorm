@@ -373,28 +373,30 @@ export class CommitPanel extends TailwindElement() {
     const expandedUntracked = this.expandedSections.has('untracked');
 
     return html`
-      <div class="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0" style="border-color: var(--app-border); background-color: var(--app-bg);">
-        <os-icon name="git-branch" size="14" color="var(--app-foreground)"></os-icon>
-        <span class="text-[11px] font-medium" style="color: var(--app-foreground);">${this.currentBranch || 'HEAD'}</span>
-        <span class="text-[10px]" style="color: var(--app-disabled-foreground);">
-          ${staged.length + unstaged.length + untracked.length} file${staged.length + unstaged.length + untracked.length !== 1 ? 's' : ''} changed
-        </span>
-      </div>
-      <div class="flex-1 overflow-y-auto min-h-0">
-        ${staged.length > 0 ? html`
-          ${this.renderChangelistHeader('Staged Changes', staged.length, 'var(--git-added)', 'staged')}
-          ${expandedStaged ? staged.map(change => this.renderFileChange(change)) : ''}
-        ` : ''}
+      <div class="flex flex-col">
+        <div class="flex items-center gap-2 px-3 py-2 border-b flex-shrink-0" style="border-color: var(--app-border); background-color: var(--app-bg);">
+          <os-icon name="git-branch" size="14" color="var(--app-foreground)"></os-icon>
+          <span class="text-[11px] font-medium" style="color: var(--app-foreground);">${this.currentBranch || 'HEAD'}</span>
+          <span class="text-[10px]" style="color: var(--app-disabled-foreground);">
+            ${staged.length + unstaged.length + untracked.length} file${staged.length + unstaged.length + untracked.length !== 1 ? 's' : ''} changed
+          </span>
+        </div>
+        <div>
+          ${staged.length > 0 ? html`
+            ${this.renderChangelistHeader('Staged Changes', staged.length, 'var(--git-added)', 'staged')}
+            ${expandedStaged ? staged.map(change => this.renderFileChange(change)) : ''}
+          ` : ''}
 
-        ${unstaged.length > 0 ? html`
-          ${this.renderChangelistHeader('Unstaged Changes', unstaged.length, 'var(--git-modified)', 'unstaged')}
-          ${expandedUnstaged ? unstaged.map(change => this.renderFileChange(change)) : ''}
-        ` : ''}
+          ${unstaged.length > 0 ? html`
+            ${this.renderChangelistHeader('Unstaged Changes', unstaged.length, 'var(--git-modified)', 'unstaged')}
+            ${expandedUnstaged ? unstaged.map(change => this.renderFileChange(change)) : ''}
+          ` : ''}
 
-        ${untracked.length > 0 ? html`
-          ${this.renderChangelistHeader('Unversioned Files', untracked.length, 'var(--git-untracked)', 'untracked')}
-          ${expandedUntracked ? untracked.map(change => this.renderFileChange(change)) : ''}
-        ` : ''}
+          ${untracked.length > 0 ? html`
+            ${this.renderChangelistHeader('Unversioned Files', untracked.length, 'var(--git-untracked)', 'untracked')}
+            ${expandedUntracked ? untracked.map(change => this.renderFileChange(change)) : ''}
+          ` : ''}
+        </div>
       </div>
     `;
   }
@@ -479,9 +481,11 @@ export class CommitPanel extends TailwindElement() {
       <div class="flex flex-col h-full w-full" style="background-color: var(--app-bg);">
         ${this.renderToolbar()}
         ${!this.loading && !this.error && this.repoInfo?.is_repository ? html`
-          ${this.renderChangesSection()}
-          ${this.renderCommitMessageSection()}
-          ${this.renderCommitActions()}
+          <div class="flex-1 overflow-y-auto min-h-0">
+            ${this.renderChangesSection()}
+            ${this.renderCommitMessageSection()}
+            ${this.renderCommitActions()}
+          </div>
         ` : ''}
         ${!this.loading && !this.error && !this.repoInfo?.is_repository ? this.renderNoRepo() : ''}
         ${this.loading ? html`

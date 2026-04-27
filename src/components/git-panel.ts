@@ -1394,7 +1394,7 @@ export class GitPanel extends TailwindElement() {
     const c = this.selectedCommit;
 
     return html`
-      <div class="flex flex-col h-full overflow-hidden">
+      <div class="flex flex-col h-full overflow-y-auto">
         <!-- Commit header -->
         <div class="px-4 py-3 border-b border-[var(--app-border)]">
           <p class="text-[12px] font-semibold text-[var(--app-foreground)]">
@@ -1494,7 +1494,7 @@ export class GitPanel extends TailwindElement() {
           : ""}
 
         <!-- Changed files list -->
-        <div class="flex-1 flex flex-col overflow-hidden min-h-0">
+        <div>
           <div
             class="px-4 py-2 flex items-center justify-between border-b border-[var(--app-border)] bg-[var(--app-toolbar-background)]"
           >
@@ -1510,7 +1510,7 @@ export class GitPanel extends TailwindElement() {
             </span>
           </div>
 
-          <div class="flex-1 overflow-y-auto">
+          <div>
             ${this.changedFiles.length === 0
               ? html`
                   <p
