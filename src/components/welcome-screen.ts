@@ -1,7 +1,7 @@
 import { html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement } from "../tailwind-element.js";
-import { dispatch } from "../lib/events.js";
+import { dispatch } from "../lib/types/events.js";
 
 export type GitStatus = 'synced' | 'modified' | 'behind' | 'ahead' | 'untracked';
 export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'database' | 'generic';

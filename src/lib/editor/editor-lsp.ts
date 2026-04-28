@@ -10,8 +10,8 @@
 
 import { CompletionContext, CompletionResult, Completion } from '@codemirror/autocomplete';
 import { hoverTooltip, EditorView } from '@codemirror/view';
-import type { HoverData } from '../../components/hover-tooltip.js';
-import { dispatch } from '../events.js';
+import type { HoverData } from '../../components/layout/hover-tooltip';
+import { dispatch } from '../types';
 import {
   getCompletions,
   getHover,
@@ -21,9 +21,8 @@ import {
   notifyDocumentClosed,
   completionKindToType,
   getCompletionIcon,
-  formatHoverContent,
   pathToFileUri,
-} from '../lsp-client.js';
+} from '../lsp';
 
 /**
  * Get language ID from file path

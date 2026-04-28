@@ -2,7 +2,7 @@ import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { TailwindElement } from "../tailwind-element.js";
-import { dispatch } from "../lib/events.js";
+import { dispatch } from "../lib/types/events.js";
 import "./debug/debug-variables-panel.js";
 import "./debug/debug-watch-panel.js";
 import "./debug/debug-call-stack-panel.js";

@@ -38,7 +38,6 @@ export {
 // LSP integration
 export {
   lspCompletionSource,
-  lspHoverTooltip,
   debugHoverTooltip,
   notifyLspDocumentOpen,
   notifyLspDocumentChange,

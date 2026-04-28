@@ -1,7 +1,7 @@
 import { html, css, type TemplateResult } from 'lit';
 import { customElement, state, query, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import type { TerminalTabType } from '../../lib/file-types.js';
+import type { TerminalTabType } from '../../lib/types/file-types.js';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { readText, writeText } from '@tauri-apps/plugin-clipboard-manager';

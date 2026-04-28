@@ -17,7 +17,7 @@ import {
 } from '@codemirror/view';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
-import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
+import { customFoldGutter } from '../utils';
 import { openStormHighlight } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
 

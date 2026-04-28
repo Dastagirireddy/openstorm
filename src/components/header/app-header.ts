@@ -1,12 +1,12 @@
 import { html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import '../icon.js';
-import '../file-icon.js';
-import '../run-toolbar.js';
-import { parsePathToSegments, getFileIconColor } from '../../lib/breadcrumb.js';
-import * as git from '../../lib/git-api.js';
-import { dispatch } from '../../lib/events.js';
+import '../layout/icon.js';
+import '../layout/file-icon.js';
+import '../debug/run-toolbar.js';
+import { parsePathToSegments, getFileIconColor } from '../../lib/utils/breadcrumb.js';
+import * as git from '../../lib/git/git-api.js';
+import { dispatch } from '../../lib/types/events.js';
 
 export interface HeaderAction {
   id: string;

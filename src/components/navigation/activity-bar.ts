@@ -1,7 +1,7 @@
 import { html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import '../icon.js';
+import '../layout/icon.js';
 
 export type ActivityItem = 'explorer' | 'search' | 'commits' | 'pull-requests' | 'settings';
 

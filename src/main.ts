@@ -2,8 +2,10 @@ import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
+import { getGitBranch } from "./lib/git/git-status.js";
 import { TailwindElement } from "./tailwind-element.js";
-import { dispatch } from "./lib/events.js";
+import { dispatch } from "./lib/types/events.js";
 import {
   loadTerminalPane,
   loadSearchOverlay,
@@ -15,10 +17,10 @@ import {
   loadDebugPanel,
   loadDebugToolbar,
   loadRunToolbar,
-} from "./lib/lazy-loader.js";
+} from "./lib/utils/lazy-loader.js";
 
 // Initialize theme service early for CSS variable injection
-import { ThemeService } from "./lib/theme-service.js";
+import { ThemeService } from "./lib/services/theme-service.js";
 ThemeService.getInstance().initialize();
 
 // Import iconify-icon web component and register icon collections
@@ -50,24 +52,24 @@ import "./components/navigation/activity-bar.js";
 import "./components/explorer/project-explorer.js";
 import "./components/editor/pane.js";
 import "./components/editor/editor-tab-bar.js";
-import "./components/status-bar.js";
-import "./components/icon.js";
-import "./components/resizable-container.js";
-import "./components/dialog.js";
+import "./components/layout/status-bar.js";
+import "./components/layout/icon.js";
+import "./components/layout/resizable-container.js";
+import "./components/dialogs/dialog.js";
 import "./components/file-type-picker.js";
-import "./components/file-create-dialog.js";
-import "./components/context-menu.js";
-import "./components/rename-dialog.js";
-import "./components/delete-dialog.js";
+import "./components/dialogs/file-create-dialog.js";
+import "./components/dialogs/context-menu.js";
+import "./components/dialogs/rename-dialog.js";
+import "./components/dialogs/delete-dialog.js";
 import "./components/welcome-screen.js";
-import "./components/theme-palette.js";
-import "./components/hover-tooltip.js";
-import "./components/git-not-found-banner.js";
+import "./components/overlays/theme-palette.js";
+import "./components/layout/hover-tooltip.js";
+import "./components/git/git-not-found-banner.js";
 
 // Lazy-loaded components (loaded on demand via lazy-loader.ts)
 // Terminal, Search, Settings, Git, Commit, Pull Requests, App Console, Debug panels
 
-import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
+import type { EditorTab, SaveStatus, ActivityItem } from "./lib/types/file-types.js";
 
 @customElement("openstorm-app")
 export class OpenStormApp extends TailwindElement() {
@@ -165,7 +167,6 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   private async setupMenuHandler(): Promise<void> {
-    const { listen } = await import("@tauri-apps/api/event");
     listen("menu-item-clicked", (event: any) => {
       const menuId = event.payload;
       console.log("[Menu] Menu item clicked:", menuId);
@@ -199,7 +200,6 @@ export class OpenStormApp extends TailwindElement() {
 
   private async setupFileChangeHandler(): Promise<void> {
     // Listen for file system changes from backend
-    const { listen } = await import("@tauri-apps/api/event");
     listen("file-change", (event: any) => {
       dispatch("refresh-explorer", event.payload);
     }).catch(console.error);
@@ -281,8 +281,7 @@ export class OpenStormApp extends TailwindElement() {
     });
 
     // Listen for terminal output (for notification dot)
-    const { listen: listenTauri } = await import('@tauri-apps/api/event');
-    listenTauri('terminal-output', () => {
+    listen('terminal-output', () => {
       if (this.activeStatusBarPanel !== 'terminal') {
         this.showTerminalNotification = true;
         this.requestUpdate();
@@ -359,7 +358,6 @@ export class OpenStormApp extends TailwindElement() {
     } else {
       // Open the file
       try {
-        const { invoke } = await import("@tauri-apps/api/core");
         const content = await invoke("read_file", { path: targetPath });
         const name = targetPath.split("/").pop() || "";
 
@@ -530,7 +528,6 @@ export class OpenStormApp extends TailwindElement() {
 
     this.saveStatus = "saving";
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       await invoke("write_file", {
         path: activeTab.path,
         content: activeTab.content,
@@ -738,7 +735,6 @@ export class OpenStormApp extends TailwindElement() {
 
     // Start watching the project folder for file changes
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       await invoke("start_watching", { path: this.projectPath });
       console.log("File watcher started for:", this.projectPath);
 
@@ -751,7 +747,6 @@ export class OpenStormApp extends TailwindElement() {
 
       // Fetch git branch
       try {
-        const { getGitBranch } = await import('./lib/git-status.js');
         this.gitBranch = await getGitBranch(this.projectPath);
       } catch (e) {
         console.error('Failed to get git branch:', e);
