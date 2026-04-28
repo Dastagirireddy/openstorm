@@ -6,9 +6,9 @@
 
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { TailwindElement, getTailwindStyles } from "../tailwind-element.js";
-import type { BranchInfo, RepoStatus } from "../lib/git-types.js";
-import "./icon.js";
+import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
+import type { BranchInfo, RepoStatus } from "../../lib/git-types.js";
+import "../layout/icon.js";
 
 @customElement("git-branch-panel")
 export class GitBranchPanel extends TailwindElement() {

@@ -6,9 +6,9 @@
 
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { TailwindElement, getTailwindStyles } from "../tailwind-element.js";
-import type { CommitEntryWithStats, ChangedFile } from "../lib/git-types.js";
-import "./icon.js";
+import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
+import type { CommitEntryWithStats, ChangedFile } from "../../lib/git-types.js";
+import "../layout/icon.js";
 
 interface LogEntry extends CommitEntryWithStats {
   shortHash: string;
@@ -72,7 +72,7 @@ export class GitCommitDetails extends TailwindElement() {
         <div class="flex items-center gap-3 px-4 py-2.5 border-b border-[var(--app-border)]">
           <div class="flex items-center gap-2">
             <div
-              class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shadow-sm"
+              class="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-[var(--app-bg)] shadow-sm"
               style="background-color: ${this._getAuthorColor(c.author)}"
               title="${c.author}">
               ${this._getAuthorInitials(c.author)}
@@ -189,13 +189,31 @@ export class GitCommitDetails extends TailwindElement() {
   }
 
   private _getAuthorColor(author: string): string {
+    // Modern, vibrant color palette for author avatars
+    const colors = [
+      "#d8a7ab", // Cotton Rose
+      "#e5957f", // Sweet Salmon
+      "#88a89d", // Muted Teal
+      "#4a536b", // Charcoal Blue
+      "#6b8e9f", // Dusty Azure
+      "#b8a78e", // Warm Taupe
+      "#9a8fb8", // Soft Lavender
+      "#d4a76e", // Golden Sand
+      "#7a9b8e", // Sage Green
+      "#a78fb8", // Muted Violet
+      "#e0b89a", // Peach Cream
+      "#6b7a8e", // Slate Blue
+    ];
+
+    // Hash the author name to get a consistent index
     let hash = 0;
     for (let i = 0; i < author.length; i++) {
       hash = (hash << 5) - hash + author.charCodeAt(i);
       hash |= 0;
     }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 60%, 40%)`;
+    const index = Math.abs(hash) % colors.length;
+
+    return colors[index];
   }
 
   private _getAuthorInitials(author: string): string {

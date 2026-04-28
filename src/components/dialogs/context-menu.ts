@@ -1,7 +1,7 @@
 import { html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { TailwindElement } from '../tailwind-element.js';
-import './icon.js';
+import { TailwindElement } from '../../tailwind-element.js';
+import '../layout/icon.js';
 
 export interface ContextMenuItem {
   id: string;

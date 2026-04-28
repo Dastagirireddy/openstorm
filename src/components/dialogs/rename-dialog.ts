@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
-import { TailwindElement } from '../tailwind-element.js';
+import { TailwindElement } from '../../tailwind-element.js';
 
 @customElement('rename-dialog')
 export class RenameDialog extends TailwindElement() {

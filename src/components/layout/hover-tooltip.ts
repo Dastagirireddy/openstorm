@@ -7,7 +7,7 @@
 
 import { html, css } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { TailwindElement } from '../tailwind-element.js';
+import { TailwindElement } from '../../tailwind-element.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import MarkdownIt from 'markdown-it';
 

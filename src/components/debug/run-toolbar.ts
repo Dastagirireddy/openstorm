@@ -2,7 +2,7 @@ import { html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { TailwindElement } from "../tailwind-element.js";
+import { TailwindElement } from "../../tailwind-element.js";
 
 export interface RunConfiguration {
   id: string;

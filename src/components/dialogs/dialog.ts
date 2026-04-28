@@ -1,7 +1,7 @@
 import { html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
-import { TailwindElement } from '../tailwind-element.js';
+import { TailwindElement } from '../../tailwind-element.js';
 
 @customElement('os-dialog')
 export class OSDialog extends TailwindElement() {

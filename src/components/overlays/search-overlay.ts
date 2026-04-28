@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
-import { TailwindElement } from '../tailwind-element';
+import { TailwindElement } from '../../tailwind-element.js';
 
 export interface SearchResult {
   path: string;

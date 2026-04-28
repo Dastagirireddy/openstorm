@@ -1,7 +1,8 @@
 import { html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
-import { TailwindElement } from "../tailwind-element.js";
+import { open } from '@tauri-apps/plugin-dialog';
+import { TailwindElement } from "../../tailwind-element.js";
 
 export interface Template {
   id: string;
@@ -159,7 +160,6 @@ export class TemplatePicker extends TailwindElement() {
 
   private openFolderDialog = async () => {
     try {
-      const { open } = await import('@tauri-apps/plugin-dialog');
       const selected = await open({
         directory: true,
         multiple: false,

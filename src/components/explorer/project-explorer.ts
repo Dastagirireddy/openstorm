@@ -5,15 +5,15 @@ import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch, dispatchFrom } from '../../lib/events.js';
 import type { FileNode } from '../../lib/file-types.js';
 import type { FileTemplate } from '../file-type-picker.js';
-import type { ContextMenuItem } from '../context-menu.js';
+import type { ContextMenuItem } from '../dialogs/context-menu.js';
 import { getFolderInfo, isSpecialFolder, type FolderType } from '../../lib/folder-types.js';
-import '../icon.js';
-import '../file-icon.js';
-import '../dialog.js';
-import '../file-create-dialog.js';
-import '../context-menu.js';
-import '../rename-dialog.js';
-import '../delete-dialog.js';
+import '../layout/icon.js';
+import '../layout/file-icon.js';
+import '../dialogs/dialog.js';
+import '../dialogs/file-create-dialog.js';
+import '../dialogs/context-menu.js';
+import '../dialogs/rename-dialog.js';
+import '../dialogs/delete-dialog.js';
 
 @customElement('project-explorer')
 export class ProjectExplorer extends TailwindElement() {

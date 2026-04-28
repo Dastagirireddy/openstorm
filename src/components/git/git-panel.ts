@@ -6,15 +6,15 @@
 
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { TailwindElement, getTailwindStyles } from "../tailwind-element.js";
-import type { RepoInfo, RepoStatus, BranchInfo, ChangedFile, CommitEntryWithStats } from "../lib/git-types.js";
-import * as git from "../lib/git-api.js";
-import { buildGraphData, type GraphData } from "../lib/git-graph.js";
+import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
+import type { RepoInfo, RepoStatus, BranchInfo, ChangedFile, CommitEntryWithStats } from "../../lib/git-types.js";
+import * as git from "../../lib/git-api.js";
+import { buildGraphData, type GraphData } from "../../lib/git-graph.js";
 import "./git-toolbar.js";
 import "./git-commit-list.js";
 import "./git-branch-panel.js";
 import "./git-commit-details.js";
-import "./icon.js";
+import "../layout/icon.js";
 
 interface LogEntry extends CommitEntryWithStats {
   shortHash: string;

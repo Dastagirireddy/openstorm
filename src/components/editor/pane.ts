@@ -12,7 +12,7 @@ import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
 import { getFileExtension } from '../../lib/file-icons.js';
 import { dispatch } from '../../lib/events.js';
 import type { EditorTab } from '../../lib/file-types.js';
-import type { BreakpointCondition } from '../conditional-breakpoint-dialog.js';
+import type { BreakpointCondition } from '../dialogs/conditional-breakpoint-dialog.js';
 import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 
 // Import extracted editor modules
@@ -58,6 +58,8 @@ import {
 } from '../../lib/editor/editor-theme.js';
 import { getDebugService } from '../../lib/services/debug-service.js';
 import { getCommonExtensions } from '../../lib/editor/editor-extensions.js';
+import { invoke } from '@tauri-apps/api/core';
+import { notifyDocumentOpened as notifyDocOpened } from '../../lib/lsp-client.js';
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
@@ -236,7 +238,6 @@ export class EditorPane extends TailwindElement() {
 
     // Sync directly to backend (don't rely on panel being visible)
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       const result = await invoke<Breakpoint>("add_breakpoint", {
         request: {
           source_path: filePath,
@@ -370,7 +371,6 @@ export class EditorPane extends TailwindElement() {
     if (!this.editorView || !this.isDebugging) return;
 
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
 
       // Get scopes to find visible variables
       let scopes: any[] = [];
@@ -546,7 +546,6 @@ export class EditorPane extends TailwindElement() {
     if (keywords.includes(varName) || !/^[a-zA-Z_$][\w$]*$/.test(varName)) return null;
 
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
 
       const result = await invoke<any>("evaluate_expression", {
         expression: varName,
@@ -652,7 +651,7 @@ export class EditorPane extends TailwindElement() {
 
     this._documentVersion = 1;
     const uri = pathToFileUri(activeTab.path);
-    await notifyDocumentOpened(languageId, uri, content, this._documentVersion);
+    await notifyDocOpened(languageId, uri, content, this._documentVersion);
     console.log('[LSP] Document opened:', activeTab.path);
   }
 
@@ -874,8 +873,7 @@ export class EditorPane extends TailwindElement() {
 
     console.log(`[LSP] Server ready for ${languageId}, re-notifying document open`);
     // Re-send document open notification to initialize LSP
-    const { notifyDocumentOpened } = await import('../../lib/lsp-client.js');
-    await notifyDocumentOpened(
+    await notifyDocOpened(
       languageId,
       activeTab.path,
       activeTab.content || '',
@@ -1029,7 +1027,6 @@ export class EditorPane extends TailwindElement() {
 
     // Fetch the current stack frame to find the stopped location
     try {
-      const { invoke } = await import("@tauri-apps/api/core");
       const stackFrames = await invoke<any[]>("get_stack_trace");
       if (stackFrames.length > 0) {
         const topFrame = stackFrames[0];

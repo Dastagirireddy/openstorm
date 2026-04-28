@@ -5,7 +5,7 @@
 
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { TailwindElement } from '../tailwind-element.js';
+import { TailwindElement } from '../../tailwind-element.js';
 import { listen } from '@tauri-apps/api/event';
 
 export interface ConsoleOutput {

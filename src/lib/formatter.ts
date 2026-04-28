@@ -4,6 +4,16 @@
  */
 
 import { dispatch } from './events.js';
+import { invoke } from '@tauri-apps/api/core';
+import * as prettier from 'prettier';
+import * as prettierHtml from 'prettier/plugins/html';
+import * as prettierCss from 'prettier/plugins/postcss';
+import * as prettierBabel from 'prettier/plugins/babel';
+import * as prettierMarkdown from 'prettier/plugins/markdown';
+import * as prettierYaml from 'prettier-plugin-yaml';
+import * as prettierGraphql from 'prettier/plugins/graphql';
+import * as prettierPhp from '@prettier/plugin-php';
+import * as prettierSql from 'prettier-plugin-sql';
 
 export interface FormatterOptions {
   tabWidth: number;
@@ -40,7 +50,6 @@ const jsFormatter: LanguageFormatter = {
     }
 
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       const languageId = options.extension === 'ts' || options.extension === 'tsx'
         ? 'typescript'
         : 'javascript';
@@ -81,8 +90,6 @@ const htmlFormatter: LanguageFormatter = {
   extensions: ['html', 'htm', 'xhtml', 'svelte', 'vue'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierHtml = await import('prettier/plugins/html');
 
       const result = await prettier.format(content, {
         parser: 'html',
@@ -112,8 +119,6 @@ const cssFormatter: LanguageFormatter = {
   extensions: ['css', 'scss', 'sass', 'less'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierCss = await import('prettier/plugins/postcss');
 
       const result = await prettier.format(content, {
         parser: 'css',
@@ -144,8 +149,6 @@ const jsonFormatter: LanguageFormatter = {
   extensions: ['json', 'jsonc'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierBabel = await import('prettier/plugins/babel');
 
       const result = await prettier.format(content, {
         parser: 'json',
@@ -175,9 +178,6 @@ const markdownFormatter: LanguageFormatter = {
   extensions: ['md', 'markdown', 'mdx'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierMarkdown = await import('prettier/plugins/markdown');
-      const prettierBabel = await import('prettier/plugins/babel');
 
       const result = await prettier.format(content, {
         parser: 'markdown',
@@ -207,8 +207,6 @@ const yamlFormatter: LanguageFormatter = {
   extensions: ['yaml', 'yml'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierYaml = await import('prettier-plugin-yaml');
 
       const result = await prettier.format(content, {
         parser: 'yaml',
@@ -238,8 +236,6 @@ const graphqlFormatter: LanguageFormatter = {
   extensions: ['graphql', 'gql'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierGraphql = await import('prettier/plugins/graphql');
 
       const result = await prettier.format(content, {
         parser: 'graphql',
@@ -270,7 +266,6 @@ const rustFormatter: LanguageFormatter = {
   extensions: ['rs'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       const result = await invoke('format_rust', { content, tabWidth: options.tabWidth });
       // Validate result is not garbage
       const resultStr = result as string;
@@ -294,7 +289,6 @@ const goFormatter: LanguageFormatter = {
   extensions: ['go'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       return await invoke('format_go', { content, tabWidth: options.tabWidth });
     } catch (error) {
       console.warn('gofmt not available, using basic formatting:', error);
@@ -310,7 +304,6 @@ const pythonFormatter: LanguageFormatter = {
   extensions: ['py', 'pyw'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       return await invoke('format_python', { content, tabWidth: options.tabWidth });
     } catch (error) {
       console.warn('black not available, using basic formatting:', error);
@@ -326,8 +319,6 @@ const phpFormatter: LanguageFormatter = {
   extensions: ['php'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierPhp = await import('@prettier/plugin-php');
 
       const result = await prettier.format(content, {
         parser: 'php',
@@ -358,8 +349,6 @@ const sqlFormatter: LanguageFormatter = {
   extensions: ['sql'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const prettier = await import('prettier');
-      const prettierSql = await import('prettier-plugin-sql');
 
       const result = await prettier.format(content, {
         parser: 'sql',
@@ -403,7 +392,6 @@ const cppFormatter: LanguageFormatter = {
   extensions: ['c', 'cpp', 'cc', 'cxx', 'h', 'hpp', 'hxx'],
   async format(content: string, options: FormatterOptions): Promise<string> {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       return await invoke('format_cpp', { content, tabWidth: options.tabWidth });
     } catch (error) {
       console.warn('clang-format not available, using basic formatting:', error);

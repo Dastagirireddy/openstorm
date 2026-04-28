@@ -1,8 +1,8 @@
 import { html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../tailwind-element.js';
-import './icon.js';
-import './file-icon.js';
+import './layout/icon.js';
+import './layout/file-icon.js';
 
 export interface FileTemplate {
   id: string;

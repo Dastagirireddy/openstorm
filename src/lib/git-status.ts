@@ -1,4 +1,5 @@
-export async function getGitBranch(projectPath: string): Promise<string> {
-  const { gitGetBranch } = await import('./git-api.js');
+import { gitGetBranch } from './git-api.js';
+
+export function getGitBranch(projectPath: string): Promise<string> {
   return gitGetBranch(projectPath);
 }

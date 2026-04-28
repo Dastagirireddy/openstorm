@@ -8,6 +8,10 @@
  * - Theme persistence
  */
 
+import openstormLight from '../themes/openstorm-light.json' with { type: 'json' };
+import openstormDark from '../themes/openstorm-dark.json' with { type: 'json' };
+import vscodeDark from '../themes/vscode-dark.json' with { type: 'json' };
+
 export interface WorkbenchColors {
   // Application
   'app-bg': string;
@@ -212,7 +216,7 @@ export class ThemeService {
     if (this.initialized) return;
 
     console.log('[Theme] Initializing theme service...');
-    await this.loadThemesFromJson();
+    this.loadThemesFromJson();
 
     // Ensure we have at least the default theme
     if (!this.themes.has('openstorm-light')) {
@@ -261,15 +265,11 @@ export class ThemeService {
   /**
    * Load theme definitions from JSON files
    */
-  private async loadThemesFromJson(): Promise<void> {
+  private loadThemesFromJson(): void {
     if (this.themesLoaded) return;
 
     // Import theme JSON files directly (Vite handles JSON imports)
-    const openstormLight = await import('../themes/openstorm-light.json' as string);
-    const openstormDark = await import('../themes/openstorm-dark.json' as string);
-    const vscodeDark = await import('../themes/vscode-dark.json' as string);
-
-    const themes = [openstormLight.default, openstormDark.default, vscodeDark.default];
+    const themes = [openstormLight, openstormDark, vscodeDark];
 
     for (const theme of themes) {
       if (theme?.id && theme.workbench && theme.editor) {

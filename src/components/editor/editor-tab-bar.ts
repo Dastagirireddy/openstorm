@@ -3,8 +3,8 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { EditorTab } from '../../lib/file-types.js';
-import '../file-icon.js';
-import '../icon.js';
+import '../layout/file-icon.js';
+import '../layout/icon.js';
 
 @customElement('tab-bar')
 export class TabBar extends TailwindElement() {

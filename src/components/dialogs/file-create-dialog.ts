@@ -1,10 +1,10 @@
 import { html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
-import { TailwindElement } from '../tailwind-element.js';
-import type { FileTemplate } from './file-type-picker.js';
-import './file-icon.js';
-import './icon.js';
+import { TailwindElement } from '../../tailwind-element.js';
+import type { FileTemplate } from '../file-type-picker.js';
+import '../../components/layout/file-icon.js';
+import '../layout/icon.js';
 
 @customElement('file-create-dialog')
 export class FileCreateDialog extends TailwindElement() {

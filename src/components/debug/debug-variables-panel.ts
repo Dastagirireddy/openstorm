@@ -7,7 +7,7 @@ import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { TailwindElement } from "../../tailwind-element.js";
-import type { Variable } from "./debug-panel.js";
+import type { Variable } from "../../debug-panel.js";
 
 interface EditingVariable {
   path: string;

@@ -6,8 +6,8 @@
 
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import { TailwindElement, getTailwindStyles } from "../tailwind-element.js";
-import "./icon.js";
+import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
+import "../layout/icon.js";
 
 @customElement("git-toolbar")
 export class GitToolbar extends TailwindElement() {

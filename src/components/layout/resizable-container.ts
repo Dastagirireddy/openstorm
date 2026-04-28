@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { TailwindElement } from '../tailwind-element.js';
+import { TailwindElement } from '../../tailwind-element.js';
 
 @customElement('resizable-container')
 export class ResizableContainer extends TailwindElement() {

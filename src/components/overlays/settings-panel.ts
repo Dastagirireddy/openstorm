@@ -1,10 +1,10 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { TailwindElement } from '../tailwind-element.js';
-import { dispatch } from '../lib/events.js';
-import './icon.js';
-
-import type { ThemeDefinition, ThemeMode } from '../lib/theme-service.js';
+import { TailwindElement } from '../../tailwind-element.js';
+import { dispatch } from '../../lib/events.js';
+import { ThemeService } from '../../lib/theme-service.js';
+import type { ThemeDefinition, ThemeMode } from '../../lib/theme-service.js';
+import '../../layout/icon.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends TailwindElement() {
@@ -20,7 +20,6 @@ export class SettingsPanel extends TailwindElement() {
     await this.loadThemes();
 
     // Listen for theme changes
-    const { ThemeService } = await import('../lib/theme-service.js');
     const themeService = ThemeService.getInstance();
 
     const updateThemeState = () => {
@@ -52,41 +51,31 @@ export class SettingsPanel extends TailwindElement() {
 
   private _themeDispose: (() => void) | null = null;
 
-  private async loadThemes(): Promise<void> {
-    const { ThemeService } = await import('../lib/theme-service.js');
+  private loadThemes(): void {
     this.themes = ThemeService.getInstance().getThemes();
   }
 
-  private async selectTheme(themeId: string): Promise<void> {
-    const { ThemeService } = await import('../lib/theme-service.js');
-    const themeService = ThemeService.getInstance();
-    themeService.setTheme(themeId);
+  private selectTheme(themeId: string): void {
+    ThemeService.getInstance().setTheme(themeId);
   }
 
-  private async setWorkbenchTheme(themeId: string): Promise<void> {
-    const { ThemeService } = await import('../lib/theme-service.js');
-    const themeService = ThemeService.getInstance();
-    themeService.setWorkbenchTheme(themeId);
+  private setWorkbenchTheme(themeId: string): void {
+    ThemeService.getInstance().setWorkbenchTheme(themeId);
   }
 
-  private async setEditorTheme(themeId: string): Promise<void> {
-    const { ThemeService } = await import('../lib/theme-service.js');
-    const themeService = ThemeService.getInstance();
-    themeService.setEditorTheme(themeId);
+  private setEditorTheme(themeId: string): void {
+    ThemeService.getInstance().setEditorTheme(themeId);
   }
 
-  private async setThemeMode(mode: ThemeMode): Promise<void> {
-    const { ThemeService } = await import('../lib/theme-service.js');
-    const themeService = ThemeService.getInstance();
-    themeService.setThemeMode(mode);
+  private setThemeMode(mode: ThemeMode): void {
+    ThemeService.getInstance().setThemeMode(mode);
     this.currentThemeMode = mode;
     this.requestUpdate();
   }
 
-  private async previewThemeHover(themeId: string | null): Promise<void> {
+  private previewThemeHover(themeId: string | null): void {
     if (themeId) {
-      const { ThemeService } = await import('../lib/theme-service.js');
-      const themeService = ThemeService.getInstance();
+        const themeService = ThemeService.getInstance();
       const currentIds = themeService.getCurrentThemeIds();
 
       // Store original themes
@@ -98,8 +87,7 @@ export class SettingsPanel extends TailwindElement() {
       }
     } else if (this.previewTheme) {
       // Restore original theme on mouse leave
-      const { ThemeService } = await import('../lib/theme-service.js');
-      const themeService = ThemeService.getInstance();
+        const themeService = ThemeService.getInstance();
       const currentIds = themeService.getCurrentThemeIds();
 
       // Restore workbench theme to what it was before preview

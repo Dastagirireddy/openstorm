@@ -9,10 +9,10 @@
 
 import { html, css, type CSSResultGroup } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import { TailwindElement, getTailwindStyles } from '../tailwind-element.js';
-import '../components/icon.js';
-import { gitGetPullRequests } from '../lib/git-api.js';
-import type { PullRequest } from '../lib/git-types.js';
+import { TailwindElement, getTailwindStyles } from '../../tailwind-element.js';
+import '../../components/icon.js';
+import { gitGetPullRequests } from '../../lib/git-api.js';
+import type { PullRequest } from '../../lib/git-types.js';
 
 interface PullRequest {
   id: number;

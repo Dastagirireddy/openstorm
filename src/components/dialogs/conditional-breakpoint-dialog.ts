@@ -1,6 +1,6 @@
 import { html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
-import { TailwindElement } from "../tailwind-element.js";
+import { TailwindElement } from "../../tailwind-element.js";
 
 export interface BreakpointCondition {
   condition?: string;
