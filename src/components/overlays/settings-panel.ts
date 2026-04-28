@@ -1,9 +1,9 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import { dispatch } from '../../lib/events.js';
-import { ThemeService } from '../../lib/theme-service.js';
-import type { ThemeDefinition, ThemeMode } from '../../lib/theme-service.js';
+import { dispatch } from '../../lib/types/events.js';
+import { ThemeService } from '../../lib/services/theme-service.js';
+import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
 import '../../layout/icon.js';
 
 @customElement('settings-panel')

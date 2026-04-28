@@ -7,9 +7,9 @@
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
-import type { RepoInfo, RepoStatus, BranchInfo, ChangedFile, CommitEntryWithStats } from "../../lib/git-types.js";
-import * as git from "../../lib/git-api.js";
-import { buildGraphData, type GraphData } from "../../lib/git-graph.js";
+import type { RepoInfo, RepoStatus, BranchInfo, ChangedFile, CommitEntryWithStats } from "../../lib/git/git-types.js";
+import * as git from "../../lib/git/git-api.js";
+import { buildGraphData, type GraphData } from "../../lib/git/git-graph.js";
 import "./git-toolbar.js";
 import "./git-commit-list.js";
 import "./git-branch-panel.js";

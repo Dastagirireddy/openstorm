@@ -7,7 +7,7 @@
 import { html, css, type CSSResultGroup } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { TailwindElement, getTailwindStyles } from "../../tailwind-element.js";
-import type { CommitEntryWithStats, ChangedFile } from "../../lib/git-types.js";
+import type { CommitEntryWithStats, ChangedFile } from "../../lib/git/git-types.js";
 import "../layout/icon.js";
 
 interface LogEntry extends CommitEntryWithStats {

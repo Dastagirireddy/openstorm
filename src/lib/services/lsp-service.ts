@@ -14,7 +14,7 @@ import type {
   HoverInfo,
   LocationInfo,
   DiagnosticInfo,
-} from '../lsp-client.js';
+} from '../lsp';
 
 /**
  * LSP Server status

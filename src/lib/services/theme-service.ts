@@ -8,9 +8,9 @@
  * - Theme persistence
  */
 
-import openstormLight from '../themes/openstorm-light.json' with { type: 'json' };
-import openstormDark from '../themes/openstorm-dark.json' with { type: 'json' };
-import vscodeDark from '../themes/vscode-dark.json' with { type: 'json' };
+import openstormLight from '../../themes/openstorm-light.json' with { type: 'json' };
+import openstormDark from '../../themes/openstorm-dark.json' with { type: 'json' };
+import vscodeDark from '../../themes/vscode-dark.json' with { type: 'json' };
 
 export interface WorkbenchColors {
   // Application

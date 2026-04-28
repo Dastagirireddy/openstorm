@@ -2,7 +2,7 @@ import { html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import type { EditorTab } from '../../lib/file-types.js';
+import type { EditorTab } from '../../lib/types/file-types.js';
 import '../layout/file-icon.js';
 import '../layout/icon.js';
 

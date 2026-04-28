@@ -1,6 +1,6 @@
 import { customElement, property } from 'lit/decorators.js';
 import { LitElement, html, CSSResultGroup, css } from 'lit';
-import { getFileIconName } from '../../lib/file-icon-mapper.js';
+import { getFileIconName } from '../../lib/icons/file-icon-mapper.js';
 import 'iconify-icon';
 
 @customElement('file-icon')

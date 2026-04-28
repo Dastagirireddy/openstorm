@@ -8,7 +8,7 @@
  * - Tree-shakeable imports
  */
 
-import type { IconName } from '../components/icon.js';
+import type { IconName } from '../../components/layout/icon';
 
 /**
  * Icon source types

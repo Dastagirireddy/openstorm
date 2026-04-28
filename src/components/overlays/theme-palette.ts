@@ -7,8 +7,8 @@
 import { html } from 'lit';
 import { customElement, state, query } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import { ThemeService } from '../../lib/theme-service.js';
-import type { ThemeDefinition } from '../../lib/theme-service.js';
+import { ThemeService } from '../../lib/services/theme-service.js';
+import type { ThemeDefinition } from '../../lib/services/theme-service.js';
 
 @customElement('theme-palette')
 export class ThemePalette extends TailwindElement() {

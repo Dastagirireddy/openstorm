@@ -4,8 +4,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { dispatch } from './events.js';
+import { dispatch } from '../types';
 
 export interface CompletionItem {
   label: string;

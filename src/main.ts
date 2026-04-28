@@ -3,9 +3,9 @@ import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
-import { getGitBranch } from "./lib/git-status.js";
+import { getGitBranch } from "./lib/git/git-status.js";
 import { TailwindElement } from "./tailwind-element.js";
-import { dispatch } from "./lib/events.js";
+import { dispatch } from "./lib/types/events.js";
 import {
   loadTerminalPane,
   loadSearchOverlay,
@@ -17,10 +17,10 @@ import {
   loadDebugPanel,
   loadDebugToolbar,
   loadRunToolbar,
-} from "./lib/lazy-loader.js";
+} from "./lib/utils/lazy-loader.js";
 
 // Initialize theme service early for CSS variable injection
-import { ThemeService } from "./lib/theme-service.js";
+import { ThemeService } from "./lib/services/theme-service.js";
 ThemeService.getInstance().initialize();
 
 // Import iconify-icon web component and register icon collections
@@ -69,7 +69,7 @@ import "./components/git/git-not-found-banner.js";
 // Lazy-loaded components (loaded on demand via lazy-loader.ts)
 // Terminal, Search, Settings, Git, Commit, Pull Requests, App Console, Debug panels
 
-import type { EditorTab, SaveStatus, ActivityItem } from "./lib/file-types.js";
+import type { EditorTab, SaveStatus, ActivityItem } from "./lib/types/file-types.js";
 
 @customElement("openstorm-app")
 export class OpenStormApp extends TailwindElement() {

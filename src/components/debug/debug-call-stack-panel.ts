@@ -7,7 +7,7 @@ import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { TailwindElement } from "../../tailwind-element.js";
-import { dispatch } from "../../lib/events.js";
+import { dispatch } from "../../lib/types/events.js";
 
 export interface StackFrame {
   id: number;

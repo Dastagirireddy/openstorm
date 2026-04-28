@@ -8,7 +8,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
-import type { FileNode } from '../file-types.js';
+import type { FileNode } from '../types';
 
 /**
  * File read options

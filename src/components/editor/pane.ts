@@ -8,10 +8,10 @@ import { bracketMatching, indentOnInput, foldKeymap } from '@codemirror/language
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 import { TailwindElement } from '../../tailwind-element.js';
-import { customFoldGutter } from '../../lib/custom-fold-gutter.js';
-import { getFileExtension } from '../../lib/file-icons.js';
-import { dispatch } from '../../lib/events.js';
-import type { EditorTab } from '../../lib/file-types.js';
+import { customFoldGutter } from '../../lib/utils/custom-fold-gutter.js';
+import { getFileExtension } from '../../lib/icons/file-icons.js';
+import { dispatch } from '../../lib/types/events.js';
+import type { EditorTab } from '../../lib/types/file-types.js';
 import type { BreakpointCondition } from '../dialogs/conditional-breakpoint-dialog.js';
 import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 
@@ -51,7 +51,7 @@ import {
   pathToFileUri,
   notifyDocumentOpened,
   notifyDocumentChanged,
-} from '../../lib/lsp-client.js';
+} from '../../lib/lsp/lsp-client.js';
 import {
   getEditorTheme,
   getLineNumbers,
@@ -59,7 +59,7 @@ import {
 import { getDebugService } from '../../lib/services/debug-service.js';
 import { getCommonExtensions } from '../../lib/editor/editor-extensions.js';
 import { invoke } from '@tauri-apps/api/core';
-import { notifyDocumentOpened as notifyDocOpened } from '../../lib/lsp-client.js';
+import { notifyDocumentOpened as notifyDocOpened } from '../../lib/lsp/lsp-client.js';
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {

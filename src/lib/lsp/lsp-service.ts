@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { dispatch } from './events.js';
+import { dispatch } from '../types';
 
 export interface LspServerInfo {
   language_id: string;

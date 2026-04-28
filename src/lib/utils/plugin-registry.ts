@@ -9,8 +9,8 @@
  * - Toolbar extensions (custom actions)
  */
 
-import type { ThemeDefinition } from './theme-service.js';
-import type { IconDefinition } from './icon-registry.js';
+import type { ThemeDefinition } from '../services/theme-service';
+import type { IconDefinition } from '../icons';
 
 /**
  * Plugin metadata

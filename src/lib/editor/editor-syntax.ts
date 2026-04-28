@@ -23,7 +23,7 @@ import { java } from '@codemirror/lang-java';
 import { sql } from '@codemirror/lang-sql';
 import { php } from '@codemirror/lang-php';
 import type { Extension } from '@codemirror/state';
-import { getFileExtension } from '../file-icons.js';
+import { getFileExtension } from '../icons';
 
 /**
  * Syntax highlighting style using CSS variables for theme support

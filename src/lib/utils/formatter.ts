@@ -3,7 +3,7 @@
  * Supports multiple languages via different formatting backends
  */
 
-import { dispatch } from './events.js';
+import { dispatch } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import * as prettier from 'prettier';
 import * as prettierHtml from 'prettier/plugins/html';

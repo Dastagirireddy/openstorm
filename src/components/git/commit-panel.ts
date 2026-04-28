@@ -12,10 +12,10 @@
 import { html, css, type CSSResultGroup } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement, getTailwindStyles } from '../../tailwind-element.js';
-import { dispatch } from '../../lib/events.js';
-import type { RepoStatus, FileChange, RepoInfo } from '../../lib/git-types.js';
-import '../../layout/icon.js';
-import * as git from '../../lib/git-api.js';
+import { dispatch } from '../../lib/types';
+import type { RepoStatus, FileChange, RepoInfo } from '../../lib/git';
+import '../layout/icon';
+import * as git from '../../lib/git/git-api.js';
 
 @customElement('commit-panel')
 export class CommitPanel extends TailwindElement() {

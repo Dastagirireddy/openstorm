@@ -7,7 +7,7 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
-import { dispatch } from '../../lib/events.js';
+import { dispatch } from '../../lib/types/events.js';
 import { listen } from '@tauri-apps/api/event';
 
 @customElement('git-not-found-banner')
