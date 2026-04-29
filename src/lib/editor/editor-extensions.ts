@@ -14,21 +14,25 @@ import {
   highlightActiveLine,
   drawSelection,
   dropCursor,
+  gutter,
 } from '@codemirror/view';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
 import { customFoldGutter } from '../utils';
 import { openStormHighlight } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
+import { blameField, blameGutterPlugin, getBlameGutter, type BlameLine } from './editor-blame.js';
 
 /**
  * Generates the core extension stack
  * @param indentUnitStr - The detected indent unit string (e.g., "  ", "    ", "\t")
  * @param onBreakpointClick - Callback for breakpoint clicks
+ * @param blameEnabled - Whether git blame gutter is enabled
  */
 export function getCommonExtensions(
   indentUnitStr: string = "    ",
-  onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void
+  onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void,
+  blameEnabled: boolean = false
 ) {
   return [
     EditorState.tabSize.of(4),
@@ -37,6 +41,9 @@ export function getCommonExtensions(
     inlineValueDecorations(),
     breakpointField,
     breakpointGutter(onBreakpointClick ?? (() => {})),
+    blameField,
+    blameGutterPlugin,
+    ...(blameEnabled ? [getBlameGutter()] : []),
     lineNumbers(),
     highlightActiveLineGutter(),
     ...customFoldGutter(),

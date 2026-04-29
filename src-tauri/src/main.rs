@@ -241,6 +241,17 @@ fn main() {
                     &MenuItem::with_id(app, "zoom-out", "Zoom Out", true, Some("Cmd+-")).unwrap(),
                     &MenuItem::with_id(app, "reset-zoom", "Reset Zoom", true, Some("Cmd+0")).unwrap(),
                 ]).unwrap(),
+                &Submenu::with_items(app, "Git", true, &[
+                    &MenuItem::with_id(app, "git-pull", "Pull", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-push", "Push", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-commit", "Commit...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-blame", "Show Git Blame", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-history", "View History", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-branch", "Switch Branch...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-rollback", "Discard Changes", true, None::<&str>).unwrap(),
+                ]).unwrap(),
                 &Submenu::with_items(app, "Run", true, &[
                     &MenuItem::with_id(app, "run", "Run", true, Some("Cmd+R")).unwrap(),
                     &MenuItem::with_id(app, "debug", "Debug", true, Some("Cmd+Shift+R")).unwrap(),
@@ -293,6 +304,17 @@ fn main() {
                     &MenuItem::with_id(app, "toggle-sidebar", "Toggle Sidebar", true, Some("Ctrl+B")).unwrap(),
                     &MenuItem::with_id(app, "toggle-terminal", "Toggle Terminal", true, Some("Ctrl+`")).unwrap(),
                     &MenuItem::with_id(app, "toggle-debug", "Toggle Debug Panel", true, Some("Ctrl+Shift+D")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Git", true, &[
+                    &MenuItem::with_id(app, "git-pull", "Pull", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-push", "Push", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-commit", "Commit...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-blame", "Show Git Blame", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-history", "View History", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-branch", "Switch Branch...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "git-rollback", "Discard Changes", true, None::<&str>).unwrap(),
                 ]).unwrap(),
                 &Submenu::with_items(app, "Run", true, &[
                     &MenuItem::with_id(app, "run", "Run", true, Some("Ctrl+R")).unwrap(),
@@ -451,6 +473,7 @@ fn main() {
             commands::git::git_get_last_commit,
             commands::git::git_search_commits,
             commands::git::git_get_file_history,
+            commands::git::git_blame,
             commands::git::git_get_pull_requests,
         ])
         .build(tauri::generate_context!())

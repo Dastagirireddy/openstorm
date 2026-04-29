@@ -1,5 +1,5 @@
 import { html } from 'lit';
-import { customElement, state, query } from 'lit/decorators.js';
+import { customElement, state, query, property } from 'lit/decorators.js';
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, Decoration } from '@codemirror/view';
 import { EditorState, EditorSelection, StateEffect } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
@@ -14,6 +14,7 @@ import { dispatch } from '../../lib/types/events.js';
 import type { EditorTab } from '../../lib/types/file-types.js';
 import type { BreakpointCondition } from '../dialogs/conditional-breakpoint-dialog.js';
 import { autocompletion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
+import type { ContextMenuItem } from '../dialogs/context-menu.js';
 
 // Import extracted editor modules
 import {
@@ -44,6 +45,7 @@ import {
   checkDefinitionAtPosition,
   showLspHoverTooltip,
 } from '../../lib/editor/editor-lsp.js';
+import { formatHoverContent } from '../../lib/lsp/lsp-client.js';
 import {
   getCompletions,
   getDefinition,
@@ -60,6 +62,12 @@ import { getDebugService } from '../../lib/services/debug-service.js';
 import { getCommonExtensions } from '../../lib/editor/editor-extensions.js';
 import { invoke } from '@tauri-apps/api/core';
 import { notifyDocumentOpened as notifyDocOpened } from '../../lib/lsp/lsp-client.js';
+import {
+  blameField,
+  setBlameData,
+  type BlameLine,
+} from '../../lib/editor/editor-blame.js';
+import { getBlame, type BlameData } from '../../lib/git/git-blame.js';
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
@@ -68,6 +76,7 @@ export class EditorPane extends TailwindElement() {
   @state() private isDebugging = false;
   @state() private currentDebugLine: number | null = null;
   @state() private debugState: 'running' | 'stopped' | 'terminated' = 'terminated';
+  @property() projectPath: string = '';
 
   // Track breakpoints per file path
   private breakpoints: Map<string, Breakpoint[]> = new Map();
@@ -80,6 +89,16 @@ export class EditorPane extends TailwindElement() {
   // Conditional breakpoint dialog
   private conditionalDialog: HTMLDivElement | null = null;
   private pendingBreakpointLine: number | null = null;
+
+  // Git blame state
+  @state() private blameVisible = false;
+  @state() private blameData: BlameData | null = null;
+
+  // Context menu state
+  @state() private showContextMenu = false;
+  @state() private contextMenuItems: ContextMenuItem[] = [];
+  @state() private contextMenuAnchorX = 0;
+  @state() private contextMenuAnchorY = 0;
 
   private editorView: EditorView | null = null;
   private _isInitialTabLoad = true;
@@ -202,6 +221,116 @@ export class EditorPane extends TailwindElement() {
     } catch (error) {
       console.error('[Editor] LSP definition error:', error);
     }
+  }
+
+  /**
+   * Load git blame for current file
+   */
+  private async _loadBlame(): Promise<void> {
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab || !this.projectPath) {
+      console.warn('[Editor:_loadBlame] Skipping — no activeTab or projectPath:', { activeTab: !!activeTab, projectPath: this.projectPath });
+      return;
+    }
+
+    console.log('[Editor:_loadBlame] Loading blame for:', { projectPath: this.projectPath, filePath: activeTab.path });
+
+    try {
+      const blame = await getBlame(this.projectPath, activeTab.path);
+      console.log('[Editor:_loadBlame] Got blame data with', blame.lines.length, 'lines');
+      this.blameData = blame;
+
+      if (this.editorView) {
+        this.editorView.dispatch({
+          effects: setBlameData.of(blame),
+        });
+        console.log('[Editor:_loadBlame] Dispatched setBlameData to editor');
+      } else {
+        console.warn('[Editor:_loadBlame] No editorView to dispatch to');
+      }
+    } catch (e) {
+      console.error('[Editor] Failed to load blame:', e);
+      this.blameData = null;
+    }
+  }
+
+  /**
+   * Handle blame annotation click
+   */
+  private _handleBlameClick(line: number, blame: BlameLine): void {
+    dispatch('blame-click', {
+      line,
+      blame: {
+        hash: blame.hash,
+        shortHash: blame.shortHash,
+        author: blame.author,
+        authorEmail: blame.authorEmail,
+        authorTime: blame.authorTime,
+        subject: blame.subject,
+      },
+    });
+  }
+
+  /**
+   * Toggle git blame visibility
+   */
+  public toggleBlame(visible?: boolean): void {
+    this.blameVisible = visible !== undefined ? visible : !this.blameVisible;
+
+    if (this.editorView) {
+      // Recreate editor with updated extensions
+      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+      if (activeTab) {
+        const content = activeTab.content;
+        const cursorPos = this.editorView.state.selection.main.head;
+        const indentUnitStr = detectIndentUnit(content, activeTab.path);
+        const language = getLanguageExtension(activeTab.path);
+
+        this.editorView.destroy();
+
+        const state = EditorState.create({
+          doc: content,
+          extensions: [
+            ...getCommonExtensions(
+              indentUnitStr,
+              (lineNum, wasThere) => this._handleBreakpointClick(lineNum, wasThere),
+              this.blameVisible
+            ),
+            getEditorTheme(),
+            language,
+          ],
+          selection: EditorSelection.create([EditorSelection.cursor(cursorPos)]),
+        });
+
+        this.editorView = new EditorView({
+          state,
+          parent: this.renderRoot.querySelector('#editor-container')!,
+        });
+
+        // Add CSS class for blame visibility
+        if (this.blameVisible) {
+          this.editorView.dom.classList.add('cm-blame-enabled');
+        } else {
+          this.editorView.dom.classList.remove('cm-blame-enabled');
+        }
+
+        this.editorView.dom.addEventListener('mousemove', (e: MouseEvent) => {
+          this._handleEditorHover(e);
+        });
+
+        // Add context menu handler
+        this.editorView.dom.addEventListener('contextmenu', (e: MouseEvent) => {
+          this._handleContextMenu(e);
+        });
+
+        // Load blame data if showing
+        if (this.blameVisible) {
+          this._loadBlame();
+        }
+      }
+    }
+
+    dispatch('blame-toggled', { visible: this.blameVisible });
   }
 
   /**
@@ -616,7 +745,9 @@ export class EditorPane extends TailwindElement() {
 
     // Delay hover request to avoid flickering
     this._hoverTimeout = setTimeout(() => {
-      showLspHoverTooltip(this.editorView, pos, activeTab.path);
+      if (this.editorView) {
+        showLspHoverTooltip(this.editorView, pos, activeTab.path);
+      }
     }, 150);
   }
 
@@ -721,17 +852,25 @@ export class EditorPane extends TailwindElement() {
       const state = EditorState.create({
         doc: activeTab.content,
         extensions: [
-          ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
-            this._handleBreakpointClick(lineNum, wasThere);
-          }),
+          ...getCommonExtensions(
+            indentUnitStr,
+            (lineNum, wasThere) => this._handleBreakpointClick(lineNum, wasThere),
+            this.blameVisible
+          ),
           getEditorTheme(),
-          language
+          language,
         ]
       });
       this.editorView = new EditorView({
         state,
         parent: editorContainer
       });
+      // Add CSS class for blame visibility
+      if (this.blameVisible) {
+        this.editorView.dom.classList.add('cm-blame-enabled');
+      } else {
+        this.editorView.dom.classList.remove('cm-blame-enabled');
+      }
       // Add hover listener for LSP tooltips
       this.editorView.dom.addEventListener('mousemove', (e: MouseEvent) => {
         this._handleEditorHover(e);
@@ -743,6 +882,10 @@ export class EditorPane extends TailwindElement() {
       this._currentTabId = activeTab.id;
       // Store initial content as "saved" state
       this._savedContent.set(activeTab.path, activeTab.content);
+      // Load blame if enabled
+      if (this.blameVisible) {
+        this._loadBlame();
+      }
     } else {
       // Editor exists - check if language or tab changed
       const languageChanged = newLanguageKey !== this._currentLanguage;
@@ -764,17 +907,29 @@ export class EditorPane extends TailwindElement() {
         const state = EditorState.create({
           doc: activeTab.content,
           extensions: [
-            ...getCommonExtensions(indentUnitStr, (lineNum, wasThere) => {
-              this._handleBreakpointClick(lineNum, wasThere);
-            }),
+            ...getCommonExtensions(
+              indentUnitStr,
+              (lineNum, wasThere) => this._handleBreakpointClick(lineNum, wasThere),
+              this.blameVisible
+            ),
             getEditorTheme(),
-            language
+            language,
           ],
           selection: EditorSelection.create([EditorSelection.cursor(pos)])
         });
         this.editorView.setState(state);
+        // Update CSS class for blame visibility
+        if (this.blameVisible) {
+          this.editorView.dom.classList.add('cm-blame-enabled');
+        } else {
+          this.editorView.dom.classList.remove('cm-blame-enabled');
+        }
         this._currentLanguage = newLanguageKey;
         this._currentTabId = activeTab.id;
+        // Reload blame if enabled
+        if (this.blameVisible) {
+          this._loadBlame();
+        }
         this._isInitialTabLoad = true;
 
         // Dispatch cursor position immediately after tab switch
@@ -900,6 +1055,9 @@ export class EditorPane extends TailwindElement() {
     // Listen for LSP server ready event (after install)
     document.addEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
 
+    // Listen for blame toggle event
+    document.addEventListener('toggle-blame', this._handleToggleBlame.bind(this));
+
     // Listen for theme changes
     document.addEventListener('theme-changed', this._themeChangeHandler);
   }
@@ -919,12 +1077,80 @@ export class EditorPane extends TailwindElement() {
       // Recreate editor - _updateEditor will create a new EditorView with updated CSS variables
       this._updateEditor();
 
-      // Restore cursor position
-      if (this.editorView && cursorPos >= 0) {
-        this.editorView.dispatch({
-          selection: EditorSelection.create([EditorSelection.cursor(cursorPos)]),
-        });
-      }
+      // Restore cursor position (wait for next microtask to ensure editor is ready)
+      requestAnimationFrame(() => {
+        if (this.editorView && cursorPos >= 0) {
+          this.editorView.dispatch({
+            selection: EditorSelection.create([EditorSelection.cursor(cursorPos)]),
+          });
+        }
+      });
+    }
+  }
+
+  private _handleToggleBlame(e: CustomEvent<{ visible: boolean }>): void {
+    this.toggleBlame(e.detail.visible);
+  }
+
+  private _handleContextMenu(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    // Check if file is tracked by git
+    const isGitFile = this.projectPath && activeTab.path.startsWith(this.projectPath);
+
+    this.contextMenuItems = [
+      {
+        id: 'toggle-blame',
+        label: this.blameVisible ? 'Hide Git Blame' : 'Show Git Blame',
+        icon: 'git-commit',
+        disabled: !isGitFile,
+      },
+      {
+        id: 'separator',
+        label: '',
+        separator: true,
+      },
+      {
+        id: 'copy-path',
+        label: 'Copy File Path',
+        icon: 'copy',
+      },
+      {
+        id: 'copy-relative-path',
+        label: 'Copy Relative Path',
+        icon: 'copy',
+      },
+    ];
+
+    this.contextMenuAnchorX = e.clientX;
+    this.contextMenuAnchorY = e.clientY;
+    this.showContextMenu = true;
+  }
+
+  private _handleContextMenuSelect(e: CustomEvent<{ itemId: string }>): void {
+    const { itemId } = e.detail;
+    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!activeTab) return;
+
+    switch (itemId) {
+      case 'toggle-blame':
+        this.toggleBlame();
+        // Dispatch to update main.ts state
+        dispatch('toggle-blame', { visible: this.blameVisible });
+        break;
+      case 'copy-path':
+        navigator.clipboard.writeText(activeTab.path);
+        dispatch('status-message', { message: 'File path copied', type: 'success' });
+        break;
+      case 'copy-relative-path':
+        const relativePath = activeTab.path.replace(this.projectPath + '/', '');
+        navigator.clipboard.writeText(relativePath);
+        dispatch('status-message', { message: 'Relative path copied', type: 'success' });
+        break;
     }
   }
 
@@ -938,6 +1164,7 @@ export class EditorPane extends TailwindElement() {
     document.removeEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
     document.removeEventListener('debug-session-started', this._handleDebugSessionStarted.bind(this));
     document.removeEventListener('debug-session-ended', this._handleDebugSessionEnded.bind(this));
+    document.removeEventListener('toggle-blame', this._handleToggleBlame.bind(this));
     // Note: debug-stopped listener is wrapped, so we can't easily remove it - minor memory leak but acceptable
     document.removeEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
     document.removeEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
@@ -1100,6 +1327,16 @@ export class EditorPane extends TailwindElement() {
           ? html`<div id="editor-container" class="flex-1 overflow-hidden" style="border-top-color: var(--app-border);"></div>`
           : html`<div class="flex-1 flex items-center justify-center text-sm" style="color: var(--app-disabled-foreground);">Select a file to edit</div>`
         }
+        ${this.showContextMenu ? html`
+          <context-menu
+            .open=${this.showContextMenu}
+            .items=${this.contextMenuItems}
+            .anchorX=${this.contextMenuAnchorX}
+            .anchorY=${this.contextMenuAnchorY}
+            @select=${this._handleContextMenuSelect.bind(this)}
+            @close=${() => { this.showContextMenu = false; }}>
+          </context-menu>
+        ` : ''}
       </div>
     `;
   }

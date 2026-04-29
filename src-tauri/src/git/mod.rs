@@ -11,6 +11,7 @@ pub mod commit;
 pub mod remote;
 pub mod log;
 pub mod github;
+pub mod blame;
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
