@@ -100,6 +100,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private gitPanelResizeStartHeight = 0;
   @state() private commitPanelVisible = false;
   @state() private commitPanelWidth = 400;
+  @state() private blameVisible = false;
   @state() private showTerminalNotification = false;
   @state() private showConsoleNotification = false;
 
@@ -111,12 +112,18 @@ export class OpenStormApp extends TailwindElement() {
     this.setupAutoSaveHandler();
     this.setupMenuHandler();
     this.setupQuickSearchHandler();
+    this.setupBlameHandler();
   }
 
   private setupQuickSearchHandler(): void {
     document.addEventListener("quick-search", () => {
       loadSearchOverlay();
     });
+  }
+
+  private setupBlameHandler(): void {
+    // Event listener not needed - menu handler calls toggleBlame() directly
+    // which dispatches toggle-blame for editor-pane to receive
   }
 
   // Lazy-load components before they're displayed
@@ -192,6 +199,29 @@ export class OpenStormApp extends TailwindElement() {
           break;
         case "find":
           dispatch("quick-search");
+          break;
+        // Git menu handlers
+        case "git-blame":
+          // Call toggleBlame directly to avoid loop (setupBlameHandler also listens for toggle-blame)
+          this.toggleBlame();
+          break;
+        case "git-history":
+          dispatch("toggle-git-log", { visible: true });
+          break;
+        case "git-pull":
+          dispatch("git-pull");
+          break;
+        case "git-push":
+          dispatch("git-push");
+          break;
+        case "git-commit":
+          dispatch("set-active-activity", { activity: "commits" });
+          break;
+        case "git-branch":
+          dispatch("git-branch");
+          break;
+        case "git-rollback":
+          dispatch("git-rollback");
           break;
         // Add more menu handlers as needed
       }
@@ -1105,6 +1135,7 @@ export class OpenStormApp extends TailwindElement() {
               .branch=${this.gitBranch}
               .activePanel=${this.activeStatusBarPanel}
               .gitPanelVisible=${this.gitPanelVisible}
+              .blameVisible=${this.blameVisible}
               .showTerminalNotification=${this.showTerminalNotification}
               .showConsoleNotification=${this.showConsoleNotification}>
             </status-bar>
@@ -1124,7 +1155,16 @@ export class OpenStormApp extends TailwindElement() {
 
         <!-- Hover Tooltip -->
         <hover-tooltip></hover-tooltip>
+
+        <!-- File History Overlay (commit diff dialog) -->
+        <file-history-overlay></file-history-overlay>
       </div>
     `;
+  }
+
+  private toggleBlame(): void {
+    this.blameVisible = !this.blameVisible;
+    // Dispatch event with the new state to editor-pane
+    dispatch("toggle-blame", { visible: this.blameVisible });
   }
 }

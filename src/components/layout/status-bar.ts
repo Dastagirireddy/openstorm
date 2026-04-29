@@ -13,6 +13,7 @@ export class StatusBar extends TailwindElement() {
   @property() gitPanelVisible = false;
   @property() showTerminalNotification = false;
   @property() showConsoleNotification = false;
+  @property() blameVisible = false;
 
   // --- Internal State ---
   @state() private cursorLine = 0;

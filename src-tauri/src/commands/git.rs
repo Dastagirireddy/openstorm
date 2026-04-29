@@ -229,6 +229,12 @@ pub fn git_get_file_history(path: String, filePath: String, limit: Option<usize>
     git::log::get_file_log(&path, &filePath, limit)
 }
 
+/// Get git blame for a file
+#[tauri::command]
+pub fn git_blame(path: String, file_path: String) -> Result<String, String> {
+    git::blame::get_blame(&path, &file_path)
+}
+
 /// Get GitHub pull requests
 #[tauri::command]
 pub fn git_get_pull_requests(path: String) -> Result<Vec<PullRequest>, String> {
