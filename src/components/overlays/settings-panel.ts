@@ -4,7 +4,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
 import { ThemeService } from '../../lib/services/theme-service.js';
 import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
-import '../../layout/icon.js';
+import '../layout/icon.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends TailwindElement() {

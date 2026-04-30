@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
@@ -86,5 +87,42 @@ pub fn get_file_info(path: String) -> Result<FileInfo, String> {
             .as_millis() as u64,
         is_executable,
         children: None,
+    })
+}
+
+/// Read a file as base64-encoded binary (for images and other binary files)
+#[tauri::command]
+pub fn read_file_base64(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    Ok(BASE64.encode(&bytes))
+}
+
+/// Get image metadata (dimensions, format, etc.)
+#[derive(Debug, Serialize)]
+pub struct ImageMetadata {
+    pub width: u32,
+    pub height: u32,
+    pub format: String,
+    pub size: u64,
+}
+
+#[tauri::command]
+pub fn get_image_metadata(path: String) -> Result<ImageMetadata, String> {
+    let file_size = fs::metadata(&path)
+        .map_err(|e| format!("Failed to get file size: {}", e))?
+        .len();
+
+    let img = image::open(&path)
+        .map_err(|e| format!("Failed to open image: {}", e))?;
+
+    let width = img.width();
+    let height = img.height();
+    let format = format!("{:?}", img.color());
+
+    Ok(ImageMetadata {
+        width,
+        height,
+        format,
+        size: file_size,
     })
 }

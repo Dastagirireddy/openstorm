@@ -30,6 +30,10 @@ export interface WorkbenchColors {
   'app-button-hover': string;
   'app-toolbar-hover': string;
   'app-toolbar-active': string;
+  'app-badge-bg': string;
+  'app-badge-border': string;
+  'app-badge-shadow': string;
+  'app-badge-foreground': string;
   'app-tab-active': string;
   'app-tab-inactive': string;
   'app-tab-border': string;

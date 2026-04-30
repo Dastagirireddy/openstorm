@@ -50,7 +50,7 @@ import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
 import "./components/navigation/activity-bar.js";
 import "./components/explorer/project-explorer.js";
-import "./components/editor/pane.js";
+import "./components/viewers/file-viewer-container.js";
 import "./components/editor/editor-tab-bar.js";
 import "./components/layout/status-bar.js";
 import "./components/layout/icon.js";
@@ -453,9 +453,16 @@ export class OpenStormApp extends TailwindElement() {
       if (selected) {
         const filePath = selected as string;
         const name = filePath.split("/").pop() || "";
+        const ext = filePath.split(".").pop()?.toLowerCase() || "";
 
-        // Read the file content
-        const content = await invoke("read_file", { path: filePath });
+        // Check if it's an image file
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+        const isImage = imageExtensions.includes(ext);
+
+        // Read the file content (base64 for images, text for text files)
+        const content = isImage
+          ? await invoke<string>("read_file_base64", { path: filePath })
+          : await invoke<string>("read_file", { path: filePath });
 
         // Check if file is already open
         const existingTab = this.tabs.find((t) => t.path === filePath);
@@ -652,6 +659,11 @@ export class OpenStormApp extends TailwindElement() {
   ): Promise<void> => {
     const { path } = e.detail;
     const name = path.split("/").pop() || "";
+    const ext = path.split(".").pop()?.toLowerCase() || "";
+
+    // Check if it's an image file
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+    const isImage = imageExtensions.includes(ext);
 
     const existingTab = this.tabs.find((t) => t.path === path);
     if (existingTab) {
@@ -667,7 +679,11 @@ export class OpenStormApp extends TailwindElement() {
     }
 
     try {
-      const content = await invoke("read_file", { path });
+      // Read image files as base64, text files as string
+      const content = isImage
+        ? await invoke<string>("read_file_base64", { path })
+        : await invoke<string>("read_file", { path });
+
       const newTab: EditorTab = {
         id: path,
         name,
@@ -912,8 +928,8 @@ export class OpenStormApp extends TailwindElement() {
                               </tab-bar>
                             `
                           : ""}
-                        <!-- Editor Pane -->
-                        <editor-pane
+                        <!-- File Viewer Container -->
+                        <file-viewer-container
                           id="editor"
                           class="flex-1 flex flex-col overflow-hidden"
                           .tabs=${this.tabs}
@@ -923,7 +939,7 @@ export class OpenStormApp extends TailwindElement() {
                           @open-folder=${() => dispatch("open-folder")}
                           @quick-search=${() => dispatch("quick-search")}
                         >
-                        </editor-pane>
+                        </file-viewer-container>
                       </div>
                     </resizable-container>
                   `
@@ -976,8 +992,8 @@ export class OpenStormApp extends TailwindElement() {
                               </tab-bar>
                             `
                           : ""}
-                        <!-- Editor Pane -->
-                        <editor-pane
+                        <!-- File Viewer Container -->
+                        <file-viewer-container
                           id="editor"
                           class="flex-1 flex flex-col overflow-hidden"
                           .tabs=${this.tabs}
@@ -987,7 +1003,7 @@ export class OpenStormApp extends TailwindElement() {
                           @open-folder=${() => dispatch("open-folder")}
                           @quick-search=${() => dispatch("quick-search")}
                         >
-                        </editor-pane>
+                        </file-viewer-container>
                       </div>
                     </resizable-container>
                   `
@@ -1010,7 +1026,7 @@ export class OpenStormApp extends TailwindElement() {
                             </tab-bar>
                           `
                         : ""}
-                      <editor-pane
+                      <file-viewer-container
                         id="editor"
                         class="flex-1 flex flex-col overflow-hidden"
                         .tabs=${this.tabs}
@@ -1020,7 +1036,7 @@ export class OpenStormApp extends TailwindElement() {
                         @open-folder=${() => dispatch("open-folder")}
                         @quick-search=${() => dispatch("quick-search")}
                       >
-                      </editor-pane>
+                      </file-viewer-container>
                     </div>
                   `}
             </div>

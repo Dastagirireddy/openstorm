@@ -351,6 +351,8 @@ fn main() {
             commands::file::delete_file,
             commands::file::rename_file,
             commands::file::get_file_info,
+            commands::file::read_file_base64,
+            commands::file::get_image_metadata,
 
             // === Directory Operations ===
             commands::directory::list_directory,
