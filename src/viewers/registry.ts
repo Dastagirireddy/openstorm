@@ -1,36 +1,48 @@
 /**
- * Viewer Registry - Maps file types to viewer factories
+ * Viewer Registry - Maps file types to viewer tag names
+ *
+ * New architecture: Viewers are Lit custom elements rendered declaratively
  */
 
-import type { FileViewer, ViewerFactory, ViewerMetadata } from './types.js';
-import { createTextViewer } from './builtin/text-viewer.js';
-import { createImageViewer } from './builtin/image-viewer.js';
+import type { ViewerMetadata } from './types.js';
+
+export interface ViewerRegistration {
+  id: string;
+  displayName: string;
+  supportedExtensions: string[];
+  tagName: string;
+}
 
 class ViewerRegistry {
-  private viewers = new Map<string, { factory: ViewerFactory; metadata: ViewerMetadata }>();
+  private viewers = new Map<string, ViewerRegistration>();
 
   /**
    * Register a viewer for specific file types
    */
-  register(id: string, factory: ViewerFactory, metadata: ViewerMetadata): void {
-    // Store by viewer ID
-    this.viewers.set(id, { factory, metadata });
+  register(registration: ViewerRegistration): void {
+    this.viewers.set(registration.id, registration);
   }
 
   /**
-   * Get a viewer instance for a file extension
+   * Get viewer tag name for a file extension
    */
-  async getViewerForExtension(extension: string): Promise<FileViewer | null> {
+  getViewerTagForExtension(extension: string): string | null {
     const ext = extension.toLowerCase();
 
-    // Find matching viewer
+    // First pass: exact extension match (no wildcards)
     for (const [, viewer] of this.viewers.entries()) {
-      if (viewer.metadata.supportedExtensions.includes(ext)) {
-        return await viewer.factory();
+      if (viewer.supportedExtensions.includes('*')) {
+        continue;
       }
-      // Support wildcard matching (e.g., for text files)
-      if (viewer.metadata.supportedExtensions.includes('*')) {
-        return await viewer.factory();
+      if (viewer.supportedExtensions.includes(ext)) {
+        return viewer.tagName;
+      }
+    }
+
+    // Second pass: wildcard fallback
+    for (const [, viewer] of this.viewers.entries()) {
+      if (viewer.supportedExtensions.includes('*')) {
+        return viewer.tagName;
       }
     }
 
@@ -38,21 +50,21 @@ class ViewerRegistry {
   }
 
   /**
-   * Get a viewer instance by ID (for manual selection)
+   * Get viewer registration by ID
    */
-  async getViewerById(id: string): Promise<FileViewer | null> {
-    const viewer = this.viewers.get(id);
-    if (viewer) {
-      return await viewer.factory();
-    }
-    return null;
+  getViewerById(id: string): ViewerRegistration | null {
+    return this.viewers.get(id) || null;
   }
 
   /**
-   * Get all registered viewer metadata (for viewer picker UI)
+   * Get all registered viewer metadata
    */
   getAllViewers(): ViewerMetadata[] {
-    return Array.from(this.viewers.values()).map(v => v.metadata);
+    return Array.from(this.viewers.values()).map(v => ({
+      id: v.id,
+      displayName: v.displayName,
+      supportedExtensions: v.supportedExtensions,
+    }));
   }
 
   /**
@@ -61,8 +73,8 @@ class ViewerRegistry {
   hasViewerForExtension(extension: string): boolean {
     const ext = extension.toLowerCase();
     for (const [, viewer] of this.viewers.entries()) {
-      if (viewer.metadata.supportedExtensions.includes(ext) ||
-          viewer.metadata.supportedExtensions.includes('*')) {
+      if (viewer.supportedExtensions.includes(ext) ||
+          viewer.supportedExtensions.includes('*')) {
         return true;
       }
     }
@@ -72,16 +84,40 @@ class ViewerRegistry {
 
 export const registry = new ViewerRegistry();
 
-// Register built-in image viewer for image files
-registry.register('image', createImageViewer, {
+// Import viewers to ensure custom elements are defined
+import './builtin/text-viewer.js';
+import './builtin/image-viewer.js';
+import './builtin/svg-viewer.js';
+import './builtin/markdown-viewer.js';
+
+// Register built-in image viewer for raster images
+registry.register({
   id: 'image',
   displayName: 'Image Viewer',
-  supportedExtensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'],
+  supportedExtensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'],
+  tagName: 'image-viewer',
+});
+
+// Register built-in SVG viewer for SVG files
+registry.register({
+  id: 'svg',
+  displayName: 'SVG Editor',
+  supportedExtensions: ['svg'],
+  tagName: 'svg-viewer',
+});
+
+// Register built-in markdown viewer for markdown files
+registry.register({
+  id: 'markdown',
+  displayName: 'Markdown Editor',
+  supportedExtensions: ['md', 'markdown', 'mdown'],
+  tagName: 'markdown-viewer',
 });
 
 // Register built-in text viewer as default fallback
-registry.register('text', createTextViewer, {
+registry.register({
   id: 'text',
   displayName: 'Text Editor',
-  supportedExtensions: ['*'], // Wildcard - handles all text files
+  supportedExtensions: ['*'],
+  tagName: 'text-viewer',
 });

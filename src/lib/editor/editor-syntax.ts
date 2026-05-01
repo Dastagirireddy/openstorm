@@ -58,7 +58,7 @@ export function getLanguageExtension(path: string): Extension {
     case 'go': return go();
     case 'py': return python();
     case 'c': case 'cpp': case 'cc': case 'cxx': case 'h': case 'hpp': case 'hxx': return cpp();
-    case 'html': case 'htm': case 'xhtml': return htmlLang();
+    case 'html': case 'htm': case 'xhtml': case 'svg': return htmlLang();
     case 'css': case 'scss': case 'sass': case 'less': return cssLang();
     case 'json': return json();
     case 'md': case 'markdown': return markdown();
@@ -66,6 +66,7 @@ export function getLanguageExtension(path: string): Extension {
     case 'java': return java();
     case 'sql': return sql();
     case 'php': return php();
+    case 'xml': return htmlLang(); // Use HTML lang for XML as fallback
     default: return javascript();
   }
 }

@@ -455,8 +455,8 @@ export class OpenStormApp extends TailwindElement() {
         const name = filePath.split("/").pop() || "";
         const ext = filePath.split(".").pop()?.toLowerCase() || "";
 
-        // Check if it's an image file
-        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+        // Check if it's a raster image file (SVG is handled as text/code)
+        const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
         const isImage = imageExtensions.includes(ext);
 
         // Read the file content (base64 for images, text for text files)
@@ -661,8 +661,8 @@ export class OpenStormApp extends TailwindElement() {
     const name = path.split("/").pop() || "";
     const ext = path.split(".").pop()?.toLowerCase() || "";
 
-    // Check if it's an image file
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+    // Check if it's a raster image file (SVG is handled as text/code)
+    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
     const isImage = imageExtensions.includes(ext);
 
     const existingTab = this.tabs.find((t) => t.path === path);

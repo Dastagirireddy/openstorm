@@ -3,23 +3,26 @@
  *
  * This component manages the lifecycle of individual viewers and provides
  * a unified API for the rest of the application.
+ *
+ * New architecture: Uses Lit custom elements rendered declaratively
  */
 
 import { html } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import { registry } from '../../viewers/registry.js';
-import type { FileViewer, ViewerAction } from '../../viewers/types.js';
+import type { ViewerAction } from '../../viewers/types.js';
 import type { EditorTab } from '../../lib/types/file-types.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
 import { dispatch } from '../../lib/types/events.js';
+import type { TextViewer } from '../../viewers/builtin/text-viewer.js';
 
 @customElement('file-viewer-container')
 export class FileViewerContainer extends TailwindElement() {
   @property({ type: Array }) tabs: EditorTab[] = [];
   @property({ type: String }) activeTabId: string = '';
 
-  @state() private currentViewer: FileViewer | null = null;
+  @state() private viewerTag: string | null = null;
   @state() private filePath: string = '';
   @state() private content: string = '';
   @state() private toolbarActions: ViewerAction[] = [];
@@ -29,46 +32,42 @@ export class FileViewerContainer extends TailwindElement() {
   @state() private debugLine: number | null = null;
   @state() private isDebugging = false;
 
-  private viewerContainer: HTMLElement | null = null;
   private _pendingOpen: { path: string; content: string } | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
     // Listen for open-file-external events
-    document.addEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
+    document.addEventListener('open-file-external', ((e: Event) => this.handleOpenFileExternal(e as CustomEvent<{ path: string; content: string }>)).bind(this));
     // Listen for save-file events
     document.addEventListener('save-file', this.handleSaveFile.bind(this));
     // Listen for debug events
     document.addEventListener('debug-session-started', this.handleDebugSessionStarted.bind(this));
     document.addEventListener('debug-session-ended', this.handleDebugSessionEnded.bind(this));
-    document.addEventListener('debug-stopped', this.handleDebugStopped.bind(this));
+    document.addEventListener('debug-stopped', ((e: Event) => this.handleDebugStopped(e as CustomEvent)).bind(this));
     // Listen for format-code events
     document.addEventListener('format-code', this.handleFormatCode.bind(this));
     // Listen for clear-editor events (when all tabs are closed)
     document.addEventListener('clear-editor', this.handleClearEditor.bind(this));
+    // Listen for viewer actions changed events
+    document.addEventListener('viewer-actions-changed', ((e: Event) => this.handleViewerActionsChanged(e as CustomEvent<{ actions: ViewerAction[] }>)).bind(this));
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
     document.removeEventListener('clear-editor', this.handleClearEditor.bind(this));
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
-    }
+    document.removeEventListener('viewer-actions-changed', this.handleViewerActionsChanged.bind(this));
   }
 
   private handleClearEditor(): void {
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
-    }
+    this.viewerTag = null;
     this.filePath = '';
     this.content = '';
     this.toolbarActions = [];
-    if (this.viewerContainer) {
-      this.viewerContainer.innerHTML = '';
-    }
+  }
+
+  private handleViewerActionsChanged(e: CustomEvent<{ actions: ViewerAction[] }>): void {
+    this.toolbarActions = e.detail.actions;
   }
 
   updated(changedProperties: Map<string, unknown>): void {
@@ -76,9 +75,6 @@ export class FileViewerContainer extends TailwindElement() {
 
     // Handle tab change
     if (changedProperties.has('activeTabId')) {
-      // Previous active tab
-      const prevTabId = changedProperties.get('activeTabId') as string;
-
       // New active tab
       if (this.activeTabId) {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
@@ -89,16 +85,10 @@ export class FileViewerContainer extends TailwindElement() {
       }
 
       // No valid tab selected - clear viewer
-      if (this.currentViewer) {
-        this.currentViewer.unmount();
-        this.currentViewer = null;
-      }
+      this.viewerTag = null;
       this.filePath = '';
       this.content = '';
       this.toolbarActions = [];
-      if (this.viewerContainer) {
-        this.viewerContainer.innerHTML = '';
-      }
     }
   }
 
@@ -113,20 +103,14 @@ export class FileViewerContainer extends TailwindElement() {
 
   private handleDebugSessionStarted(): void {
     this.isDebugging = true;
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(true);
-    }
+    this.getTextViewer()?.setDebugMode(true);
   }
 
   private handleDebugSessionEnded(): void {
     this.isDebugging = false;
     this.debugLine = null;
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(false);
-    }
-    if (this.currentViewer && 'setDebugLine' in this.currentViewer) {
-      (this.currentViewer as any).setDebugLine(null);
-    }
+    this.getTextViewer()?.setDebugMode(false);
+    this.getTextViewer()?.setDebugLine(null);
   }
 
   private async handleDebugStopped(e?: CustomEvent): Promise<void> {
@@ -169,42 +153,41 @@ export class FileViewerContainer extends TailwindElement() {
   }
 
   /**
+   * Get reference to text viewer if that's what's currently rendered
+   */
+  private getTextViewer(): TextViewer | null {
+    if (this.viewerTag !== 'text-viewer') return null;
+    return this.renderRoot.querySelector('text-viewer');
+  }
+
+  /**
    * Open a file in the appropriate viewer
    */
   async openFile(path: string, content: string): Promise<void> {
     const ext = getFileExtension(path);
-    const viewer = await registry.getViewerForExtension(ext);
+    const viewerTag = registry.getViewerTagForExtension(ext);
 
-    if (!viewer) {
+    if (!viewerTag) {
       console.error(`[FileViewerContainer] No viewer found for extension: ${ext}`);
       return;
-    }
-
-    // Unmount previous viewer
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
     }
 
     // Store file info
     this.filePath = path;
     this.content = content;
 
-    // Mount new viewer
-    this.currentViewer = viewer;
+    // Set viewer type - Lit will render the appropriate custom element
+    this.viewerTag = viewerTag;
+
+    // Wait for Lit to render the element
     await this.updateComplete;
 
-    // Get viewer container element
-    this.viewerContainer = this.renderRoot.querySelector('#viewer-container');
-    if (!this.viewerContainer) {
-      throw new Error('Viewer container not found');
+    // Get the viewer element and load the file
+    const viewer = this.renderRoot.querySelector(viewerTag) as any;
+    if (!viewer) {
+      throw new Error(`Viewer element ${viewerTag} not found`);
     }
 
-    // Clear container
-    this.viewerContainer.innerHTML = '';
-
-    // Mount and load file
-    viewer.mount(this.viewerContainer);
     await viewer.loadFile(path, content);
 
     // Get toolbar actions from viewer
@@ -214,7 +197,7 @@ export class FileViewerContainer extends TailwindElement() {
     if ('setBreakpointsForFile' in viewer) {
       // Restore breakpoints for this file if any
       const fileBreakpoints = this.breakpoints.get(path) || [];
-      (viewer as any).setBreakpointsForFile(fileBreakpoints);
+      viewer.setBreakpointsForFile(fileBreakpoints);
     }
   }
 
@@ -222,13 +205,14 @@ export class FileViewerContainer extends TailwindElement() {
    * Save the current file
    */
   async saveFile(): Promise<void> {
-    if (!this.currentViewer?.saveFile) {
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    if (!viewer?.saveFile) {
       console.warn('[FileViewerContainer] Viewer does not support saving');
       return;
     }
 
     try {
-      const newContent = await this.currentViewer.saveFile();
+      const newContent = await viewer.saveFile();
       this.content = newContent;
       dispatch('file-saved', { path: this.filePath, content: newContent });
     } catch (error) {
@@ -240,7 +224,8 @@ export class FileViewerContainer extends TailwindElement() {
    * Check if current file is modified
    */
   isDirtyState(): boolean {
-    return this.currentViewer?.isDirtyState() ?? false;
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    return viewer?.isDirtyState() ?? false;
   }
 
   /**
@@ -251,8 +236,9 @@ export class FileViewerContainer extends TailwindElement() {
       this.breakpoints.set(this.filePath, breakpoints);
     }
 
-    if (this.currentViewer && 'setBreakpointsForFile' in this.currentViewer) {
-      (this.currentViewer as any).setBreakpointsForFile(breakpoints);
+    const viewer = this.getTextViewer();
+    if (viewer) {
+      viewer.setBreakpointsForFile(breakpoints);
     }
   }
 
@@ -261,10 +247,7 @@ export class FileViewerContainer extends TailwindElement() {
    */
   setDebugLine(line: number | null): void {
     this.debugLine = line;
-
-    if (this.currentViewer && 'setDebugLine' in this.currentViewer) {
-      (this.currentViewer as any).setDebugLine(line);
-    }
+    this.getTextViewer()?.setDebugLine(line);
   }
 
   /**
@@ -272,10 +255,7 @@ export class FileViewerContainer extends TailwindElement() {
    */
   setDebugMode(enabled: boolean): void {
     this.isDebugging = enabled;
-
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(enabled);
-    }
+    this.getTextViewer()?.setDebugMode(enabled);
   }
 
   /**
@@ -318,11 +298,17 @@ export class FileViewerContainer extends TailwindElement() {
               `)}
             </div>`
           : ''}
-        <div
-          id="viewer-container"
-          class="flex-1 overflow-hidden"
-          style="border-top-color: var(--app-border);"
-        ></div>
+        <div class="flex-1 overflow-hidden relative">
+          ${this.viewerTag === 'text-viewer'
+            ? html`<text-viewer .filePath=${this.filePath} .content=${this.content}></text-viewer>`
+            : this.viewerTag === 'image-viewer'
+              ? html`<image-viewer .filePath=${this.filePath}></image-viewer>`
+              : this.viewerTag === 'svg-viewer'
+                ? html`<svg-viewer .filePath=${this.filePath} .content=${this.content}></svg-viewer>`
+                : this.viewerTag === 'markdown-viewer'
+                  ? html`<markdown-viewer .filePath=${this.filePath} .content=${this.content}></markdown-viewer>`
+                  : ''}
+        </div>
       </div>
     `;
   }
