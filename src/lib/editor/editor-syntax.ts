@@ -32,6 +32,8 @@ export const openStormHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier], color: 'var(--app-keyword)', fontWeight: 'bold' },
   { tag: [t.definition(t.variableName), t.function(t.variableName)], color: 'var(--app-type)' },
   { tag: t.propertyName, color: 'var(--app-type)' },
+  { tag: t.tagName, color: 'var(--app-keyword)' },
+  { tag: t.attributeName, color: 'var(--app-type)' },
   { tag: t.string, color: 'var(--app-string)' },
   { tag: t.number, color: 'var(--app-number)' },
   { tag: [t.comment, t.lineComment], color: 'var(--app-disabled-foreground)', fontStyle: 'italic' },

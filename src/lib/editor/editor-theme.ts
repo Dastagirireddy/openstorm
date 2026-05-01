@@ -14,7 +14,7 @@ export function getEditorTheme(): Extension {
   return EditorView.theme({
     '&': {
       height: '100%',
-      fontSize: '15px',
+      fontSize: '14px',
       fontFamily: "'Fira Code', 'JetBrains Mono', monospace",
       backgroundColor: 'var(--editor-background)',
       direction: 'ltr !important',

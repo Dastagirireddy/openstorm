@@ -4,7 +4,7 @@
 
 import { html, LitElement } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { html as htmlLang } from '@codemirror/lang-html';
+import { svg } from '../../lib/editor/lang-svg.js';
 import { invoke } from '@tauri-apps/api/core';
 import { dispatch } from '../../lib/types/events.js';
 import type { ViewerAction } from '../types.js';
@@ -143,8 +143,8 @@ export class SvgViewer extends SplitViewViewerBase {
 
   private async createEditorView(content: string): Promise<void> {
     const indentUnitStr = this.detectIndentUnit(content);
-    const langExtension = htmlLang();
-    const extensions = this.createEditorExtensions(indentUnitStr, langExtension);
+    const langExtension = svg();
+    const extensions = this.createEditorExtensions(indentUnitStr, langExtension, true);
 
     await this.createEditorInContainer(content, extensions);
 

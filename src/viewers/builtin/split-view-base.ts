@@ -281,9 +281,12 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
 
   /**
    * Create default editor extensions
+   * @param indentUnitStr - The indentation unit string
+   * @param langExtension - The language extension
+   * @param skipGenericHighlighting - If true, skip applying openStormHighlight (for languages with custom highlighting)
    */
-  protected createEditorExtensions(indentUnitStr: string, langExtension: any): any[] {
-    return [
+  protected createEditorExtensions(indentUnitStr: string, langExtension: any, skipGenericHighlighting = false): any[] {
+    const extensions: any[] = [
       EditorState.tabSize.of(4),
       indentUnit.of(indentUnitStr),
       lineNumbers(),
@@ -305,7 +308,6 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
           activeDark: '#707070',
         },
       }),
-      syntaxHighlighting(openStormHighlight),
       getEditorTheme(),
       langExtension,
       EditorView.updateListener.of((update) => {
@@ -320,6 +322,13 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
         },
       ]),
     ];
+
+    // Only apply generic syntax highlighting if not skipped
+    if (!skipGenericHighlighting) {
+      extensions.push(syntaxHighlighting(openStormHighlight));
+    }
+
+    return extensions;
   }
 
   /**

@@ -297,3 +297,24 @@ html, body {
   color: #666;
   font-style: italic;
 }
+
+/* SVG-specific syntax highlighting */
+/* Aligned with theme syntax highlighting colors */
+.cm-svg-element {
+  color: var(--app-keyword) !important;
+  font-weight: 600 !important;
+}
+
+.cm-svg-attribute {
+  color: var(--app-type) !important;
+}
+
+/* Also style SVG tag names and attributes via HighlightStyle */
+.cm-svg-tagName {
+  color: var(--app-keyword) !important;
+  font-weight: 600 !important;
+}
+
+.cm-svg-attrName {
+  color: var(--app-type) !important;
+}
