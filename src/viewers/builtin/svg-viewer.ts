@@ -274,35 +274,53 @@ export class SvgViewer extends SplitViewViewerBase {
     return html`
       <div class="flex flex-col h-full overflow-hidden" style="background: var(--app-workbench-bg);">
         <!-- Main content area -->
-        <div id="split-main-area" class="flex-1 flex overflow-hidden">
+        <div id="split-main-area" class="flex-1 flex overflow-hidden" style="position: relative;">
           <!-- Code panel -->
           <div
             id="code-panel"
             class="overflow-hidden"
-            style="min-width: 200px;"
+            style="
+              min-width: ${this.options.minPanelWidth}px;
+              width: ${this.viewMode === 'split' ? `${this.splitRatio}%` : this.viewMode === 'code' ? '100%' : 'auto'};
+              flex: ${this.viewMode === 'split' ? 'none' : this.viewMode === 'code' ? '1' : 'none'};
+              border-right: ${this.viewMode === 'code' ? 'none' : '1px solid var(--app-border)'};
+            "
           ></div>
-
-          <!-- Resize handle -->
-          ${this.viewMode === 'split'
-            ? html`<div
-                id="resize-handle"
-                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
-                style="background: var(--app-border);"
-              ></div>`
-            : ''}
 
           <!-- Preview panel -->
           <div
             id="preview-panel"
-            class="overflow-hidden relative"
+            class="overflow-hidden"
             style="
               background: var(--app-workbench-bg);
-              min-width: 200px;
+              min-width: ${this.options.minPanelWidth}px;
+              width: ${this.viewMode === 'split' ? `${100 - this.splitRatio}%` : this.viewMode === 'preview' ? '100%' : 'auto'};
+              flex: ${this.viewMode === 'split' ? 'none' : this.viewMode === 'preview' ? '1' : 'none'};
+              position: relative;
             "
           >
             <div id="preview-content" class="absolute inset-0 flex items-center justify-center" style="padding: 40px; box-sizing: border-box;">
             </div>
           </div>
+
+          <!-- Resize handle - absolutely positioned on top of the border between panels -->
+          ${this.viewMode === 'split'
+            ? html`<div
+                id="resize-handle"
+                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
+                style="
+                  position: absolute;
+                  left: ${this.splitRatio}%;
+                  top: 0;
+                  bottom: 0;
+                  width: 8px;
+                  background: var(--app-border);
+                  z-index: 100;
+                  pointer-events: auto;
+                  transform: translateX(-50%);
+                "
+              ></div>`
+            : ''}
         </div>
       </div>
     `;

@@ -69,7 +69,7 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
   private _codePanel: HTMLElement | null = null;
   private _previewPanel: HTMLElement | null = null;
 
-  private options: SplitViewOptions;
+  protected options: SplitViewOptions;
 
   constructor(options: SplitViewOptions = {}) {
     super();
@@ -130,7 +130,6 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
   protected setupResizeHandle(): void {
     // Wait for DOM to be ready
     if (!this.renderRoot.querySelector('#resize-handle')) {
-      console.log('[SplitViewViewerBase] Resize handle not found, waiting for updateComplete...');
       this.updateComplete.then(() => this.setupResizeHandle());
       return;
     }
@@ -139,21 +138,9 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
     this._codePanel = this.renderRoot.querySelector('#code-panel') as HTMLElement;
     this._previewPanel = this.renderRoot.querySelector('#preview-panel') as HTMLElement;
 
-    if (!this._resizeHandle) {
-      console.warn('[SplitViewViewerBase] Resize handle element not found');
+    if (!this._resizeHandle || !this._codePanel || !this._previewPanel) {
       return;
     }
-    if (!this._codePanel) {
-      console.warn('[SplitViewViewerBase] Code panel element not found');
-      return;
-    }
-    if (!this._previewPanel) {
-      console.warn('[SplitViewViewerBase] Preview panel element not found');
-      return;
-    }
-
-    console.log('[SplitViewViewerBase] Resize handle setup successful');
-    console.log('[SplitViewViewerBase] Handle:', this._resizeHandle, 'Code panel:', this._codePanel, 'Preview panel:', this._previewPanel);
 
     // Remove any existing listeners to avoid duplicates
     this._resizeHandle.removeEventListener('mousedown', this._boundStartResize);
@@ -164,14 +151,11 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
     this._resizeHandle.addEventListener('mousedown', this._boundStartResize, { capture: true });
     document.addEventListener('mousemove', this._boundResize, { capture: true });
     document.addEventListener('mouseup', this._boundStopResize, { capture: true });
-
-    console.log('[SplitViewViewerBase] Event listeners attached');
   }
 
   private _startResize(e: MouseEvent): void {
     e.preventDefault();
     e.stopPropagation();
-    console.log('[SplitViewViewerBase] Resize started at', e.clientX, 'button:', e.button);
     this.isResizing = true;
     this.resizeStartX = e.clientX;
     this.resizeStartRatio = this.splitRatio;
@@ -188,7 +172,6 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
 
     const mainArea = this.renderRoot.querySelector('#split-main-area') as HTMLElement;
     if (!mainArea) {
-      console.warn('[SplitViewViewerBase] Main area not found during resize');
       return;
     }
 
@@ -197,15 +180,17 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
     const newRatio = this.resizeStartRatio + (deltaX / mainRect.width) * 100;
     this.splitRatio = Math.max(20, Math.min(80, newRatio));
 
-    console.log('[SplitViewViewerBase] Resizing: deltaX=', deltaX, 'newRatio=', this.splitRatio);
-
     // Update panel widths during resize for smooth visual feedback
     this._codePanel.style.width = `${this.splitRatio}%`;
     this._previewPanel.style.width = `${100 - this.splitRatio}%`;
+
+    // Update resize handle position
+    if (this._resizeHandle) {
+      this._resizeHandle.style.left = `${this.splitRatio}%`;
+    }
   }
 
   private _stopResize(): void {
-    console.log('[SplitViewViewerBase] Resize stopped');
     this.isResizing = false;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
@@ -474,7 +459,7 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
     return html`
       <div class="flex flex-col h-full overflow-hidden" style="background: var(--app-workbench-bg);">
         <!-- Main content area -->
-        <div id="split-main-area" class="flex-1 flex overflow-hidden">
+        <div id="split-main-area" class="flex-1 flex overflow-hidden" style="position: relative;">
           <!-- Code panel -->
           <div
             id="code-panel"
@@ -487,28 +472,39 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
             "
           ></div>
 
-          <!-- Resize handle -->
-          ${this.viewMode === 'split'
-            ? html`<div
-                id="resize-handle"
-                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
-                style="background: var(--app-border);"
-              ></div>`
-            : ''}
-
           <!-- Preview panel -->
           <div
             id="preview-panel"
-            class="overflow-hidden relative"
+            class="overflow-hidden"
             style="
               background: var(--app-workbench-bg);
               min-width: ${this.options.minPanelWidth}px;
               width: ${this.viewMode === 'split' ? `${100 - this.splitRatio}%` : this.viewMode === 'preview' ? '100%' : 'auto'};
               flex: ${this.viewMode === 'split' ? 'none' : this.viewMode === 'preview' ? '1' : 'none'};
+              position: relative;
             "
           >
             <slot name="preview"></slot>
           </div>
+
+          <!-- Resize handle - absolutely positioned on top of the border between panels -->
+          ${this.viewMode === 'split'
+            ? html`<div
+                id="resize-handle"
+                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
+                style="
+                  position: absolute;
+                  left: ${this.splitRatio}%;
+                  top: 0;
+                  bottom: 0;
+                  width: 8px;
+                  background: var(--app-border);
+                  z-index: 100;
+                  pointer-events: auto;
+                  transform: translateX(-50%);
+                "
+              ></div>`
+            : ''}
         </div>
       </div>
     `;

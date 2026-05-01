@@ -197,20 +197,14 @@ export class MarkdownViewer extends SplitViewViewerBase {
     try {
       const themeService = ThemeService.getInstance();
       const currentTheme = themeService.getCurrentWorkbenchTheme();
-      console.log('[MarkdownViewer] Selected theme:', JSON.stringify({ id: currentTheme.id, type: currentTheme.type }));
-      console.log('[MarkdownViewer] Theme mode:', themeService.getThemeMode());
 
       // Check actual applied theme by reading CSS variable (handles system mode correctly)
       const root = document.documentElement;
       const bgColor = getComputedStyle(root).getPropertyValue('--app-bg').trim();
-      // Light theme bg is typically #ffffff, dark theme is darker
       const isLightBg = bgColor.toLowerCase().includes('fff') || bgColor === '#ffffff';
       this.isDarkMode = !isLightBg;
 
-      console.log('[MarkdownViewer] Detected applied theme:', this.isDarkMode ? 'dark' : 'light', 'bg:', bgColor);
-
       this.themeUnsubscribe = themeService.subscribe((event) => {
-        console.log('[MarkdownViewer] Theme change event:', JSON.stringify({ id: event.themeId, type: event.theme.type }));
         this.isDarkMode = event.theme.type === 'dark';
         this.updatePreviewMode();
       });
@@ -349,30 +343,29 @@ export class MarkdownViewer extends SplitViewViewerBase {
     return html`
       <div class="flex flex-col h-full overflow-hidden" style="background: var(--app-workbench-bg);">
         <!-- Main content area -->
-        <div id="split-main-area" class="flex-1 flex overflow-hidden">
+        <div id="split-main-area" class="flex-1 flex overflow-hidden" style="position: relative;">
           <!-- Code panel -->
           <div
             id="code-panel"
             class="overflow-hidden"
-            style="min-width: 200px;"
+            style="
+              min-width: ${this.options.minPanelWidth}px;
+              width: ${this.viewMode === 'split' ? `${this.splitRatio}%` : this.viewMode === 'code' ? '100%' : 'auto'};
+              flex: ${this.viewMode === 'split' ? 'none' : this.viewMode === 'code' ? '1' : 'none'};
+              border-right: ${this.viewMode === 'code' ? 'none' : '1px solid var(--app-border)'};
+            "
           ></div>
-
-          <!-- Resize handle -->
-          ${this.viewMode === 'split'
-            ? html`<div
-                id="resize-handle"
-                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
-                style="background: var(--app-border);"
-              ></div>`
-            : ''}
 
           <!-- Preview panel with isolated markdown preview element -->
           <div
             id="preview-panel"
-            class="overflow-hidden relative"
+            class="overflow-hidden"
             style="
               background: var(--app-workbench-bg);
-              min-width: 200px;
+              min-width: ${this.options.minPanelWidth}px;
+              width: ${this.viewMode === 'split' ? `${100 - this.splitRatio}%` : this.viewMode === 'preview' ? '100%' : 'auto'};
+              flex: ${this.viewMode === 'split' ? 'none' : this.viewMode === 'preview' ? '1' : 'none'};
+              position: relative;
             "
           >
             <markdown-preview-inline
@@ -381,6 +374,25 @@ export class MarkdownViewer extends SplitViewViewerBase {
               .darkMode=${this.isDarkMode}
             ></markdown-preview-inline>
           </div>
+
+          <!-- Resize handle - absolutely positioned on top of the border between panels -->
+          ${this.viewMode === 'split'
+            ? html`<div
+                id="resize-handle"
+                class="w-1 cursor-col-resize hover:bg-[var(--app-indigo)] transition-colors"
+                style="
+                  position: absolute;
+                  left: ${this.splitRatio}%;
+                  top: 0;
+                  bottom: 0;
+                  width: 8px;
+                  background: var(--app-border);
+                  z-index: 100;
+                  pointer-events: auto;
+                  transform: translateX(-50%);
+                "
+              ></div>`
+            : ''}
         </div>
       </div>
     `;
