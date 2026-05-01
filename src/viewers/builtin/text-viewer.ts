@@ -106,10 +106,16 @@ export class TextViewer extends TailwindElement() {
       this.editorView = null;
     }
 
+    // Clear the container content
+    const editorContainer = this.renderRoot.querySelector('#editor-container') as HTMLElement;
+    if (editorContainer) {
+      editorContainer.innerHTML = '';
+    }
+
     await this.updateComplete;
 
-    const editorContainer = this.renderRoot.querySelector('#editor-container') as HTMLElement;
-    if (!editorContainer) {
+    const editorContainerAfter = this.renderRoot.querySelector('#editor-container') as HTMLElement;
+    if (!editorContainerAfter) {
       throw new Error('Editor container not found');
     }
 
@@ -142,7 +148,7 @@ export class TextViewer extends TailwindElement() {
     // Create editor view
     this.editorView = new EditorView({
       state,
-      parent: editorContainer,
+      parent: editorContainerAfter,
     });
 
     // Add hover listener for LSP tooltips

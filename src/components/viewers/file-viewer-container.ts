@@ -34,35 +34,64 @@ export class FileViewerContainer extends TailwindElement() {
 
   private _pendingOpen: { path: string; content: string } | null = null;
 
+  // Bound event handlers for proper add/removeEventListener
+  private _boundHandleOpenFileExternal!: (e: CustomEvent<{ path: string; content: string }>) => void;
+  private _boundHandleSaveFile!: () => void;
+  private _boundHandleContentChanged!: (e: CustomEvent<{ path: string; content: string; isModified?: boolean }>) => void;
+  private _boundHandleFormatCode!: () => void;
+  private _boundHandleFormatCodeRequest!: (e: CustomEvent<{ path: string; content: string }>) => void;
+  private _boundHandleDebugSessionStarted!: () => void;
+  private _boundHandleDebugSessionEnded!: () => void;
+  private _boundHandleDebugStopped!: (e: CustomEvent) => void;
+  private _boundHandleClearEditor!: () => void;
+  private _boundHandleViewerActionsChanged!: (e: CustomEvent<{ actions: ViewerAction[] }>) => void;
+
   connectedCallback(): void {
     super.connectedCallback();
+    // Bind handlers once for proper add/removeEventListener
+    this._boundHandleOpenFileExternal = (e: CustomEvent<{ path: string; content: string }>) => this.handleOpenFileExternal(e);
+    this._boundHandleSaveFile = () => this.handleSaveFile();
+    this._boundHandleContentChanged = (e: CustomEvent<{ path: string; content: string; isModified?: boolean }>) => this.handleContentChanged(e);
+    this._boundHandleFormatCode = () => this.handleFormatCode();
+    this._boundHandleFormatCodeRequest = (e: CustomEvent<{ path: string; content: string }>) => this.handleFormatCodeRequest(e);
+    this._boundHandleDebugSessionStarted = () => this.handleDebugSessionStarted();
+    this._boundHandleDebugSessionEnded = () => this.handleDebugSessionEnded();
+    this._boundHandleDebugStopped = (e: CustomEvent) => this.handleDebugStopped(e);
+    this._boundHandleClearEditor = () => this.handleClearEditor();
+    this._boundHandleViewerActionsChanged = (e: CustomEvent<{ actions: ViewerAction[] }>) => this.handleViewerActionsChanged(e);
+
     // Listen for open-file-external events
-    document.addEventListener('open-file-external', ((e: Event) => this.handleOpenFileExternal(e as CustomEvent<{ path: string; content: string }>)).bind(this));
+    document.addEventListener('open-file-external', this._boundHandleOpenFileExternal);
     // Listen for save-file events
-    document.addEventListener('save-file', this.handleSaveFile.bind(this));
+    document.addEventListener('save-file', this._boundHandleSaveFile);
     // Listen for content-changed events from viewers and re-dispatch them
-    document.addEventListener('content-changed', this.handleContentChanged.bind(this));
+    document.addEventListener('content-changed', this._boundHandleContentChanged);
     // Listen for format-code events
-    document.addEventListener('format-code', this.handleFormatCode.bind(this));
+    document.addEventListener('format-code', this._boundHandleFormatCode);
     // Listen for format-code-request events for formatting
-    document.addEventListener('format-code-request', this.handleFormatCodeRequest.bind(this));
+    document.addEventListener('format-code-request', this._boundHandleFormatCodeRequest);
     // Listen for debug events
-    document.addEventListener('debug-session-started', this.handleDebugSessionStarted.bind(this));
-    document.addEventListener('debug-session-ended', this.handleDebugSessionEnded.bind(this));
-    document.addEventListener('debug-stopped', ((e: Event) => this.handleDebugStopped(e as CustomEvent)).bind(this));
+    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.addEventListener('debug-stopped', this._boundHandleDebugStopped);
     // Listen for clear-editor events (when all tabs are closed)
-    document.addEventListener('clear-editor', this.handleClearEditor.bind(this));
+    document.addEventListener('clear-editor', this._boundHandleClearEditor);
     // Listen for viewer actions changed events
-    document.addEventListener('viewer-actions-changed', ((e: Event) => this.handleViewerActionsChanged(e as CustomEvent<{ actions: ViewerAction[] }>)).bind(this));
+    document.addEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
-    document.removeEventListener('content-changed', this.handleContentChanged.bind(this));
-    document.removeEventListener('format-code-request', this.handleFormatCodeRequest.bind(this));
-    document.removeEventListener('clear-editor', this.handleClearEditor.bind(this));
-    document.removeEventListener('viewer-actions-changed', this.handleViewerActionsChanged.bind(this));
+    document.removeEventListener('open-file-external', this._boundHandleOpenFileExternal);
+    document.removeEventListener('save-file', this._boundHandleSaveFile);
+    document.removeEventListener('content-changed', this._boundHandleContentChanged);
+    document.removeEventListener('format-code', this._boundHandleFormatCode);
+    document.removeEventListener('format-code-request', this._boundHandleFormatCodeRequest);
+    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.removeEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.removeEventListener('clear-editor', this._boundHandleClearEditor);
+    document.removeEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
   }
 
   private handleClearEditor(): void {
@@ -104,6 +133,16 @@ export class FileViewerContainer extends TailwindElement() {
       this.filePath = '';
       this.content = '';
       this.toolbarActions = [];
+    }
+
+    // Handle case where tabs array changed but activeTabId stayed the same
+    // (e.g., clicking same file in explorer when it's already active)
+    if (changedProperties.has('tabs') && this.activeTabId) {
+      const tab = this.tabs.find(t => t.id === this.activeTabId);
+      if (tab && this.filePath === tab.path) {
+        // Same file is still active, but tabs changed - refresh content
+        this.openFile(tab.path, tab.content);
+      }
     }
   }
 
@@ -200,10 +239,15 @@ export class FileViewerContainer extends TailwindElement() {
     this.filePath = path;
     this.content = content;
 
+    // Force re-render by clearing viewerTag first, then setting it
+    // This ensures Lit re-renders even when opening same file type
+    this.viewerTag = null;
+    this.requestUpdate();
+    await this.updateComplete;
+
     // Set viewer type - Lit will render the appropriate custom element
     this.viewerTag = viewerTag;
-
-    // Wait for Lit to render the element
+    this.requestUpdate();
     await this.updateComplete;
 
     // Get the viewer element and load the file
@@ -324,13 +368,13 @@ export class FileViewerContainer extends TailwindElement() {
           : ''}
         <div class="flex-1 overflow-hidden relative">
           ${this.viewerTag === 'text-viewer'
-            ? html`<text-viewer .filePath=${this.filePath} .content=${this.content}></text-viewer>`
+            ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></text-viewer>`
             : this.viewerTag === 'image-viewer'
-              ? html`<image-viewer .filePath=${this.filePath}></image-viewer>`
+              ? html`<image-viewer key=${this.filePath} .filePath=${this.filePath}></image-viewer>`
               : this.viewerTag === 'svg-viewer'
-                ? html`<svg-viewer .filePath=${this.filePath} .content=${this.content}></svg-viewer>`
+                ? html`<svg-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></svg-viewer>`
                 : this.viewerTag === 'markdown-viewer'
-                  ? html`<markdown-viewer .filePath=${this.filePath} .content=${this.content}></markdown-viewer>`
+                  ? html`<markdown-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></markdown-viewer>`
                   : ''}
         </div>
       </div>

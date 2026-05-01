@@ -674,8 +674,8 @@ export class OpenStormApp extends TailwindElement() {
       this.tabs = this.tabs.map((t) =>
         t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
       );
-      // Don't dispatch open-file event - just switch to existing tab
-      // Dispatching open-file would trigger the global handler and open the file dialog
+      // Dispatch open-file-external to ensure the viewer updates its content
+      dispatch("open-file-external", { path, content: existingTab.content });
       return;
     }
 
