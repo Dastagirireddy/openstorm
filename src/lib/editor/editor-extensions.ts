@@ -20,6 +20,7 @@ import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/c
 import { customFoldGutter } from '../utils';
 import { openStormHighlight } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
+import { dispatch } from '../types/events.js';
 
 /**
  * Generates the core extension stack
@@ -61,6 +62,15 @@ export function getCommonExtensions(
       },
     }),
     syntaxHighlighting(openStormHighlight),
+    // Track cursor position changes
+    EditorView.updateListener.of((update) => {
+      if (update.selectionSet) {
+        const pos = update.state.selection.main.head;
+        const line = update.state.doc.lineAt(pos);
+        const column = pos - line.from + 1; // 1-indexed
+        dispatch('cursor-position', { line: line.number, column });
+      }
+    }),
     // Keymap order matters - historyKeymap must come before defaultKeymap
     // so undo/redo takes precedence
     // Explicitly define undo/redo keybindings for macOS Cmd+Z / Cmd+Shift+Z

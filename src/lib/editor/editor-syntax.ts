@@ -32,6 +32,8 @@ export const openStormHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.modifier], color: 'var(--app-keyword)', fontWeight: 'bold' },
   { tag: [t.definition(t.variableName), t.function(t.variableName)], color: 'var(--app-type)' },
   { tag: t.propertyName, color: 'var(--app-type)' },
+  { tag: t.tagName, color: 'var(--app-keyword)' },
+  { tag: t.attributeName, color: 'var(--app-type)' },
   { tag: t.string, color: 'var(--app-string)' },
   { tag: t.number, color: 'var(--app-number)' },
   { tag: [t.comment, t.lineComment], color: 'var(--app-disabled-foreground)', fontStyle: 'italic' },
@@ -58,7 +60,7 @@ export function getLanguageExtension(path: string): Extension {
     case 'go': return go();
     case 'py': return python();
     case 'c': case 'cpp': case 'cc': case 'cxx': case 'h': case 'hpp': case 'hxx': return cpp();
-    case 'html': case 'htm': case 'xhtml': return htmlLang();
+    case 'html': case 'htm': case 'xhtml': case 'svg': return htmlLang();
     case 'css': case 'scss': case 'sass': case 'less': return cssLang();
     case 'json': return json();
     case 'md': case 'markdown': return markdown();
@@ -66,6 +68,7 @@ export function getLanguageExtension(path: string): Extension {
     case 'java': return java();
     case 'sql': return sql();
     case 'php': return php();
+    case 'xml': return htmlLang(); // Use HTML lang for XML as fallback
     default: return javascript();
   }
 }

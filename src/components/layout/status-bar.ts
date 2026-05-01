@@ -2,7 +2,7 @@ import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
-import { LspService, LspServerInfo, LspInstallProgress } from '../../lib/services/lsp-service.js';
+import { LspService, LspServerInfo, LspInstallProgress } from '../../lib/lsp/lsp-service.js';
 import './icon.js';
 
 @customElement('status-bar')

@@ -1,14 +1,16 @@
 /**
- * Text Viewer - CodeMirror 6 based text editor
+ * Text Viewer - CodeMirror 6 based text editor (Lit Element version)
  *
  * Wraps CodeMirror with syntax highlighting, LSP, and debugging support
  */
 
+import { html } from 'lit';
+import { customElement, property, state } from 'lit/decorators.js';
 import { EditorView, ViewUpdate, keymap, lineNumbers, highlightActiveLineGutter } from '@codemirror/view';
 import { EditorState, EditorSelection, StateEffect } from '@codemirror/state';
 import { history, historyKeymap, undo, redo, defaultKeymap } from '@codemirror/commands';
 
-import type { FileViewer, ViewerMetadata, ViewerAction } from '../types.js';
+import type { ViewerMetadata, ViewerAction } from '../types.js';
 import { getCommonExtensions } from '../../lib/editor/editor-extensions.js';
 import { getSyntaxHighlighting, getLanguageExtension, detectIndentUnit } from '../../lib/editor/editor-syntax.js';
 import { getEditorTheme } from '../../lib/editor/editor-theme.js';
@@ -37,20 +39,29 @@ import { autocompletion } from '@codemirror/autocomplete';
 import { invoke } from '@tauri-apps/api/core';
 import { dispatch } from '../../lib/types/events.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
+import { TailwindElement } from '../../tailwind-element.js';
 
-export class TextViewer implements FileViewer {
+@customElement('text-viewer')
+export class TextViewer extends TailwindElement() {
   readonly metadata: ViewerMetadata = {
     id: 'text',
     displayName: 'Text Editor',
-    supportedExtensions: ['*'], // Default fallback for text files
+    supportedExtensions: ['*'],
   };
 
+  @property({ type: String })
+  filePath = '';
+
+  @property({ type: String })
+  content = '';
+
+  @state()
+  private isDirty = false;
+
+  @state()
+  private documentVersion = 0;
+
   private editorView: EditorView | null = null;
-  private container: HTMLElement | null = null;
-  private filePath: string = '';
-  private content: string = '';
-  private isDirty: boolean = false;
-  private documentVersion: number = 0;
   private openedDocs = new Set<string>();
   private _hoverTimeout: ReturnType<typeof setTimeout> | null = null;
   private _lastHoverPos: number | null = null;
@@ -60,32 +71,30 @@ export class TextViewer implements FileViewer {
   private nextBreakpointId = 1;
 
   // Debug state
+  @state()
   private isDebugging = false;
+
+  @state()
   private currentDebugLine: number | null = null;
 
   // Event listeners
   private _boundHandleThemeChange = this.handleThemeChange.bind(this);
 
-  mount(container: HTMLElement): void {
-    this.container = container;
-    // Editor view is created in loadFile
+  connectedCallback(): void {
+    super.connectedCallback();
     document.addEventListener('theme-changed', this._boundHandleThemeChange);
   }
 
-  unmount(): void {
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
     if (this.editorView) {
       this.editorView.destroy();
       this.editorView = null;
     }
-    this.container = null;
     document.removeEventListener('theme-changed', this._boundHandleThemeChange);
   }
 
   async loadFile(path: string, content: string): Promise<void> {
-    if (!this.container) {
-      throw new Error('TextViewer not mounted');
-    }
-
     this.filePath = path;
     this.content = content;
     this.isDirty = false;
@@ -95,6 +104,19 @@ export class TextViewer implements FileViewer {
     if (this.editorView) {
       this.editorView.destroy();
       this.editorView = null;
+    }
+
+    // Clear the container content
+    const editorContainer = this.renderRoot.querySelector('#editor-container') as HTMLElement;
+    if (editorContainer) {
+      editorContainer.innerHTML = '';
+    }
+
+    await this.updateComplete;
+
+    const editorContainerAfter = this.renderRoot.querySelector('#editor-container') as HTMLElement;
+    if (!editorContainerAfter) {
+      throw new Error('Editor container not found');
     }
 
     // Detect indent unit
@@ -126,7 +148,7 @@ export class TextViewer implements FileViewer {
     // Create editor view
     this.editorView = new EditorView({
       state,
-      parent: this.container,
+      parent: editorContainerAfter,
     });
 
     // Add hover listener for LSP tooltips
@@ -163,17 +185,11 @@ export class TextViewer implements FileViewer {
   }
 
   getToolbarActions(): ViewerAction[] {
-    // Text editor doesn't add toolbar actions at viewer level
-    // (format code, etc. are handled by main.ts or editor-pane)
     return [];
   }
 
-  // Public API for external callers (mimics editor-pane API)
-
-  /**
-   * Set breakpoints for the current file
-   */
-  public setBreakpointsForFile(breakpoints: Breakpoint[]): void {
+  // Public API for breakpoint/debug support
+  setBreakpointsForFile(breakpoints: Breakpoint[]): void {
     this.breakpoints.set(this.filePath, breakpoints);
 
     if (this.editorView) {
@@ -184,10 +200,7 @@ export class TextViewer implements FileViewer {
     }
   }
 
-  /**
-   * Set the debug line highlight
-   */
-  public setDebugLine(line: number | null): void {
+  setDebugLine(line: number | null): void {
     this.currentDebugLine = line;
 
     if (this.editorView) {
@@ -201,10 +214,7 @@ export class TextViewer implements FileViewer {
     }
   }
 
-  /**
-   * Set debug mode
-   */
-  public setDebugMode(enabled: boolean): void {
+  setDebugMode(enabled: boolean): void {
     this.isDebugging = enabled;
 
     if (this.editorView) {
@@ -213,8 +223,6 @@ export class TextViewer implements FileViewer {
       });
     }
   }
-
-  // Private methods
 
   private handleUpdate(update: ViewUpdate): void {
     if (update.docChanged) {
@@ -483,8 +491,10 @@ export class TextViewer implements FileViewer {
       });
     }
   }
-}
 
-export function createTextViewer(): Promise<TextViewer> {
-  return Promise.resolve(new TextViewer());
+  render() {
+    return html`
+      <div id="editor-container" class="w-full h-full overflow-hidden"></div>
+    `;
+  }
 }

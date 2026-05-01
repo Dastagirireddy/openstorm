@@ -3,23 +3,26 @@
  *
  * This component manages the lifecycle of individual viewers and provides
  * a unified API for the rest of the application.
+ *
+ * New architecture: Uses Lit custom elements rendered declaratively
  */
 
 import { html } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import { registry } from '../../viewers/registry.js';
-import type { FileViewer, ViewerAction } from '../../viewers/types.js';
+import type { ViewerAction } from '../../viewers/types.js';
 import type { EditorTab } from '../../lib/types/file-types.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
 import { dispatch } from '../../lib/types/events.js';
+import type { TextViewer } from '../../viewers/builtin/text-viewer.js';
 
 @customElement('file-viewer-container')
 export class FileViewerContainer extends TailwindElement() {
   @property({ type: Array }) tabs: EditorTab[] = [];
   @property({ type: String }) activeTabId: string = '';
 
-  @state() private currentViewer: FileViewer | null = null;
+  @state() private viewerTag: string | null = null;
   @state() private filePath: string = '';
   @state() private content: string = '';
   @state() private toolbarActions: ViewerAction[] = [];
@@ -29,46 +32,86 @@ export class FileViewerContainer extends TailwindElement() {
   @state() private debugLine: number | null = null;
   @state() private isDebugging = false;
 
-  private viewerContainer: HTMLElement | null = null;
   private _pendingOpen: { path: string; content: string } | null = null;
+
+  // Bound event handlers for proper add/removeEventListener
+  private _boundHandleOpenFileExternal!: (e: CustomEvent<{ path: string; content: string }>) => void;
+  private _boundHandleSaveFile!: () => void;
+  private _boundHandleContentChanged!: (e: CustomEvent<{ path: string; content: string; isModified?: boolean }>) => void;
+  private _boundHandleFormatCode!: () => void;
+  private _boundHandleFormatCodeRequest!: (e: CustomEvent<{ path: string; content: string }>) => void;
+  private _boundHandleDebugSessionStarted!: () => void;
+  private _boundHandleDebugSessionEnded!: () => void;
+  private _boundHandleDebugStopped!: (e: CustomEvent) => void;
+  private _boundHandleClearEditor!: () => void;
+  private _boundHandleViewerActionsChanged!: (e: CustomEvent<{ actions: ViewerAction[] }>) => void;
 
   connectedCallback(): void {
     super.connectedCallback();
+    // Bind handlers once for proper add/removeEventListener
+    this._boundHandleOpenFileExternal = (e: CustomEvent<{ path: string; content: string }>) => this.handleOpenFileExternal(e);
+    this._boundHandleSaveFile = () => this.handleSaveFile();
+    this._boundHandleContentChanged = (e: CustomEvent<{ path: string; content: string; isModified?: boolean }>) => this.handleContentChanged(e);
+    this._boundHandleFormatCode = () => this.handleFormatCode();
+    this._boundHandleFormatCodeRequest = (e: CustomEvent<{ path: string; content: string }>) => this.handleFormatCodeRequest(e);
+    this._boundHandleDebugSessionStarted = () => this.handleDebugSessionStarted();
+    this._boundHandleDebugSessionEnded = () => this.handleDebugSessionEnded();
+    this._boundHandleDebugStopped = (e: CustomEvent) => this.handleDebugStopped(e);
+    this._boundHandleClearEditor = () => this.handleClearEditor();
+    this._boundHandleViewerActionsChanged = (e: CustomEvent<{ actions: ViewerAction[] }>) => this.handleViewerActionsChanged(e);
+
     // Listen for open-file-external events
-    document.addEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
+    document.addEventListener('open-file-external', this._boundHandleOpenFileExternal);
     // Listen for save-file events
-    document.addEventListener('save-file', this.handleSaveFile.bind(this));
-    // Listen for debug events
-    document.addEventListener('debug-session-started', this.handleDebugSessionStarted.bind(this));
-    document.addEventListener('debug-session-ended', this.handleDebugSessionEnded.bind(this));
-    document.addEventListener('debug-stopped', this.handleDebugStopped.bind(this));
+    document.addEventListener('save-file', this._boundHandleSaveFile);
+    // Listen for content-changed events from viewers and re-dispatch them
+    document.addEventListener('content-changed', this._boundHandleContentChanged);
     // Listen for format-code events
-    document.addEventListener('format-code', this.handleFormatCode.bind(this));
+    document.addEventListener('format-code', this._boundHandleFormatCode);
+    // Listen for format-code-request events for formatting
+    document.addEventListener('format-code-request', this._boundHandleFormatCodeRequest);
+    // Listen for debug events
+    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.addEventListener('debug-stopped', this._boundHandleDebugStopped);
     // Listen for clear-editor events (when all tabs are closed)
-    document.addEventListener('clear-editor', this.handleClearEditor.bind(this));
+    document.addEventListener('clear-editor', this._boundHandleClearEditor);
+    // Listen for viewer actions changed events
+    document.addEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
-    document.removeEventListener('clear-editor', this.handleClearEditor.bind(this));
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
-    }
+    document.removeEventListener('open-file-external', this._boundHandleOpenFileExternal);
+    document.removeEventListener('save-file', this._boundHandleSaveFile);
+    document.removeEventListener('content-changed', this._boundHandleContentChanged);
+    document.removeEventListener('format-code', this._boundHandleFormatCode);
+    document.removeEventListener('format-code-request', this._boundHandleFormatCodeRequest);
+    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.removeEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.removeEventListener('clear-editor', this._boundHandleClearEditor);
+    document.removeEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
   }
 
   private handleClearEditor(): void {
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
-    }
+    this.viewerTag = null;
     this.filePath = '';
     this.content = '';
     this.toolbarActions = [];
-    if (this.viewerContainer) {
-      this.viewerContainer.innerHTML = '';
-    }
+  }
+
+  private handleContentChanged(e: CustomEvent<{ path: string; content: string; isModified?: boolean }>): void {
+    // Re-dispatch the event from this element so parent components can listen to it
+    this.dispatchEvent(new CustomEvent('content-changed', {
+      detail: e.detail,
+      bubbles: true,
+      composed: true,
+    }));
+  }
+
+  private handleViewerActionsChanged(e: CustomEvent<{ actions: ViewerAction[] }>): void {
+    this.toolbarActions = e.detail.actions;
   }
 
   updated(changedProperties: Map<string, unknown>): void {
@@ -76,9 +119,6 @@ export class FileViewerContainer extends TailwindElement() {
 
     // Handle tab change
     if (changedProperties.has('activeTabId')) {
-      // Previous active tab
-      const prevTabId = changedProperties.get('activeTabId') as string;
-
       // New active tab
       if (this.activeTabId) {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
@@ -89,15 +129,19 @@ export class FileViewerContainer extends TailwindElement() {
       }
 
       // No valid tab selected - clear viewer
-      if (this.currentViewer) {
-        this.currentViewer.unmount();
-        this.currentViewer = null;
-      }
+      this.viewerTag = null;
       this.filePath = '';
       this.content = '';
       this.toolbarActions = [];
-      if (this.viewerContainer) {
-        this.viewerContainer.innerHTML = '';
+    }
+
+    // Handle case where tabs array changed but activeTabId stayed the same
+    // (e.g., clicking same file in explorer when it's already active)
+    if (changedProperties.has('tabs') && this.activeTabId) {
+      const tab = this.tabs.find(t => t.id === this.activeTabId);
+      if (tab && this.filePath === tab.path) {
+        // Same file is still active, but tabs changed - refresh content
+        this.openFile(tab.path, tab.content);
       }
     }
   }
@@ -113,20 +157,14 @@ export class FileViewerContainer extends TailwindElement() {
 
   private handleDebugSessionStarted(): void {
     this.isDebugging = true;
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(true);
-    }
+    this.getTextViewer()?.setDebugMode(true);
   }
 
   private handleDebugSessionEnded(): void {
     this.isDebugging = false;
     this.debugLine = null;
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(false);
-    }
-    if (this.currentViewer && 'setDebugLine' in this.currentViewer) {
-      (this.currentViewer as any).setDebugLine(null);
-    }
+    this.getTextViewer()?.setDebugMode(false);
+    this.getTextViewer()?.setDebugLine(null);
   }
 
   private async handleDebugStopped(e?: CustomEvent): Promise<void> {
@@ -164,8 +202,25 @@ export class FileViewerContainer extends TailwindElement() {
   }
 
   private handleFormatCode(): void {
-    // Format code is handled by the text viewer directly
+    // Dispatch format request to the current viewer
     dispatch('format-code-request', { path: this.filePath, content: this.content });
+  }
+
+  private handleFormatCodeRequest(e: CustomEvent<{ path: string; content: string }>): void {
+    if (e.detail.path !== this.filePath) return;
+
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    if (viewer?.formatDocument) {
+      viewer.formatDocument();
+    }
+  }
+
+  /**
+   * Get reference to text viewer if that's what's currently rendered
+   */
+  private getTextViewer(): TextViewer | null {
+    if (this.viewerTag !== 'text-viewer') return null;
+    return this.renderRoot.querySelector('text-viewer');
   }
 
   /**
@@ -173,38 +228,34 @@ export class FileViewerContainer extends TailwindElement() {
    */
   async openFile(path: string, content: string): Promise<void> {
     const ext = getFileExtension(path);
-    const viewer = await registry.getViewerForExtension(ext);
+    const viewerTag = registry.getViewerTagForExtension(ext);
 
-    if (!viewer) {
+    if (!viewerTag) {
       console.error(`[FileViewerContainer] No viewer found for extension: ${ext}`);
       return;
-    }
-
-    // Unmount previous viewer
-    if (this.currentViewer) {
-      this.currentViewer.unmount();
-      this.currentViewer = null;
     }
 
     // Store file info
     this.filePath = path;
     this.content = content;
 
-    // Mount new viewer
-    this.currentViewer = viewer;
+    // Force re-render by clearing viewerTag first, then setting it
+    // This ensures Lit re-renders even when opening same file type
+    this.viewerTag = null;
+    this.requestUpdate();
     await this.updateComplete;
 
-    // Get viewer container element
-    this.viewerContainer = this.renderRoot.querySelector('#viewer-container');
-    if (!this.viewerContainer) {
-      throw new Error('Viewer container not found');
+    // Set viewer type - Lit will render the appropriate custom element
+    this.viewerTag = viewerTag;
+    this.requestUpdate();
+    await this.updateComplete;
+
+    // Get the viewer element and load the file
+    const viewer = this.renderRoot.querySelector(viewerTag) as any;
+    if (!viewer) {
+      throw new Error(`Viewer element ${viewerTag} not found`);
     }
 
-    // Clear container
-    this.viewerContainer.innerHTML = '';
-
-    // Mount and load file
-    viewer.mount(this.viewerContainer);
     await viewer.loadFile(path, content);
 
     // Get toolbar actions from viewer
@@ -214,7 +265,7 @@ export class FileViewerContainer extends TailwindElement() {
     if ('setBreakpointsForFile' in viewer) {
       // Restore breakpoints for this file if any
       const fileBreakpoints = this.breakpoints.get(path) || [];
-      (viewer as any).setBreakpointsForFile(fileBreakpoints);
+      viewer.setBreakpointsForFile(fileBreakpoints);
     }
   }
 
@@ -222,13 +273,14 @@ export class FileViewerContainer extends TailwindElement() {
    * Save the current file
    */
   async saveFile(): Promise<void> {
-    if (!this.currentViewer?.saveFile) {
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    if (!viewer?.saveFile) {
       console.warn('[FileViewerContainer] Viewer does not support saving');
       return;
     }
 
     try {
-      const newContent = await this.currentViewer.saveFile();
+      const newContent = await viewer.saveFile();
       this.content = newContent;
       dispatch('file-saved', { path: this.filePath, content: newContent });
     } catch (error) {
@@ -240,7 +292,8 @@ export class FileViewerContainer extends TailwindElement() {
    * Check if current file is modified
    */
   isDirtyState(): boolean {
-    return this.currentViewer?.isDirtyState() ?? false;
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    return viewer?.isDirtyState() ?? false;
   }
 
   /**
@@ -251,8 +304,9 @@ export class FileViewerContainer extends TailwindElement() {
       this.breakpoints.set(this.filePath, breakpoints);
     }
 
-    if (this.currentViewer && 'setBreakpointsForFile' in this.currentViewer) {
-      (this.currentViewer as any).setBreakpointsForFile(breakpoints);
+    const viewer = this.getTextViewer();
+    if (viewer) {
+      viewer.setBreakpointsForFile(breakpoints);
     }
   }
 
@@ -261,10 +315,7 @@ export class FileViewerContainer extends TailwindElement() {
    */
   setDebugLine(line: number | null): void {
     this.debugLine = line;
-
-    if (this.currentViewer && 'setDebugLine' in this.currentViewer) {
-      (this.currentViewer as any).setDebugLine(line);
-    }
+    this.getTextViewer()?.setDebugLine(line);
   }
 
   /**
@@ -272,10 +323,7 @@ export class FileViewerContainer extends TailwindElement() {
    */
   setDebugMode(enabled: boolean): void {
     this.isDebugging = enabled;
-
-    if (this.currentViewer && 'setDebugMode' in this.currentViewer) {
-      (this.currentViewer as any).setDebugMode(enabled);
-    }
+    this.getTextViewer()?.setDebugMode(enabled);
   }
 
   /**
@@ -318,11 +366,17 @@ export class FileViewerContainer extends TailwindElement() {
               `)}
             </div>`
           : ''}
-        <div
-          id="viewer-container"
-          class="flex-1 overflow-hidden"
-          style="border-top-color: var(--app-border);"
-        ></div>
+        <div class="flex-1 overflow-hidden relative">
+          ${this.viewerTag === 'text-viewer'
+            ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></text-viewer>`
+            : this.viewerTag === 'image-viewer'
+              ? html`<image-viewer key=${this.filePath} .filePath=${this.filePath}></image-viewer>`
+              : this.viewerTag === 'svg-viewer'
+                ? html`<svg-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></svg-viewer>`
+                : this.viewerTag === 'markdown-viewer'
+                  ? html`<markdown-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></markdown-viewer>`
+                  : ''}
+        </div>
       </div>
     `;
   }
