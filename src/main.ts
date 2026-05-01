@@ -199,6 +199,15 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   private async setupFileChangeHandler(): Promise<void> {
+    // Listen for file-saved events from viewers to update tab modified state
+    document.addEventListener("file-saved", ((e: CustomEvent<{ path: string; content: string }>) => {
+      const { path } = e.detail;
+      this.tabs = this.tabs.map((t) =>
+        t.path === path ? { ...t, modified: false } : t,
+      );
+      this.saveStatus = "saved";
+    }) as EventListener);
+
     // Listen for file system changes from backend
     listen("file-change", (event: any) => {
       dispatch("refresh-explorer", event.payload);
@@ -499,7 +508,14 @@ export class OpenStormApp extends TailwindElement() {
 
   private setupKeyboardShortcuts(): void {
     document.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "p") {
+      // Ctrl+Shift+P for format document
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        this.formatActiveFile();
+        return;
+      }
+      // Ctrl+P for quick search (file search)
+      if ((e.ctrlKey || e.metaKey) && e.key === "p" && !e.shiftKey) {
         e.preventDefault();
         dispatch("quick-search");
       }
@@ -515,11 +531,6 @@ export class OpenStormApp extends TailwindElement() {
         e.preventDefault();
         this.toggleTerminal();
       }
-      // Alt+Shift+F or Option+Shift+F for format code
-      if ((e.altKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
-        e.preventDefault();
-        this.formatActiveFile();
-      }
     });
   }
 
@@ -529,26 +540,16 @@ export class OpenStormApp extends TailwindElement() {
   }
 
   private async saveActiveFile(): Promise<void> {
-    // Delegate to editor-pane which has the content
+    // Delegate to file-viewer-container which will call the viewer's saveFile() method
+    // This ensures SVG, Markdown, and other viewers can save their editor content correctly
     const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
     if (!activeTab) return;
 
     this.saveStatus = "saving";
-    try {
-      await invoke("write_file", {
-        path: activeTab.path,
-        content: activeTab.content,
-      });
-      this.saveStatus = "saved";
-      this.tabs = this.tabs.map((t) =>
-        t.path === activeTab.path ? { ...t, modified: false } : t,
-      );
-      // Notify editor-pane to update saved content
-      dispatch('file-saved', { path: activeTab.path, content: activeTab.content });
-    } catch (error) {
-      console.error("Failed to save file:", error);
-      this.saveStatus = "error";
-    }
+    // Dispatch save-file event to let the viewer handle the save
+    dispatch('save-file');
+    // The viewer will dispatch file-saved event when complete
+    // saveStatus will be updated by the viewer's response
   }
 
   private toggleTerminal(): void {

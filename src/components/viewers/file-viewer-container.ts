@@ -40,12 +40,16 @@ export class FileViewerContainer extends TailwindElement() {
     document.addEventListener('open-file-external', ((e: Event) => this.handleOpenFileExternal(e as CustomEvent<{ path: string; content: string }>)).bind(this));
     // Listen for save-file events
     document.addEventListener('save-file', this.handleSaveFile.bind(this));
+    // Listen for content-changed events from viewers and re-dispatch them
+    document.addEventListener('content-changed', this.handleContentChanged.bind(this));
+    // Listen for format-code events
+    document.addEventListener('format-code', this.handleFormatCode.bind(this));
+    // Listen for format-code-request events for formatting
+    document.addEventListener('format-code-request', this.handleFormatCodeRequest.bind(this));
     // Listen for debug events
     document.addEventListener('debug-session-started', this.handleDebugSessionStarted.bind(this));
     document.addEventListener('debug-session-ended', this.handleDebugSessionEnded.bind(this));
     document.addEventListener('debug-stopped', ((e: Event) => this.handleDebugStopped(e as CustomEvent)).bind(this));
-    // Listen for format-code events
-    document.addEventListener('format-code', this.handleFormatCode.bind(this));
     // Listen for clear-editor events (when all tabs are closed)
     document.addEventListener('clear-editor', this.handleClearEditor.bind(this));
     // Listen for viewer actions changed events
@@ -55,6 +59,8 @@ export class FileViewerContainer extends TailwindElement() {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('open-file-external', this.handleOpenFileExternal.bind(this));
+    document.removeEventListener('content-changed', this.handleContentChanged.bind(this));
+    document.removeEventListener('format-code-request', this.handleFormatCodeRequest.bind(this));
     document.removeEventListener('clear-editor', this.handleClearEditor.bind(this));
     document.removeEventListener('viewer-actions-changed', this.handleViewerActionsChanged.bind(this));
   }
@@ -64,6 +70,15 @@ export class FileViewerContainer extends TailwindElement() {
     this.filePath = '';
     this.content = '';
     this.toolbarActions = [];
+  }
+
+  private handleContentChanged(e: CustomEvent<{ path: string; content: string; isModified?: boolean }>): void {
+    // Re-dispatch the event from this element so parent components can listen to it
+    this.dispatchEvent(new CustomEvent('content-changed', {
+      detail: e.detail,
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   private handleViewerActionsChanged(e: CustomEvent<{ actions: ViewerAction[] }>): void {
@@ -148,8 +163,17 @@ export class FileViewerContainer extends TailwindElement() {
   }
 
   private handleFormatCode(): void {
-    // Format code is handled by the text viewer directly
+    // Dispatch format request to the current viewer
     dispatch('format-code-request', { path: this.filePath, content: this.content });
+  }
+
+  private handleFormatCodeRequest(e: CustomEvent<{ path: string; content: string }>): void {
+    if (e.detail.path !== this.filePath) return;
+
+    const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
+    if (viewer?.formatDocument) {
+      viewer.formatDocument();
+    }
   }
 
   /**

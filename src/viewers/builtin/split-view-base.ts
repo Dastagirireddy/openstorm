@@ -15,6 +15,7 @@ import { history, historyKeymap, undo, redo, defaultKeymap, indentMore } from '@
 import { lineNumbers, highlightActiveLine, drawSelection, dropCursor, keymap } from '@codemirror/view';
 import { indentUnit, bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { invoke } from '@tauri-apps/api/core';
 
 import type { ViewerMetadata, ViewerAction } from '../types.js';
 import { detectIndentUnit } from '../../lib/editor/editor-syntax.js';
@@ -22,6 +23,7 @@ import { getEditorTheme } from '../../lib/editor/editor-theme.js';
 import { openStormHighlight } from '../../lib/editor/editor-syntax.js';
 import { dispatch } from '../../lib/types/events.js';
 import { TailwindElement } from '../../tailwind-element.js';
+import { formatCode } from '../../lib/utils/formatter.js';
 
 export type ViewMode = 'split' | 'preview' | 'code';
 
@@ -56,6 +58,16 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
   private isResizing = false;
   private resizeStartX = 0;
   private resizeStartRatio = 0;
+  private autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly AUTO_SAVE_DELAY = 1000; // 1 second after typing stops
+
+  // Bound resize handlers
+  private _boundStartResize = this._startResize.bind(this);
+  private _boundResize = this._doResize.bind(this);
+  private _boundStopResize = this._stopResize.bind(this);
+  private _resizeHandle: HTMLElement | null = null;
+  private _codePanel: HTMLElement | null = null;
+  private _previewPanel: HTMLElement | null = null;
 
   private options: SplitViewOptions;
 
@@ -116,42 +128,104 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
    * Setup resize handle
    */
   protected setupResizeHandle(): void {
+    // Wait for DOM to be ready
+    if (!this.renderRoot.querySelector('#resize-handle')) {
+      console.log('[SplitViewViewerBase] Resize handle not found, waiting for updateComplete...');
+      this.updateComplete.then(() => this.setupResizeHandle());
+      return;
+    }
+
+    this._resizeHandle = this.renderRoot.querySelector('#resize-handle') as HTMLElement;
+    this._codePanel = this.renderRoot.querySelector('#code-panel') as HTMLElement;
+    this._previewPanel = this.renderRoot.querySelector('#preview-panel') as HTMLElement;
+
+    if (!this._resizeHandle) {
+      console.warn('[SplitViewViewerBase] Resize handle element not found');
+      return;
+    }
+    if (!this._codePanel) {
+      console.warn('[SplitViewViewerBase] Code panel element not found');
+      return;
+    }
+    if (!this._previewPanel) {
+      console.warn('[SplitViewViewerBase] Preview panel element not found');
+      return;
+    }
+
+    console.log('[SplitViewViewerBase] Resize handle setup successful');
+    console.log('[SplitViewViewerBase] Handle:', this._resizeHandle, 'Code panel:', this._codePanel, 'Preview panel:', this._previewPanel);
+
+    // Remove any existing listeners to avoid duplicates
+    this._resizeHandle.removeEventListener('mousedown', this._boundStartResize);
+    document.removeEventListener('mousemove', this._boundResize);
+    document.removeEventListener('mouseup', this._boundStopResize);
+
+    // Add event listeners - use capture phase to ensure we get the event
+    this._resizeHandle.addEventListener('mousedown', this._boundStartResize, { capture: true });
+    document.addEventListener('mousemove', this._boundResize, { capture: true });
+    document.addEventListener('mouseup', this._boundStopResize, { capture: true });
+
+    console.log('[SplitViewViewerBase] Event listeners attached');
+  }
+
+  private _startResize(e: MouseEvent): void {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('[SplitViewViewerBase] Resize started at', e.clientX, 'button:', e.button);
+    this.isResizing = true;
+    this.resizeStartX = e.clientX;
+    this.resizeStartRatio = this.splitRatio;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    if (this._resizeHandle) {
+      this._resizeHandle.style.backgroundColor = 'var(--app-indigo)';
+    }
+  }
+
+  private _doResize(e: MouseEvent): void {
+    if (!this.isResizing) return;
+    if (!this._codePanel || !this._previewPanel) return;
+
+    const mainArea = this.renderRoot.querySelector('#split-main-area') as HTMLElement;
+    if (!mainArea) {
+      console.warn('[SplitViewViewerBase] Main area not found during resize');
+      return;
+    }
+
+    const mainRect = mainArea.getBoundingClientRect();
+    const deltaX = e.clientX - this.resizeStartX;
+    const newRatio = this.resizeStartRatio + (deltaX / mainRect.width) * 100;
+    this.splitRatio = Math.max(20, Math.min(80, newRatio));
+
+    console.log('[SplitViewViewerBase] Resizing: deltaX=', deltaX, 'newRatio=', this.splitRatio);
+
+    // Update panel widths during resize for smooth visual feedback
+    this._codePanel.style.width = `${this.splitRatio}%`;
+    this._previewPanel.style.width = `${100 - this.splitRatio}%`;
+  }
+
+  private _stopResize(): void {
+    console.log('[SplitViewViewerBase] Resize stopped');
+    this.isResizing = false;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    if (this._resizeHandle) {
+      this._resizeHandle.style.backgroundColor = '';
+    }
+  }
+
+  /**
+   * Setup double-click to reset split ratio
+   */
+  protected setupResetOnDoubleClick(): void {
     const handle = this.renderRoot.querySelector('#resize-handle') as HTMLElement;
-    const codePanel = this.renderRoot.querySelector('#code-panel') as HTMLElement;
-    const previewPanel = this.renderRoot.querySelector('#preview-panel') as HTMLElement;
-
-    if (!handle || !codePanel || !previewPanel) return;
-
-    const startResize = (e: MouseEvent) => {
-      e.preventDefault();
-      this.isResizing = true;
-      this.resizeStartX = e.clientX;
-      this.resizeStartRatio = this.splitRatio;
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-    };
-
-    const resize = (e: MouseEvent) => {
-      if (!this.isResizing) return;
-
-      const mainArea = this.renderRoot.querySelector('#split-main-area') as HTMLElement;
-      if (!mainArea) return;
-
-      const mainRect = mainArea.getBoundingClientRect();
-      const deltaX = e.clientX - this.resizeStartX;
-      const newRatio = this.resizeStartRatio + (deltaX / mainRect.width) * 100;
-      this.splitRatio = Math.max(20, Math.min(80, newRatio));
-    };
-
-    const stopResize = () => {
-      this.isResizing = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    handle.addEventListener('mousedown', startResize);
-    document.addEventListener('mousemove', resize);
-    document.addEventListener('mouseup', stopResize);
+    if (handle) {
+      handle.addEventListener('dblclick', () => {
+        console.log('[SplitViewViewerBase] Double-click to reset');
+        this.splitRatio = 50;
+        this.applyViewModeStyles();
+      });
+    }
   }
 
   /**
@@ -281,6 +355,75 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
         content: newContent,
         isModified: true,
       });
+
+      // Schedule auto-save
+      this.scheduleAutoSave(newContent);
+    }
+  }
+
+  /**
+   * Schedule auto-save after user stops typing
+   */
+  private scheduleAutoSave(content: string): void {
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+    this.autoSaveTimer = setTimeout(async () => {
+      if (this.isDirty && this.filePath) {
+        try {
+          await invoke('write_file', { path: this.filePath, content });
+          this.isDirty = false;
+          dispatch('content-changed', {
+            path: this.filePath,
+            content,
+            isModified: false,
+          });
+          dispatch('auto-saved', { path: this.filePath, content });
+        } catch (error) {
+          console.error('[SplitViewViewerBase] Auto-save failed:', error);
+        }
+      }
+    }, this.AUTO_SAVE_DELAY);
+  }
+
+  /**
+   * Cleanup auto-save timer on disconnect
+   */
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.autoSaveTimer) {
+      clearTimeout(this.autoSaveTimer);
+    }
+  }
+
+  /**
+   * Format document content
+   */
+  async formatDocument(): Promise<void> {
+    if (!this.editorView || !this.filePath) return;
+
+    const ext = this.filePath.split('.').pop() || '';
+    const content = this.editorView.state.doc.toString();
+
+    const formatted = await formatCode(ext, content);
+
+    if (formatted && formatted !== content) {
+      this.editorView.dispatch({
+        changes: {
+          from: 0,
+          to: content.length,
+          insert: formatted,
+        },
+      });
+      dispatch('notification', {
+        type: 'success',
+        message: 'File formatted',
+      });
+    } else {
+      dispatch('notification', {
+        type: 'info',
+        message: 'No formatting changes applied',
+      });
     }
   }
 
@@ -322,6 +465,7 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
 
     // Setup resize handle after editor is created
     this.setupResizeHandle();
+    this.setupResetOnDoubleClick();
   }
 
   render() {

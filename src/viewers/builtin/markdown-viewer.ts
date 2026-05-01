@@ -17,8 +17,8 @@ import MarkdownIt from 'markdown-it';
 import markdownItKatex from '@traptitech/markdown-it-katex';
 import mermaid from 'mermaid';
 import hljs from 'highlight.js';
-import darkTheme from 'highlight.js/styles/github-dark.css?inline';
-import lightTheme from 'highlight.js/styles/github.css?inline';
+import darkTheme from 'highlight.js/styles/atom-one-dark.css?inline';
+import lightTheme from 'highlight.js/styles/atom-one-light.css?inline';
 
 interface MarkdownMetadata {
   wordCount: number;
@@ -245,8 +245,13 @@ export class MarkdownViewer extends SplitViewViewerBase {
     // Create editor view
     await this.createEditorView(content);
 
-    // Apply view mode styles
+    // Apply view mode styles (this triggers another render)
     this.applyViewModeStyles();
+
+    // Wait for applyViewModeStyles to complete, then setup resize
+    await this.updateComplete;
+    this.setupResizeHandle();
+    this.setupResetOnDoubleClick();
 
     // Ensure preview element has correct darkMode value
     this.updatePreviewMode();
@@ -264,6 +269,13 @@ export class MarkdownViewer extends SplitViewViewerBase {
 
     // Update preview
     this.updatePreview();
+
+    // Dispatch content-changed with isModified: false to update tab state
+    dispatch('content-changed', {
+      path: this.filePath,
+      content,
+      isModified: false,
+    });
 
     return content;
   }

@@ -57,8 +57,13 @@ export class SvgViewer extends SplitViewViewerBase {
     // Create editor view
     await this.createEditorView(content);
 
-    // Apply view mode styles
+    // Apply view mode styles (this triggers another render)
     this.applyViewModeStyles();
+
+    // Wait for applyViewModeStyles to complete, then setup resize
+    await this.updateComplete;
+    this.setupResizeHandle();
+    this.setupResetOnDoubleClick();
   }
 
   async saveFile(): Promise<string> {
@@ -73,6 +78,13 @@ export class SvgViewer extends SplitViewViewerBase {
 
     // Update preview
     this.updatePreview();
+
+    // Dispatch content-changed with isModified: false to update tab state
+    dispatch('content-changed', {
+      path: this.filePath,
+      content,
+      isModified: false,
+    });
 
     return content;
   }
