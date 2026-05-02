@@ -149,7 +149,7 @@ export class RenameDialog extends TailwindElement() {
             <h3 class="text-[14px] font-semibold mb-4" style="color: var(--app-foreground);">Rename</h3>
             <input
               type="text"
-              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:ring-2 focus:border-transparent"
+              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent"
               style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
               value="${this.newName}"
               @input=${this.handleInput}
@@ -175,7 +175,7 @@ export class RenameDialog extends TailwindElement() {
               Cancel
             </button>
             <button
-              class="px-4 py-1.5 text-[13px] text-white bg-[#5b47c9] hover:bg-[#4a37b5] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="px-4 py-1.5 text-[13px] text-white bg-[var(--brand-primary)] hover:bg-[var(--brand-primary-hover)] rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               @click=${this.handleConfirm}
               ?disabled=${!!this.error || !this.newName.trim()}
             >

@@ -49,6 +49,7 @@ addCollection(lucide);
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
 import "./components/navigation/activity-bar.js";
+import "./components/navigation/right-activity-bar.js";
 import "./components/explorer/project-explorer.js";
 import "./components/viewers/file-viewer-container.js";
 import "./components/editor/editor-tab-bar.js";
@@ -65,11 +66,18 @@ import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
+import "./components/panels/data-sources/data-sources-panel.js";
+import "./components/panels/data-sources/data-source-list.js";
+import "./components/panels/data-sources/data-source-type-picker.js";
+import "./components/panels/data-sources/database-vendor-picker.js";
+import "./components/panels/data-sources/data-source-empty-state.js";
+import "./components/panels/data-sources/data-source-forms/database-connection-form.js";
+import "./components/panels/data-sources/data-source-forms/sqlite-connection-form.js";
 
 // Lazy-loaded components (loaded on demand via lazy-loader.ts)
 // Terminal, Search, Settings, Git, Commit, Pull Requests, App Console, Debug panels
 
-import type { EditorTab, SaveStatus, ActivityItem } from "./lib/types/file-types.js";
+import type { EditorTab, SaveStatus, ActivityItem, RightActivityItem } from "./lib/types/file-types.js";
 
 @customElement("openstorm-app")
 export class OpenStormApp extends TailwindElement() {
@@ -79,6 +87,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private saveStatus: SaveStatus = "saved";
   @state() private tabLimit = 10;
   @state() private activeActivity: ActivityItem = "explorer";
+  @state() private activeRightActivity: RightActivityItem = "";
   @state() private terminalCreated = false;
   @state() private sidebarWidth = 250;
   @state() private terminalHeight = 200;
@@ -651,6 +660,10 @@ export class OpenStormApp extends TailwindElement() {
     }
   };
 
+  private handleRightActivityChange = (e: CustomEvent<{ item: RightActivityItem }>): void => {
+    this.activeRightActivity = e.detail.item;
+  };
+
   private handleCloseSettings = (): void => {
     this.activeActivity = "explorer";
   };
@@ -849,6 +862,7 @@ export class OpenStormApp extends TailwindElement() {
     const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
     const showDebugPanel = this.isDebugging;
     const showAppConsole = !isSingleFileMode && this.activeStatusBarPanel === 'app-console';
+    const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
@@ -886,6 +900,70 @@ export class OpenStormApp extends TailwindElement() {
               ${showSettings
                 ? html`
                     <settings-panel class="flex-1"></settings-panel>
+                  `
+                : showDatabase
+                ? html`
+                    <!-- Explorer + Editor + Database Panel (right side) -->
+                    <div class="flex flex-1 overflow-hidden">
+                      <resizable-container
+                        direction="horizontal"
+                        class="flex-1"
+                        .initialSize=${this.sidebarWidth}
+                        .minSize=${150}
+                        .maxSize=${600}
+                        @size-change=${(e: CustomEvent<{ size: number }>) => {
+                          this.sidebarWidth = e.detail.size;
+                        }}
+                      >
+                        <div slot="first" class="h-full w-full">
+                          <project-explorer
+                            class="flex flex-col overflow-hidden border-r h-full"
+                            style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
+                            .projectPath=${this.projectPath}
+                            .selectedPath=${this.activeFilePath}
+                            @file-selected=${this.handleFileSelect}
+                            @open-folder=${() => dispatch("open-folder")}
+                          >
+                          </project-explorer>
+                        </div>
+                        <div
+                          slot="second"
+                          class="flex flex-col overflow-hidden min-w-0 w-full h-full"
+                          style="background-color: var(--app-bg);"
+                        >
+                          <!-- Tab Bar -->
+                          ${this.tabs.length > 0
+                            ? html`
+                                <tab-bar
+                                  class="h-[35px] shrink-0"
+                                  .tabs=${this.tabs}
+                                  .activeTab=${this.activeTabId}
+                                  @tab-select=${this.handleTabSelect}
+                                  @tab-close=${this.handleTabClose}
+                                  @tab-pin-toggle=${this.handleTabPinToggle}
+                                >
+                                </tab-bar>
+                              `
+                            : ""}
+                          <!-- File Viewer Container -->
+                          <file-viewer-container
+                            id="editor"
+                            class="flex-1 flex flex-col overflow-hidden"
+                            .tabs=${this.tabs}
+                            .activeTabId=${this.activeTabId}
+                            @folder-opened=${this.handleFolderOpened}
+                            @content-changed=${this.handleContentChanged}
+                            @open-folder=${() => dispatch("open-folder")}
+                            @quick-search=${() => dispatch("quick-search")}
+                          >
+                          </file-viewer-container>
+                        </div>
+                      </resizable-container>
+                      <!-- Data Sources Panel on the right -->
+                      <div class="shrink-0 border-l" style="width: 400px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                        <data-sources-panel class="h-full w-full"></data-sources-panel>
+                      </div>
+                    </div>
                   `
                 : showExplorer
                 ? html`
@@ -1008,6 +1086,57 @@ export class OpenStormApp extends TailwindElement() {
                       </div>
                     </resizable-container>
                   `
+                : showDatabase
+                ? html`
+                    <!-- Editor + Data Sources Panel (right side) -->
+                    <resizable-container
+                      direction="horizontal"
+                      class="flex-1"
+                      .initialSize=${400}
+                      .minSize=${200}
+                      .maxSize=${800}
+                      @size-change=${(e: CustomEvent<{ size: number }>) => {
+                        // Data sources panel width change
+                      }}
+                    >
+                      <div
+                        slot="first"
+                        class="flex flex-col flex-1 overflow-hidden h-full w-full"
+                        style="background-color: var(--app-bg);"
+                      >
+                        ${this.tabs.length > 0
+                          ? html`
+                              <tab-bar
+                                class="h-[35px] shrink-0"
+                                .tabs=${this.tabs}
+                                .activeTab=${this.activeTabId}
+                                @tab-select=${this.handleTabSelect}
+                                @tab-close=${this.handleTabClose}
+                                @tab-pin-toggle=${this.handleTabPinToggle}
+                              >
+                              </tab-bar>
+                            `
+                          : ""}
+                        <file-viewer-container
+                          id="editor"
+                          class="flex-1 flex flex-col overflow-hidden"
+                          .tabs=${this.tabs}
+                          .activeTabId=${this.activeTabId}
+                          @folder-opened=${this.handleFolderOpened}
+                          @content-changed=${this.handleContentChanged}
+                          @open-folder=${() => dispatch("open-folder")}
+                          @quick-search=${() => dispatch("quick-search")}
+                        >
+                        </file-viewer-container>
+                      </div>
+                      <div slot="second" class="h-full w-full">
+                        <data-sources-panel
+                          class="flex flex-col overflow-hidden border-l h-full"
+                          style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                        </data-sources-panel>
+                      </div>
+                    </resizable-container>
+                  `
                 : html`
                     <!-- Editor only (explorer hidden or single-file mode) -->
                     <div
@@ -1126,6 +1255,17 @@ export class OpenStormApp extends TailwindElement() {
               .showConsoleNotification=${this.showConsoleNotification}>
             </status-bar>
           </div>
+          <!-- Right Activity Bar (hidden in single-file mode) -->
+          ${!isSingleFileMode
+            ? html`
+                <right-activity-bar
+                  class="shrink-0"
+                  .activeItem=${this.activeRightActivity}
+                  @item-change=${this.handleRightActivityChange}
+                >
+                </right-activity-bar>
+              `
+            : ""}
         </div>
 
         <!-- Search Overlay -->

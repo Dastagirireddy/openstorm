@@ -204,7 +204,7 @@ export class AppConsolePanel extends TailwindElement() {
             <iconify-icon icon="mdi:magnify" width="14" style="color: var(--app-disabled-foreground);"></iconify-icon>
             <input
               type="text"
-              class="flex-1 px-1 py-0.5 text-[11px] border-none bg-transparent outline-none"
+              class="flex-1 px-1 py-0.5 text-[11px] border-none bg-transparent outline-none focus:ring-1 focus:ring-[var(--brand-primary)] rounded"
               style="color: var(--app-foreground);"
               placeholder="Search console output..."
               .value=${this.consoleSearchQuery}

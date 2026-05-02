@@ -3,11 +3,22 @@
 //! This module provides a single source of truth for all configuration values
 //! that were previously hardcoded throughout the codebase.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use directories::ProjectDirs;
 
 /// Path configuration for OpenStorm
 #[derive(Debug, Clone)]
 pub struct PathConfig {
+    // Global config (user-wide settings, connections)
+    /// Global config directory (default: platform-specific)
+    /// - macOS: ~/Library/Application Support/OpenStorm/
+    /// - Linux: ~/.config/openstorm/
+    /// - Windows: %APPDATA%/OpenStorm/
+    pub global_config_dir: PathBuf,
+    /// Global connections storage (default: global_config_dir/connections/)
+    pub global_connections_dir: PathBuf,
+
+    // Legacy cache dir for adapters, LSP servers, templates
     /// Adapter storage directory (default: ~/.openstorm/adapters)
     pub adapter_dir: PathBuf,
     /// LSP server storage directory (default: ~/.openstorm/lsp-servers)
@@ -16,24 +27,64 @@ pub struct PathConfig {
     pub template_dir: PathBuf,
     /// Debug output directory for temporary binaries (default: ./.openstorm/debug)
     pub debug_output_dir: PathBuf,
+
+    // Project-specific (per-workspace)
+    /// Project config directory name (default: .openstorm)
+    pub project_config_dir_name: &'static str,
 }
 
 impl PathConfig {
     pub fn new() -> Self {
+        // Use directories crate for platform-specific paths
+        let proj_dirs = ProjectDirs::from("com", "OpenStorm", "OpenStorm")
+            .expect("no valid home directory");
+
+        let global_config_dir = proj_dirs.config_dir().to_path_buf();
+        let global_connections_dir = global_config_dir.join("connections");
+
+        // Legacy cache dir (for adapters, LSP, templates)
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         let cache_dir = home.join(".openstorm");
 
         Self {
+            global_config_dir,
+            global_connections_dir,
             adapter_dir: cache_dir.join("adapters"),
             lsp_server_dir: cache_dir.join("lsp-servers"),
             template_dir: cache_dir.join("templates"),
             debug_output_dir: PathBuf::from(".openstorm/debug"),
+            project_config_dir_name: ".openstorm",
         }
+    }
+
+    /// Get project-specific config directory for a given project path
+    pub fn project_config_dir(&self, project_root: &Path) -> PathBuf {
+        project_root.join(self.project_config_dir_name)
+    }
+
+    /// Get project-specific connections file path
+    pub fn project_connections_file(&self, project_root: &Path) -> PathBuf {
+        self.project_config_dir(project_root).join("connections.json")
+    }
+
+    /// Get global connections file path
+    pub fn global_connections_file(&self) -> PathBuf {
+        self.global_connections_dir.join("global.json")
+    }
+
+    /// Get recent projects file path
+    pub fn recent_projects_file(&self) -> PathBuf {
+        self.global_config_dir.join("recent_projects.json")
     }
 
 
     /// Ensure all directories exist
     pub fn create_directories(&self) -> std::io::Result<()> {
+        // Global config directories
+        std::fs::create_dir_all(&self.global_config_dir)?;
+        std::fs::create_dir_all(&self.global_connections_dir)?;
+
+        // Legacy cache directories
         std::fs::create_dir_all(&self.adapter_dir)?;
         std::fs::create_dir_all(&self.lsp_server_dir)?;
         std::fs::create_dir_all(&self.template_dir)?;

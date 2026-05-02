@@ -152,7 +152,7 @@ export class SearchOverlay extends TailwindElement() {
             id="search-input"
             type="text"
             placeholder="Search files... (type to search)"
-            class="flex-1 bg-transparent text-[14px] outline-none"
+            class="flex-1 bg-transparent text-[14px] outline-none focus:ring-1 focus:ring-[var(--brand-primary)] rounded px-2 py-1"
             style="color: var(--app-foreground);"
             .value=${this.query}
             @input=${this._handleInput}/>

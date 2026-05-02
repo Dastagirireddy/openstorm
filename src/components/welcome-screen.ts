@@ -322,7 +322,7 @@ export class WelcomeScreen extends TailwindElement() {
                   <input
                     id="project-filter"
                     type="text"
-                    class="w-full pl-9 pr-8 py-2 text-[13px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    class="w-full pl-9 pr-8 py-2 text-[13px] border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent"
                     style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
                     placeholder="Filter projects... (press / to focus)"
                     .value=${this.filterText}

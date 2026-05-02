@@ -368,7 +368,7 @@ export class DebugVariablesPanel extends TailwindElement() {
         <span style="color: var(--app-foreground);">Variables</span>
         <div class="flex items-center gap-2 max-w-[200px] flex-1">
           <input type="text"
-                 class="flex-1 px-2 py-0.5 text-xs border rounded outline-none focus:border-indigo-500 font-sans"
+                 class="flex-1 px-2 py-0.5 text-xs border rounded outline-none focus:border-[var(--brand-primary)] focus:ring-1 focus:ring-[var(--brand-primary)] font-sans"
                  style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-border);"
                  placeholder="Filter variables..."
                  .value=${this.variableFilter}
