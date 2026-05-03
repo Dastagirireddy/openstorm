@@ -44,6 +44,11 @@ export type ActivityItem =
   | 'settings';
 
 /**
+ * Right activity bar items
+ */
+export type RightActivityItem = 'database' | '';
+
+/**
  * Save status states
  */
 export type SaveStatus = 'saved' | 'saving' | 'unsaved' | 'error';

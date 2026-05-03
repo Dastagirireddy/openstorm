@@ -149,7 +149,7 @@ export class ThemePalette extends TailwindElement() {
               id="theme-input"
               type="text"
               placeholder="Select theme... (type to filter)"
-              class="flex-1 bg-transparent text-[14px] outline-none"
+              class="flex-1 bg-transparent text-[14px] outline-none focus:ring-1 focus:ring-[var(--brand-primary)] rounded px-2 py-1"
               style="color: var(--app-foreground);"
               .value=${this.query}
               @input=${this._handleInput}/>

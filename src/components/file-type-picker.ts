@@ -154,7 +154,8 @@ export class FileTypePicker extends TailwindElement() {
             <input
               ${ref => { this.searchInput = ref as HTMLInputElement; }}
               type="text"
-              class="w-full px-2 py-1 text-[12px] border border-[#c0c0c0] rounded focus:outline-none focus:ring-2 focus:ring-[#5b47c9] focus:border-transparent"
+              class="w-full px-2 py-1 text-[12px] border rounded focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent"
+              style="border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
               placeholder="Search..."
               value="${this.searchQuery}"
               @input=${(e: Event) => { this.searchQuery = (e.target as HTMLInputElement).value; this.selectedIndex = 0; }}

@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod dap;
 pub mod dap_installer;
+mod database;
 mod file_watcher;
 mod git;
 mod lsp;
@@ -13,6 +14,7 @@ mod run_config;
 mod terminal;
 mod templates;
 mod theme;
+
 
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tokio::sync::Mutex;
@@ -172,6 +174,7 @@ fn main() {
         .manage(process::ProcessManager::new())
         .manage(Mutex::new(dap::DapClient::new()))
         .manage(dap_installer::DebugAdapterInstaller::new())
+        .manage(database::DatabaseManager::new())
         .setup(|app| {
             let handle = app.handle().clone();
             println!("OpenStorm IDE starting up...");
@@ -415,6 +418,20 @@ fn main() {
             lsp::notify_document_changed,
             lsp::notify_document_closed,
             lsp::notify_document_saved,
+
+            // === Database ===
+            commands::database::db_list_connections,
+            commands::database::db_add_connection,
+            commands::database::db_update_connection,
+            commands::database::db_remove_connection,
+            commands::database::db_test_connection,
+            commands::database::db_make_connection_global,
+            commands::database::db_make_connection_project,
+
+            // === Database Introspection ===
+            commands::introspection::db_get_objects,
+            commands::introspection::db_get_children,
+            commands::introspection::db_get_object_details,
 
             // === Theme ===
             theme::get_system_theme,

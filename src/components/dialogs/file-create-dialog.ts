@@ -196,7 +196,8 @@ export class FileCreateDialog extends TailwindElement() {
             <input
               id="filename-input"
               type="text"
-              class="w-full px-2.5 py-1.5 text-[13px] bg-white border ${showError ? 'border-red-500' : 'border-[#c0c0c0]'} rounded focus:outline-none focus:ring-1 focus:ring-[#5b47c9] focus:border-transparent"
+              class="w-full px-2.5 py-1.5 text-[13px] bg-white border rounded focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)] focus:border-transparent"
+              style="border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
               placeholder="File name..."
               value="${this.filename}"
               @input=${this.handleInput}
