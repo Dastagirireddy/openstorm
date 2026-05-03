@@ -14,7 +14,10 @@
 pub mod error;
 pub mod types;
 pub mod manager;
+pub mod providers;
+pub mod introspection;
 
 pub use error::{DatabaseError, Result};
 pub use manager::DatabaseManager;
 pub use types::{ConnectionConfig, ConnectionInfo, ConnectionScope, DatabaseType};
+pub use providers::DatabaseProvider;

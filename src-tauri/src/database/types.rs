@@ -8,9 +8,18 @@ use uuid::Uuid;
 pub enum DatabaseType {
     PostgreSQL,
     MySQL,
+    MariaDB,
     SQLite,
     MongoDB,
     Redis,
+    SQLServer,
+    Oracle,
+    Cassandra,
+    ClickHouse,
+    CockroachDB,
+    Neo4j,
+    DynamoDB,
+    Elasticsearch,
 }
 
 impl std::fmt::Display for DatabaseType {
@@ -18,9 +27,18 @@ impl std::fmt::Display for DatabaseType {
         match self {
             DatabaseType::PostgreSQL => write!(f, "PostgreSQL"),
             DatabaseType::MySQL => write!(f, "MySQL"),
+            DatabaseType::MariaDB => write!(f, "MariaDB"),
             DatabaseType::SQLite => write!(f, "SQLite"),
             DatabaseType::MongoDB => write!(f, "MongoDB"),
             DatabaseType::Redis => write!(f, "Redis"),
+            DatabaseType::SQLServer => write!(f, "SQL Server"),
+            DatabaseType::Oracle => write!(f, "Oracle"),
+            DatabaseType::Cassandra => write!(f, "Cassandra"),
+            DatabaseType::ClickHouse => write!(f, "ClickHouse"),
+            DatabaseType::CockroachDB => write!(f, "CockroachDB"),
+            DatabaseType::Neo4j => write!(f, "Neo4j"),
+            DatabaseType::DynamoDB => write!(f, "DynamoDB"),
+            DatabaseType::Elasticsearch => write!(f, "Elasticsearch"),
         }
     }
 }
@@ -31,9 +49,18 @@ impl DatabaseType {
         match self {
             DatabaseType::PostgreSQL => 5432,
             DatabaseType::MySQL => 3306,
-            DatabaseType::SQLite => 0, // No port for SQLite
+            DatabaseType::MariaDB => 3306,
+            DatabaseType::SQLite => 0,
             DatabaseType::MongoDB => 27017,
             DatabaseType::Redis => 6379,
+            DatabaseType::SQLServer => 1433,
+            DatabaseType::Oracle => 1521,
+            DatabaseType::Cassandra => 9042,
+            DatabaseType::ClickHouse => 8123,
+            DatabaseType::CockroachDB => 26257,
+            DatabaseType::Neo4j => 7687,
+            DatabaseType::DynamoDB => 0,
+            DatabaseType::Elasticsearch => 9200,
         }
     }
 
@@ -42,9 +69,18 @@ impl DatabaseType {
         match self {
             DatabaseType::PostgreSQL => "simple-icons:postgresql",
             DatabaseType::MySQL => "simple-icons:mysql",
+            DatabaseType::MariaDB => "simple-icons:mariadb",
             DatabaseType::SQLite => "simple-icons:sqlite",
             DatabaseType::MongoDB => "simple-icons:mongodb",
             DatabaseType::Redis => "simple-icons:redis",
+            DatabaseType::SQLServer => "simple-icons:microsoftsqlserver",
+            DatabaseType::Oracle => "simple-icons:oracle",
+            DatabaseType::Cassandra => "simple-icons:apache",
+            DatabaseType::ClickHouse => "simple-icons:clickhouse",
+            DatabaseType::CockroachDB => "simple-icons:cockroach",
+            DatabaseType::Neo4j => "simple-icons:neo4j",
+            DatabaseType::DynamoDB => "simple-icons:amazondynamodb",
+            DatabaseType::Elasticsearch => "simple-icons:elasticsearch",
         }
     }
 }
@@ -73,6 +109,8 @@ pub struct ConnectionInfo {
     pub scope: ConnectionScope,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>,
 }
 
 impl ConnectionInfo {
@@ -90,6 +128,7 @@ impl ConnectionInfo {
             scope: config.scope.clone(),
             created_at: now,
             updated_at: now,
+            file_path: config.file_path.clone(),
         }
     }
 }
@@ -113,6 +152,8 @@ pub struct ConnectionConfig {
     pub scope: ConnectionScope,
     #[serde(default)]
     pub options: std::collections::HashMap<String, String>, // Driver-specific options (SSL, timeout, etc.)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_path: Option<String>, // For SQLite file-based databases
 }
 
 impl ConnectionConfig {
@@ -130,6 +171,7 @@ impl ConnectionConfig {
             database: None,
             scope: ConnectionScope::Project,
             options: std::collections::HashMap::new(),
+            file_path: None,
         }
     }
 
@@ -148,6 +190,12 @@ impl ConnectionConfig {
     /// Set the password
     pub fn with_password(mut self, password: String) -> Self {
         self.password = Some(password);
+        self
+    }
+
+    /// Set the file path (for SQLite)
+    pub fn with_file_path(mut self, file_path: String) -> Self {
+        self.file_path = Some(file_path);
         self
     }
 }

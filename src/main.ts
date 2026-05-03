@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -67,7 +67,7 @@ import "./components/overlays/theme-palette.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
-import "./components/panels/data-sources/data-source-list.js";
+import "./components/panels/data-sources/database-multi-tree.js";
 import "./components/panels/data-sources/data-source-type-picker.js";
 import "./components/panels/data-sources/database-vendor-picker.js";
 import "./components/panels/data-sources/data-source-empty-state.js";
@@ -901,9 +901,8 @@ export class OpenStormApp extends TailwindElement() {
                 ? html`
                     <settings-panel class="flex-1"></settings-panel>
                   `
-                : showDatabase
+                : showExplorer || showDatabase
                 ? html`
-                    <!-- Explorer + Editor + Database Panel (right side) -->
                     <div class="flex flex-1 overflow-hidden">
                       <resizable-container
                         direction="horizontal"
@@ -959,68 +958,15 @@ export class OpenStormApp extends TailwindElement() {
                           </file-viewer-container>
                         </div>
                       </resizable-container>
-                      <!-- Data Sources Panel on the right -->
-                      <div class="shrink-0 border-l" style="width: 400px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
-                        <data-sources-panel class="h-full w-full"></data-sources-panel>
-                      </div>
+                      <!-- Data Sources Panel on the right (shown when database activity is active) -->
+                      ${showDatabase
+                        ? html`
+                            <div class="shrink-0 border-l" style="width: 400px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                              <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
+                            </div>
+                          `
+                        : nothing}
                     </div>
-                  `
-                : showExplorer
-                ? html`
-                    <resizable-container
-                      direction="horizontal"
-                      class="flex-1"
-                      .initialSize=${this.sidebarWidth}
-                      .minSize=${150}
-                      .maxSize=${600}
-                      @size-change=${(e: CustomEvent<{ size: number }>) => {
-                        this.sidebarWidth = e.detail.size;
-                      }}
-                    >
-                      <div slot="first" class="h-full w-full">
-                        <project-explorer
-                          class="flex flex-col overflow-hidden border-r h-full"
-                          style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
-                          .projectPath=${this.projectPath}
-                          .selectedPath=${this.activeFilePath}
-                          @file-selected=${this.handleFileSelect}
-                          @open-folder=${() => dispatch("open-folder")}
-                        >
-                        </project-explorer>
-                      </div>
-                      <div
-                        slot="second"
-                        class="flex flex-col overflow-hidden min-w-0 w-full h-full"
-                        style="background-color: var(--app-bg);"
-                      >
-                        <!-- Tab Bar -->
-                        ${this.tabs.length > 0
-                          ? html`
-                              <tab-bar
-                                class="h-[35px] shrink-0"
-                                .tabs=${this.tabs}
-                                .activeTab=${this.activeTabId}
-                                @tab-select=${this.handleTabSelect}
-                                @tab-close=${this.handleTabClose}
-                                @tab-pin-toggle=${this.handleTabPinToggle}
-                              >
-                              </tab-bar>
-                            `
-                          : ""}
-                        <!-- File Viewer Container -->
-                        <file-viewer-container
-                          id="editor"
-                          class="flex-1 flex flex-col overflow-hidden"
-                          .tabs=${this.tabs}
-                          .activeTabId=${this.activeTabId}
-                          @folder-opened=${this.handleFolderOpened}
-                          @content-changed=${this.handleContentChanged}
-                          @open-folder=${() => dispatch("open-folder")}
-                          @quick-search=${() => dispatch("quick-search")}
-                        >
-                        </file-viewer-container>
-                      </div>
-                    </resizable-container>
                   `
                 : showCommitPanel
                 ? html`
@@ -1083,57 +1029,6 @@ export class OpenStormApp extends TailwindElement() {
                           @quick-search=${() => dispatch("quick-search")}
                         >
                         </file-viewer-container>
-                      </div>
-                    </resizable-container>
-                  `
-                : showDatabase
-                ? html`
-                    <!-- Editor + Data Sources Panel (right side) -->
-                    <resizable-container
-                      direction="horizontal"
-                      class="flex-1"
-                      .initialSize=${400}
-                      .minSize=${200}
-                      .maxSize=${800}
-                      @size-change=${(e: CustomEvent<{ size: number }>) => {
-                        // Data sources panel width change
-                      }}
-                    >
-                      <div
-                        slot="first"
-                        class="flex flex-col flex-1 overflow-hidden h-full w-full"
-                        style="background-color: var(--app-bg);"
-                      >
-                        ${this.tabs.length > 0
-                          ? html`
-                              <tab-bar
-                                class="h-[35px] shrink-0"
-                                .tabs=${this.tabs}
-                                .activeTab=${this.activeTabId}
-                                @tab-select=${this.handleTabSelect}
-                                @tab-close=${this.handleTabClose}
-                                @tab-pin-toggle=${this.handleTabPinToggle}
-                              >
-                              </tab-bar>
-                            `
-                          : ""}
-                        <file-viewer-container
-                          id="editor"
-                          class="flex-1 flex flex-col overflow-hidden"
-                          .tabs=${this.tabs}
-                          .activeTabId=${this.activeTabId}
-                          @folder-opened=${this.handleFolderOpened}
-                          @content-changed=${this.handleContentChanged}
-                          @open-folder=${() => dispatch("open-folder")}
-                          @quick-search=${() => dispatch("quick-search")}
-                        >
-                        </file-viewer-container>
-                      </div>
-                      <div slot="second" class="h-full w-full">
-                        <data-sources-panel
-                          class="flex flex-col overflow-hidden border-l h-full"
-                          style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
-                        </data-sources-panel>
                       </div>
                     </resizable-container>
                   `

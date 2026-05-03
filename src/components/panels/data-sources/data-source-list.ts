@@ -7,7 +7,7 @@ import './data-source-empty-state.js';
 @customElement('data-source-list')
 export class DataSourceList extends TailwindElement() {
   @property({ type: Array })
-  dataSources: AnyDataSource[] = [];
+  dataSources: any[] = [];
 
   @property({ type: Boolean })
   isLoading = false;
@@ -33,21 +33,33 @@ export class DataSourceList extends TailwindElement() {
     );
   }
 
-  private handleRemove(e: CustomEvent) {
+  private handleConnectionSelect(id: string) {
     this.dispatchEvent(
-      new CustomEvent('remove', {
-        detail: e.detail,
+      new CustomEvent('connection-select', {
+        detail: { id },
         bubbles: true,
         composed: true,
       }),
     );
   }
 
-  private getIconForDataSource(ds: AnyDataSource): string {
-    switch (ds.type) {
+  private handleRemove(e: MouseEvent, id: string) {
+    e.stopPropagation();
+    this.dispatchEvent(
+      new CustomEvent('remove', {
+        detail: { id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  private getIconForDataSource(ds: any): string {
+    const dsType = ds.type || ds.dataSourceType;
+    switch (dsType) {
       case 'database':
-        const config = ds.config as any;
-        const dbType = config.dbType || config.type;
+        const config = ds.config;
+        const dbType = config?.dbType || config?.db_type;
         const icons: Record<string, string> = {
           postgresql: 'simple-icons:postgresql',
           mysql: 'simple-icons:mysql',
@@ -76,11 +88,12 @@ export class DataSourceList extends TailwindElement() {
     }
   }
 
-  private getColorForDataSource(ds: AnyDataSource): string {
-    switch (ds.type) {
+  private getColorForDataSource(ds: any): string {
+    const dsType = ds.type || ds.dataSourceType;
+    switch (dsType) {
       case 'database':
-        const config = ds.config as any;
-        const dbType = config.dbType || config.type;
+        const config = ds.config;
+        const dbType = config?.dbType || config?.db_type;
         const colors: Record<string, string> = {
           postgresql: 'text-[#336791]',
           mysql: 'text-[#F29111]',
@@ -109,66 +122,110 @@ export class DataSourceList extends TailwindElement() {
     }
   }
 
+  private getConnectionStatusIcon(ds: any): string {
+    // Could be enhanced to show actual connection status
+    return 'mdi:check-circle';
+  }
+
+  private getDbGradient(dbType: string): string {
+    const gradients: Record<string, string> = {
+      postgresql: 'from-cyan-500/8 to-blue-500/8',
+      mysql: 'from-orange-500/8 to-amber-500/8',
+      sqlite: 'from-teal-500/8 to-emerald-500/8',
+      mongodb: 'from-green-500/8 to-emerald-500/8',
+      redis: 'from-red-500/8 to-rose-500/8',
+      mariadb: 'from-sky-500/8 to-blue-500/8',
+      sqlserver: 'from-red-500/8 to-rose-500/8',
+      oracle: 'from-red-500/8 to-orange-500/8',
+      cockroachdb: 'from-violet-500/8 to-purple-500/8',
+      clickhouse: 'from-orange-500/8 to-amber-500/8',
+      neo4j: 'from-blue-500/8 to-indigo-500/8',
+      elasticsearch: 'from-sky-500/8 to-cyan-500/8',
+    };
+    return gradients[dbType] || 'from-indigo-500/8 to-purple-500/8';
+  }
+
   render() {
     return html`
-      <div class="flex-1 overflow-y-auto p-2">
+      <div class="flex flex-col h-full overflow-y-auto p-1">
         ${this.isLoading
           ? html`
               <div class="flex items-center justify-center h-full">
-                <iconify-icon icon="mdi:loading" class="animate-spin" width="24" height="24"></iconify-icon>
+                <iconify-icon icon="mdi:loading" class="animate-spin" width="16" height="16" style="color: var(--brand-primary);"></iconify-icon>
               </div>
             `
           : this.error
             ? html`
-                <div class="p-3 text-xs text-red-500 bg-red-500/10 rounded">
+                <div class="m-1 p-2 text-[10px] text-red-500 bg-red-500/10 border border-red-500/20 rounded">
                   ${this.error}
                   <button @click=${this.handleRetry} class="ml-2 underline">Retry</button>
                 </div>
               `
             : this.dataSources.length === 0
               ? html`
-                  <div class="h-full">
+                  <div class="flex-1 flex items-center justify-center">
                     <data-source-empty-state @add-connection=${this.handleRequestAdd}></data-source-empty-state>
                   </div>
                 `
               : html`
-                  <div class="space-y-1">
+                  <div class="space-y-0.5">
                     ${this.dataSources.map(
-                      (ds) => html`
-                        <div
-                          class="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-[var(--app-hover)] cursor-pointer"
-                        >
-                          <iconify-icon
-                            icon="${this.getIconForDataSource(ds)}"
-                            class="${this.getColorForDataSource(ds)}"
-                            width="16"
-                            height="16"
-                          ></iconify-icon>
-                          <div class="flex-1 min-w-0">
-                            <div class="text-xs font-medium truncate" style="color: var(--app-foreground);">
-                              ${ds.name}
+                      (ds) => {
+                        const dbType = ds.config?.dbType || 'database';
+                        const gradient = this.getDbGradient(dbType);
+                        const iconColor = this.getColorForDataSource(ds);
+                        const dbIcon = this.getIconForDataSource(ds);
+
+                        return html`
+                          <div
+                            class="group flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gradient-to-r ${gradient} cursor-pointer transition-colors"
+                            @click=${() => this.handleConnectionSelect(ds.id)}
+                          >
+                            <!-- Expand indicator -->
+                            <span class="w-3.5 h-3.5 flex items-center justify-center flex-shrink-0">
+                              <iconify-icon
+                                icon="mdi:chevron-right"
+                                width="10"
+                                height="10"
+                                style="color: var(--app-disabled-foreground);"
+                              ></iconify-icon>
+                            </span>
+
+                            <!-- Database Icon -->
+                            <iconify-icon
+                              icon="${dbIcon}"
+                              class="${iconColor}"
+                              width="14"
+                              height="14"
+                            ></iconify-icon>
+
+                            <!-- Connection Name -->
+                            <div class="flex-1 min-w-0">
+                              <div class="text-[11px] font-medium truncate" style="color: var(--app-foreground);">
+                                ${ds.name}
+                              </div>
                             </div>
-                            <div class="text-[10px] truncate" style="color: var(--app-disabled-foreground);">
-                              ${ds.type}
-                              ${ds.type === 'database'
-                                ? ` • ${(ds.config as any).host || 'local'}:${(ds.config as any).port || '-'}`
-                                : ''}
-                            </div>
-                          </div>
-                          <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+
+                            <!-- Connection Status -->
+                            <iconify-icon
+                              icon="${this.getConnectionStatusIcon(ds)}"
+                              width="11"
+                              height="11"
+                              class="opacity-0 group-hover:opacity-100 flex-shrink-0 transition-opacity"
+                              style="color: #10B981;"
+                            ></iconify-icon>
+
+                            <!-- Remove Button -->
                             <button
-                              @click=${(e: Event) => {
-                                e.stopPropagation();
-                                this.handleRemove(e);
-                              }}
-                              class="p-0.5 hover:bg-red-500/20 rounded text-red-500"
+                              @click=${(e: MouseEvent) => this.handleRemove(e, ds.id)}
+                              class="p-0.5 hover:bg-red-500/15 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                               title="Remove"
                             >
-                              <iconify-icon icon="mdi:trash" width="12" height="12"></iconify-icon>
+                              <iconify-icon icon="mdi:trash" width="10" height="10" style="color: var(--app-disabled-foreground);"></iconify-icon>
                             </button>
                           </div>
-                        </div>
-                      `,
+                        `;
+                      }
                     )}
                   </div>
                 `}

@@ -18,6 +18,7 @@ pub mod adapter;
 pub mod watch;
 pub mod git;
 pub mod database;
+pub mod introspection;
 
 // Re-export commonly used types
 pub use watch::WatchExpressionResult;

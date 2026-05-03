@@ -11,7 +11,7 @@ pub enum DatabaseError {
     ConnectionAlreadyExists(String),
 
     #[error("Failed to connect to database: {0}")]
-    ConnectionFailed(String),
+    ConnectionError(String),
 
     #[error("Database error: {0}")]
     DatabaseError(String),

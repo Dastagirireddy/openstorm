@@ -1,48 +1,34 @@
 import { html, nothing } from 'lit';
-import { customElement, state } from 'lit/decorators.js';
+import { customElement, state, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
 import type { AnyDataSource, DataSourceType, DatabaseType } from './data-source-types.js';
-import './data-source-list.js';
+import { getDatabaseFormDefinition } from './database-form-registry.js';
+import './database-multi-tree.js';
 import './data-source-type-picker.js';
 import './database-vendor-picker.js';
 import './data-source-forms/database-connection-form.js';
 import './data-source-forms/sqlite-connection-form.js';
 
-/**
- * Data Sources Panel - Main container
- *
- * Architecture:
- * - Supports multiple data source types (database, file, api, cloud)
- * - Extensible - new types can be added without modifying this file
- * - Currently implements database connections, with hooks for future types
- */
 @customElement('data-sources-panel')
 export class DataSourcesPanel extends TailwindElement() {
+  @property({ type: String }) projectPath: string | null = null;
   @state() private dataSources: AnyDataSource[] = [];
   @state() private isLoading = false;
   @state() private error: string | null = null;
   @state() private showAddDialog = false;
   @state() private selectedType: DataSourceType | null = null;
   @state() private selectedVendor: DatabaseType | null = null;
-  @state() private projectPath: string | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
     this.loadDataSources();
-    this.getCurrentProjectPath();
-  }
-
-  private async getCurrentProjectPath() {
-    this.projectPath = null;
   }
 
   private async loadDataSources() {
     this.isLoading = true;
     this.error = null;
     try {
-      // For now, load only database connections
-      // Future: invoke('list_data_sources', { projectPath: this.projectPath, type: this.selectedType })
       const result = await invoke<AnyDataSource[]>('db_list_connections', {
         projectPath: this.projectPath,
       });
@@ -54,35 +40,52 @@ export class DataSourcesPanel extends TailwindElement() {
     }
   }
 
+  private handleTypeSelect(type: DataSourceType) {
+    this.selectedType = type;
+    // Reset vendor when changing type
+    if (type !== 'database') {
+      this.selectedVendor = null;
+    }
+  }
+
+  private handleVendorSelect(vendorId: DatabaseType) {
+    this.selectedVendor = vendorId;
+  }
+
   private async handleAddDataSource(config: any) {
     try {
-      // Handle SQLite differently - it uses filePath instead of host/port
-      const isSqlite = config.type === 'sqlite' || config.dbType === 'sqlite';
+      const vendorDef = getDatabaseFormDefinition(config.type as DatabaseType);
+      const isFileBased = vendorDef.category === 'file-based';
+      const scope = config.isGlobal ? 'global' : 'project';
+      const projectPath = scope === 'project' ? this.projectPath : null;
 
-      await invoke('db_add_connection', {
+      const payload = {
         config: {
           id: null,
           name: config.name,
           type: config.dbType || config.type,
-          host: isSqlite ? null : (config.host || 'localhost'),
-          port: isSqlite ? 0 : (config.port || 0),
-          username: isSqlite ? null : (config.username || null),
-          password: isSqlite ? null : (config.password || null),
-          database: isSqlite ? null : (config.database || null),
-          filePath: isSqlite ? (config.filePath || null) : null,
-          scope: config.scope,
-          options: isSqlite ? {
+          host: isFileBased ? null : (config.host || 'localhost'),
+          port: isFileBased ? 0 : (config.port || vendorDef.defaultPort),
+          username: isFileBased ? null : (config.username || ''),
+          password: config.password ? String(config.password) : null,
+          database: config.database || null,
+          filePath: isFileBased ? (config.filePath || null) : null,
+          scope,
+          options: isFileBased ? {
             readOnly: (config.readOnly || false).toString(),
             walMode: (config.walMode || true).toString(),
           } : {},
         },
-        projectPath: this.projectPath,
-      });
+        projectPath,
+      };
+
+      await invoke('db_add_connection', payload);
       await this.loadDataSources();
       this.showAddDialog = false;
       this.selectedType = null;
       this.selectedVendor = null;
     } catch (err) {
+      console.error('Failed to add data source:', err);
       this.error = err instanceof Error ? err.message : 'Failed to add data source';
     }
   }
@@ -100,45 +103,74 @@ export class DataSourcesPanel extends TailwindElement() {
     }
   }
 
-  private handleTypeSelect(type: DataSourceType) {
-    this.selectedType = type;
-  }
-
-  private handleVendorSelect(vendorId: DatabaseType) {
-    this.selectedVendor = vendorId;
-  }
-
   private handleCloseDialog() {
     this.showAddDialog = false;
     this.selectedType = null;
     this.selectedVendor = null;
   }
 
+  private renderFormForType(type: DataSourceType) {
+    switch (type) {
+      case 'database':
+        return html`
+          <div class="flex flex-col items-center justify-center h-full text-center p-8">
+            <div class="w-16 h-16 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-4">
+              <iconify-icon icon="mdi:database" class="text-indigo-500" width="32" height="32"></iconify-icon>
+            </div>
+            <p class="text-sm font-medium" style="color: var(--app-foreground);">Select a Database Vendor</p>
+            <p class="text-xs mt-1" style="color: var(--app-disabled-foreground);">
+              Choose from PostgreSQL, MySQL, MongoDB, and more from the left
+            </p>
+          </div>
+        `;
+      case 'file':
+      case 'api':
+      case 'cloud':
+        return html`
+          <div class="flex flex-col items-center justify-center h-full text-center p-8">
+            <iconify-icon icon="mdi:construction" width="48" height="48" style="color: var(--app-disabled-foreground);"></iconify-icon>
+            <p class="text-sm font-medium mt-4" style="color: var(--app-foreground);">Coming Soon</p>
+            <p class="text-xs mt-1" style="color: var(--app-disabled-foreground);">
+              ${type === 'file' && 'Local file data sources (JSON, CSV, XML) will be available soon.'}
+              ${type === 'api' && 'API endpoints (REST, GraphQL) will be available soon.'}
+              ${type === 'cloud' && 'Cloud services (S3, Firebase, Supabase) will be available soon.'}
+            </p>
+          </div>
+        `;
+      default:
+        return nothing;
+    }
+  }
 
   render() {
     return html`
       <div class="flex flex-col h-full w-full" style="background-color: var(--app-bg);">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-3 py-2 border-b" style="border-color: var(--app-border);">
-          <span class="text-xs font-medium" style="color: var(--app-foreground);">Data Sources</span>
-          <button
-            @click=${() => (this.showAddDialog = true)}
-            class="p-1 hover:bg-[var(--app-hover)] rounded"
-            title="Add Data Source"
-          >
-            <iconify-icon icon="mdi:plus" width="16" height="16"></iconify-icon>
-          </button>
-        </div>
+        <div class="flex flex-col h-full">
+          <!-- Header -->
+          <div class="flex items-center justify-between px-2.5 py-2 border-b" style="border-color: var(--app-border);">
+            <div class="flex items-center gap-2">
+              <div class="w-2 h-2 rounded-full" style="background: var(--brand-primary);"></div>
+              <span class="text-[11px] font-semibold tracking-wide" style="color: var(--app-foreground);">DATABASE</span>
+            </div>
+            <button
+              @click=${() => (this.showAddDialog = true)}
+              class="p-1.5 hover:bg-[var(--app-hover)] rounded transition-colors"
+              title="Add Connection"
+            >
+              <iconify-icon icon="mdi:plus" width="15" height="15" style="color: var(--app-foreground);"></iconify-icon>
+            </button>
+          </div>
 
-        <!-- Content -->
-        <data-source-list
-          .dataSources=${this.dataSources}
-          .isLoading=${this.isLoading}
-          .error=${this.error}
-          @retry=${() => this.loadDataSources()}
-          @request-add=${() => (this.showAddDialog = true)}
-          @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
-        ></data-source-list>
+          <!-- Database Tree View -->
+          <div class="flex-1 overflow-hidden">
+            <database-multi-tree
+              class="overflow-y-auto"
+              .dataSources=${this.dataSources}
+              .projectPath=${this.projectPath}
+              @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
+            ></database-multi-tree>
+          </div>
+        </div>
 
         <!-- Add Data Source Dialog -->
         ${this.showAddDialog
@@ -269,38 +301,5 @@ export class DataSourcesPanel extends TailwindElement() {
           : nothing}
       </div>
     `;
-  }
-
-  private renderFormForType(type: DataSourceType) {
-    switch (type) {
-      case 'database':
-        return html`
-          <div class="flex flex-col items-center justify-center h-full text-center p-8">
-            <div class="w-16 h-16 rounded-xl bg-indigo-500/10 flex items-center justify-center mb-4">
-              <iconify-icon icon="mdi:database" class="text-indigo-500" width="32" height="32"></iconify-icon>
-            </div>
-            <p class="text-sm font-medium" style="color: var(--app-foreground);">Select a Database Vendor</p>
-            <p class="text-xs mt-1" style="color: var(--app-disabled-foreground);">
-              Choose from PostgreSQL, MySQL, MongoDB, and more from the left panel
-            </p>
-          </div>
-        `;
-      case 'file':
-      case 'api':
-      case 'cloud':
-        return html`
-          <div class="flex flex-col items-center justify-center h-full text-center p-8">
-            <iconify-icon icon="mdi:construction" width="48" height="48" style="color: var(--app-disabled-foreground);"></iconify-icon>
-            <p class="text-sm font-medium mt-4" style="color: var(--app-foreground);">Coming Soon</p>
-            <p class="text-xs mt-1" style="color: var(--app-disabled-foreground);">
-              ${type === 'file' && 'Local file data sources (JSON, CSV, XML) will be available soon.'}
-              ${type === 'api' && 'API endpoints (REST, GraphQL) will be available soon.'}
-              ${type === 'cloud' && 'Cloud services (S3, Firebase, Supabase) will be available soon.'}
-            </p>
-          </div>
-        `;
-      default:
-        return nothing;
-    }
   }
 }

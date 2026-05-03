@@ -6,27 +6,22 @@
 /// - Merging global and project connections
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::Arc;
 use crate::config::PathConfig;
-use crate::database::{DatabaseError, Result, ConnectionConfig, ConnectionInfo, ConnectionScope};
-
-/// Inner state of the database manager (mutable operations)
-struct DatabaseManagerInner {
-    // Placeholder for future connection pooling
-}
+use crate::database::{DatabaseError, Result, ConnectionConfig, ConnectionInfo, ConnectionScope, DatabaseType};
+use crate::database::providers::*;
 
 /// Database manager - handles connection lifecycle
+#[derive(Clone)]
 pub struct DatabaseManager {
-    path_config: PathConfig,
-    _inner: Mutex<DatabaseManagerInner>,
+    path_config: Arc<PathConfig>,
 }
 
 impl DatabaseManager {
     /// Create a new database manager
     pub fn new() -> Self {
         Self {
-            path_config: PathConfig::new(),
-            _inner: Mutex::new(DatabaseManagerInner {}),
+            path_config: Arc::new(PathConfig::new()),
         }
     }
 
@@ -61,18 +56,30 @@ impl DatabaseManager {
         let mut config = config;
         config.id = Some(id.clone());
 
-        // Store password in keychain, then save metadata
-        if let Some(password) = config.password.take() {
-            self.store_password(&id, &password)?;
-        }
+        eprintln!("[DatabaseManager] Adding connection: {} (type: {:?})", config.name, config.db_type);
+        eprintln!("[DatabaseManager] Password present: {}", config.password.is_some());
+
+        // DEBUG MODE: Store password directly in JSON file (skip keychain entirely)
+        // WARNING: This is insecure - only for debugging!
+        let password_to_store = config.password.clone();
+
+        // Remove password from config before saving to JSON
+        config.password = None;
 
         match config.scope {
             ConnectionScope::Global => {
                 self.save_to_global(&config)?;
+                // After saving metadata, store password separately
+                if let Some(pwd) = password_to_store {
+                    self.save_password_to_file(&id, &pwd)?;
+                }
             }
             ConnectionScope::Project => {
                 if let Some(project) = project_path {
                     self.save_to_project(&config, project)?;
+                    if let Some(pwd) = password_to_store {
+                        self.save_password_to_file(&id, &pwd)?;
+                    }
                 } else {
                     return Err(DatabaseError::IoError(std::io::Error::new(
                         std::io::ErrorKind::InvalidInput,
@@ -125,14 +132,24 @@ impl DatabaseManager {
         Ok(())
     }
 
-    /// Test a connection (try to connect and disconnect)
+    /// Test a connection using the appropriate provider
     pub fn test_connection(&self, config: ConnectionConfig) -> Result<bool> {
-        // TODO: Implement actual connection testing once we have providers
-        // For now, just validate the config
-        if config.host.is_empty() || config.username.is_empty() {
-            return Ok(false);
+        // Get the appropriate provider for the database type
+        let provider = self.get_provider(config.db_type.clone());
+        provider.test_connection(&config)
+    }
+
+    /// Get the appropriate provider for a database type
+    fn get_provider(&self, db_type: DatabaseType) -> Box<dyn crate::database::DatabaseProvider> {
+        match db_type {
+            DatabaseType::PostgreSQL => Box::new(PostgresProvider::new()),
+            DatabaseType::MySQL | DatabaseType::MariaDB => Box::new(MySqlProvider::new()),
+            DatabaseType::SQLite => Box::new(SqliteProvider::new()),
+            DatabaseType::MongoDB => Box::new(MongoDbProvider::new()),
+            DatabaseType::Redis => Box::new(RedisProvider::new()),
+            // Default to Postgres for unknown types
+            _ => Box::new(PostgresProvider::new()),
         }
-        Ok(true)
     }
 
     /// Make a connection global (move from project to global storage)
@@ -213,6 +230,7 @@ impl DatabaseManager {
             database: info.database,
             scope: info.scope,
             options: std::collections::HashMap::new(),
+            file_path: info.file_path,
         }
     }
 
@@ -278,41 +296,76 @@ impl DatabaseManager {
         Ok(())
     }
 
-    // === Keychain operations ===
+    // === Password file operations (DEBUG - replacing keychain) ===
 
-    fn store_password(&self, connection_id: &str, password: &str) -> Result<()> {
-        use keyring::Entry;
+    fn save_password_to_file(&self, connection_id: &str, password: &str) -> Result<()> {
+        eprintln!("[PasswordFile] Storing password for connection: {}", connection_id);
 
-        let entry = Entry::new("openstorm", connection_id)
-            .map_err(|e| DatabaseError::KeychainError(e.to_string()))?;
+        // Get the app data directory for storing passwords
+        let password_file = self.path_config.app_data_dir().join("passwords").join(format!("{}.txt", connection_id));
 
-        entry.set_password(password)
-            .map_err(|e| DatabaseError::KeychainError(e.to_string()))?;
+        // Ensure directory exists
+        if let Some(parent) = password_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
 
+        // Write password to file
+        std::fs::write(&password_file, password)?;
+        eprintln!("[PasswordFile] Password stored to: {:?}", password_file);
         Ok(())
     }
 
-    fn get_password(&self, connection_id: &str) -> Result<Option<String>> {
-        use keyring::Entry;
+    pub fn get_password(&self, connection_id: &str) -> Result<Option<String>> {
+        eprintln!("[PasswordFile] Retrieving password for connection: {}", connection_id);
 
-        let entry = Entry::new("openstorm", connection_id)
-            .map_err(|e| DatabaseError::KeychainError(e.to_string()))?;
+        let password_file = self.path_config.app_data_dir().join("passwords").join(format!("{}.txt", connection_id));
 
-        match entry.get_password() {
-            Ok(password) => Ok(Some(password)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(e) => Err(DatabaseError::KeychainError(e.to_string())),
+        if !password_file.exists() {
+            eprintln!("[PasswordFile] Password file not found: {:?}", password_file);
+            return Ok(None);
+        }
+
+        match std::fs::read_to_string(&password_file) {
+            Ok(password) => {
+                eprintln!("[PasswordFile] Password retrieved successfully");
+                Ok(Some(password))
+            }
+            Err(e) => {
+                eprintln!("[PasswordFile] Error reading password: {}", e);
+                Err(DatabaseError::IoError(e))
+            }
         }
     }
 
     fn delete_password(&self, connection_id: &str) -> Result<()> {
+        let password_file = self.path_config.app_data_dir().join("passwords").join(format!("{}.txt", connection_id));
+        if password_file.exists() {
+            let _ = std::fs::remove_file(&password_file);
+            eprintln!("[PasswordFile] Password deleted: {:?}", password_file);
+        }
+        Ok(())
+    }
+
+    // === Keychain operations (deprecated - kept for reference) ===
+
+    #[allow(dead_code)]
+    fn store_password(&self, connection_id: &str, password: &str) -> Result<()> {
         use keyring::Entry;
 
+        eprintln!("[Keychain] Storing password for connection: {}", connection_id);
         let entry = Entry::new("openstorm", connection_id)
-            .map_err(|e| DatabaseError::KeychainError(e.to_string()))?;
+            .map_err(|e| {
+                eprintln!("[Keychain] Failed to create entry: {}", e);
+                DatabaseError::KeychainError(e.to_string())
+            })?;
 
-        let _ = entry.delete_credential(); // Ignore if doesn't exist
+        entry.set_password(password)
+            .map_err(|e| {
+                eprintln!("[Keychain] Failed to set password: {}", e);
+                DatabaseError::KeychainError(e.to_string())
+            })?;
 
+        eprintln!("[Keychain] Password stored successfully");
         Ok(())
     }
 }

@@ -77,6 +77,10 @@ impl PathConfig {
         self.global_config_dir.join("recent_projects.json")
     }
 
+    /// Get app data directory (for password storage, etc.)
+    pub fn app_data_dir(&self) -> &PathBuf {
+        &self.global_config_dir
+    }
 
     /// Ensure all directories exist
     pub fn create_directories(&self) -> std::io::Result<()> {

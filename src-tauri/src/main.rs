@@ -15,6 +15,7 @@ mod terminal;
 mod templates;
 mod theme;
 
+
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tokio::sync::Mutex;
 
@@ -426,6 +427,11 @@ fn main() {
             commands::database::db_test_connection,
             commands::database::db_make_connection_global,
             commands::database::db_make_connection_project,
+
+            // === Database Introspection ===
+            commands::introspection::db_get_objects,
+            commands::introspection::db_get_children,
+            commands::introspection::db_get_object_details,
 
             // === Theme ===
             theme::get_system_theme,

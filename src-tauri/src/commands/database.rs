@@ -10,19 +10,27 @@ use std::path::PathBuf;
 use crate::database::{DatabaseManager, ConnectionConfig, ConnectionInfo, ConnectionScope};
 use serde::{Deserialize, Serialize};
 
-/// Connection info returned to frontend (without sensitive data)
+/// Connection info returned to frontend (matches AnyDataSource structure)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectionInfoDto {
     pub id: String,
     pub name: String,
     #[serde(rename = "type")]
-    pub db_type: String,
-    pub host: String,
-    pub port: u16,
-    pub username: String,
-    pub database: Option<String>,
+    pub data_source_type: String,
     pub scope: String,
+    pub config: DatabaseConfigDto,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseConfigDto {
+    pub db_type: String,
+    pub host: Option<String>,
+    pub port: u16,
+    pub username: Option<String>,
+    pub database: Option<String>,
+    pub file_path: Option<String>,
 }
 
 impl From<ConnectionInfo> for ConnectionInfoDto {
@@ -30,14 +38,18 @@ impl From<ConnectionInfo> for ConnectionInfoDto {
         Self {
             id: info.id,
             name: info.name,
-            db_type: format!("{:?}", info.db_type).to_lowercase(),
-            host: info.host,
-            port: info.port,
-            username: info.username,
-            database: info.database,
+            data_source_type: "database".to_string(),
             scope: match info.scope {
                 ConnectionScope::Global => "global".to_string(),
                 ConnectionScope::Project => "project".to_string(),
+            },
+            config: DatabaseConfigDto {
+                db_type: format!("{:?}", info.db_type).to_lowercase(),
+                host: if info.host.is_empty() { None } else { Some(info.host) },
+                port: info.port,
+                username: if info.username.is_empty() { None } else { Some(info.username) },
+                database: info.database,
+                file_path: info.file_path,
             },
         }
     }
@@ -61,10 +73,31 @@ pub fn db_add_connection(
     config: ConnectionConfigDto,
     project_path: Option<String>,
 ) -> Result<String, String> {
-    let connection_config = config.into();
+    eprintln!("[db_add_connection] === Adding connection ===");
+    eprintln!("[db_add_connection] Name: {}", config.name);
+    eprintln!("[db_add_connection] Type: {}", config.db_type);
+    eprintln!("[db_add_connection] Host: {:?}", config.host);
+    eprintln!("[db_add_connection] Port: {}", config.port);
+    eprintln!("[db_add_connection] Username: {:?}", config.username);
+    eprintln!("[db_add_connection] Password present: {}", config.password.is_some());
+    eprintln!("[db_add_connection] Password value: {:?}", config.password.as_ref().map(|_| "***"));
+    eprintln!("[db_add_connection] Database: {:?}", config.database);
+    eprintln!("[db_add_connection] Scope: {}", config.scope);
+
+    let connection_config: ConnectionConfig = config.into();
+    eprintln!("[db_add_connection] Converted config - password: {:?}", connection_config.password.as_ref().map(|_| "***"));
+
     let project = project_path.as_ref().map(|p| PathBuf::from(p));
-    manager.add_connection(connection_config, project.as_deref())
-        .map_err(|e| e.to_string())
+    match manager.add_connection(connection_config, project.as_deref()) {
+        Ok(id) => {
+            eprintln!("[db_add_connection] Connection added successfully: {}", id);
+            Ok(id)
+        }
+        Err(e) => {
+            eprintln!("[db_add_connection] Failed to add connection: {}", e);
+            Err(e.to_string())
+        }
+    }
 }
 
 /// Update an existing database connection
@@ -94,13 +127,19 @@ pub fn db_remove_connection(
 
 /// Test a database connection (validate and try to connect)
 #[tauri::command]
-pub fn db_test_connection(
-    manager: State<DatabaseManager>,
+pub async fn db_test_connection(
+    manager: State<'_, DatabaseManager>,
     config: ConnectionConfigDto,
 ) -> Result<bool, String> {
     let connection_config = config.into();
-    manager.test_connection(connection_config)
-        .map_err(|e| e.to_string())
+    // Run blocking operation in a separate thread pool to avoid blocking the UI
+    let manager_clone = manager.inner().clone();
+    tokio::task::spawn_blocking(move || {
+        manager_clone.test_connection(connection_config)
+    })
+    .await
+    .map_err(|e| format!("Task failed: {}", e))?
+    .map_err(|e| e.to_string())
 }
 
 /// Make a connection global (move from project to global storage)
@@ -133,14 +172,18 @@ pub struct ConnectionConfigDto {
     pub name: String,
     #[serde(rename = "type")]
     pub db_type: String,
-    pub host: String,
+    #[serde(default)]
+    pub host: Option<String>,
     pub port: u16,
-    pub username: String,
+    #[serde(default)]
+    pub username: Option<String>,
     pub password: Option<String>,
     pub database: Option<String>,
     pub scope: String,
     #[serde(default)]
     pub options: std::collections::HashMap<String, String>,
+    #[serde(default)]
+    pub file_path: Option<String>,
 }
 
 impl From<ConnectionConfigDto> for ConnectionConfig {
@@ -148,9 +191,18 @@ impl From<ConnectionConfigDto> for ConnectionConfig {
         let db_type = match dto.db_type.as_str() {
             "postgresql" => crate::database::DatabaseType::PostgreSQL,
             "mysql" => crate::database::DatabaseType::MySQL,
+            "mariadb" => crate::database::DatabaseType::MariaDB,
             "sqlite" => crate::database::DatabaseType::SQLite,
             "mongodb" => crate::database::DatabaseType::MongoDB,
             "redis" => crate::database::DatabaseType::Redis,
+            "sqlserver" => crate::database::DatabaseType::SQLServer,
+            "oracle" => crate::database::DatabaseType::Oracle,
+            "cassandra" => crate::database::DatabaseType::Cassandra,
+            "clickhouse" => crate::database::DatabaseType::ClickHouse,
+            "cockroachdb" => crate::database::DatabaseType::CockroachDB,
+            "neo4j" => crate::database::DatabaseType::Neo4j,
+            "dynamodb" => crate::database::DatabaseType::DynamoDB,
+            "elasticsearch" => crate::database::DatabaseType::Elasticsearch,
             _ => crate::database::DatabaseType::PostgreSQL, // Default
         };
 
@@ -164,13 +216,14 @@ impl From<ConnectionConfigDto> for ConnectionConfig {
             id: dto.id,
             name: dto.name,
             db_type,
-            host: dto.host,
+            host: dto.host.unwrap_or_else(|| "localhost".to_string()),
             port: dto.port,
-            username: dto.username,
+            username: dto.username.unwrap_or_default(),
             password: dto.password,
             database: dto.database,
             scope,
             options: dto.options,
+            file_path: dto.file_path,
         }
     }
 }
