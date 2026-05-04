@@ -2,10 +2,9 @@
 ///
 /// Uses sqlx to query SQLite system tables (sqlite_master)
 
-use crate::database::{Result, ConnectionConfig, DatabaseError};
+use crate::database::{Result, ConnectionConfig, manager::AnyPool};
 use super::traits::{DatabaseIntrospector, DatabaseObject, ObjectKind};
 use serde_json::json;
-use std::path::PathBuf;
 
 pub struct SqliteIntrospector;
 
@@ -14,99 +13,91 @@ impl SqliteIntrospector {
         Self
     }
 
-    fn get_connection_string(config: &ConnectionConfig) -> Result<String> {
-        let file_path = config.file_path.as_ref()
-            .ok_or_else(|| DatabaseError::ConnectionError("No file path provided for SQLite".to_string()))?;
+    async fn get_table_children(&self, pool: &sqlx::SqlitePool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        // Get columns using PRAGMA table_info
+        let pragma = format!("PRAGMA table_info('{}')", parent.name);
+        let columns: Vec<(i64, String, String, bool, Option<String>, bool)> = sqlx::query_as(&pragma)
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
 
-        let path = PathBuf::from(file_path);
-        if !path.exists() {
-            return Err(DatabaseError::ConnectionError(format!("SQLite file not found: {}", file_path)));
-        }
+        eprintln!("[SqliteIntrospector] Found {} columns for table {}: {:?}", columns.len(), parent.name, columns.iter().map(|(_,n,_,_,_,_)| n.as_str()).collect::<Vec<_>>());
 
-        Ok(format!("sqlite://{}?mode=ro", file_path))
+        columns.iter().map(|(_, name, dtype, notnull, _, pk)| DatabaseObject {
+            id: format!("column:{}.{}", parent.name, name),
+            name: name.clone(),
+            kind: ObjectKind::Column,
+            icon: "mdi:form-textbox".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "table": parent.name,
+                "column": name,
+                "type": dtype,
+                "nullable": !notnull,
+                "primary_key": *pk
+            })),
+        }).collect()
     }
 }
 
 impl DatabaseIntrospector for SqliteIntrospector {
-    fn get_root_objects(&self, config: &ConnectionConfig) -> Result<Vec<DatabaseObject>> {
-        let connection_string = Self::get_connection_string(config)?;
+    fn get_root_objects(&self, pool: &AnyPool, _config: &ConnectionConfig) -> Result<Vec<DatabaseObject>> {
+        let AnyPool::Sqlite(pool) = pool else {
+            return Err(crate::database::DatabaseError::ConnectionError("Wrong pool type".to_string()));
+        };
 
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e)))?;
+        eprintln!("[SqliteIntrospector] get_root_objects");
 
-        rt.block_on(async {
-            let pool = sqlx::SqlitePool::connect(&connection_string).await
-                .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                // Get all tables from sqlite_master
+                let tables: Vec<(String,)> = sqlx::query_as(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+                )
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
 
-            // Get all tables from sqlite_master
-            let tables: Vec<(String,)> = sqlx::query_as(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-            )
-            .fetch_all(&pool)
-            .await
-            .unwrap_or_default();
+                eprintln!("[SqliteIntrospector] Found {} tables: {:?}", tables.len(), tables);
 
-            pool.close().await;
-
-            let objects = tables.iter()
-                .map(|(name,)| DatabaseObject {
-                    id: format!("table:{}", name),
-                    name: name.clone(),
-                    kind: ObjectKind::Table,
-                    icon: "mdi:table".to_string(),
-                    children: None,
-                    expanded: false,
-                    metadata: Some(json!({ "name": name })),
-                })
-                .collect();
-
-            Ok(objects)
-        })
-    }
-
-    fn get_children(&self, config: &ConnectionConfig, parent: &DatabaseObject) -> Result<Vec<DatabaseObject>> {
-        let connection_string = Self::get_connection_string(config)?;
-
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| DatabaseError::ConnectionError(format!("Failed to create runtime: {}", e)))?;
-
-        rt.block_on(async {
-            let pool = sqlx::SqlitePool::connect(&connection_string).await
-                .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
-
-            match parent.kind {
-                ObjectKind::Table => {
-                    // Get columns using PRAGMA table_info
-                    let pragma = format!("PRAGMA table_info('{}')", parent.name);
-                    let columns: Vec<(i64, String, String, bool, Option<String>, bool)> = sqlx::query_as(&pragma)
-                        .fetch_all(&pool)
-                        .await
-                        .unwrap_or_default();
-
-                    pool.close().await;
-
-                    Ok(columns.iter().map(|(_, name, dtype, notnull, _, pk)| DatabaseObject {
-                        id: format!("column:{}.{}", parent.name, name),
+                Ok(tables.iter()
+                    .map(|(name,)| DatabaseObject {
+                        id: format!("table:{}", name),
                         name: name.clone(),
-                        kind: ObjectKind::Column,
-                        icon: "mdi:form-textbox".to_string(),
+                        kind: ObjectKind::Table,
+                        icon: "mdi:table".to_string(),
                         children: None,
                         expanded: false,
-                        metadata: Some(json!({
-                            "table": parent.name,
-                            "column": name,
-                            "type": dtype,
-                            "nullable": !notnull,
-                            "primary_key": *pk
-                        })),
-                    }).collect())
-                }
-                _ => Ok(Vec::new()),
-            }
-        })
+                        metadata: Some(json!({ "name": name })),
+                    })
+                    .collect::<Vec<_>>())
+            })
+        });
+
+        result
     }
 
-    fn get_object_details(&self, config: &ConnectionConfig, object: &DatabaseObject) -> Result<serde_json::Value> {
+    fn get_children(&self, pool: &AnyPool, parent: &DatabaseObject) -> Result<Vec<DatabaseObject>> {
+        let AnyPool::Sqlite(pool) = pool else {
+            return Err(crate::database::DatabaseError::ConnectionError("Wrong pool type".to_string()));
+        };
+
+        eprintln!("[SqliteIntrospector] get_children - parent: {}", parent.name);
+
+        let result = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                match parent.kind {
+                    ObjectKind::Table => self.get_table_children(pool, parent).await,
+                    _ => Vec::new(),
+                }
+            })
+        });
+
+        Ok(result)
+    }
+
+    fn get_object_details(&self, _pool: &AnyPool, object: &DatabaseObject) -> Result<serde_json::Value> {
         Ok(object.metadata.clone().unwrap_or(json!({})))
     }
 }

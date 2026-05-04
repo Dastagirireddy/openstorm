@@ -432,6 +432,7 @@ fn main() {
             commands::introspection::db_get_objects,
             commands::introspection::db_get_children,
             commands::introspection::db_get_object_details,
+            commands::introspection::db_disconnect,
 
             // === Theme ===
             theme::get_system_theme,

@@ -7,14 +7,36 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use dashmap::DashMap;
+use sqlx::postgres::PgPool;
+use sqlx::mysql::MySqlPool;
+use sqlx::SqlitePool;
 use crate::config::PathConfig;
 use crate::database::{DatabaseError, Result, ConnectionConfig, ConnectionInfo, ConnectionScope, DatabaseType};
 use crate::database::providers::*;
+
+/// Union type for database pools
+pub enum AnyPool {
+    Postgres(PgPool),
+    MySql(MySqlPool),
+    Sqlite(SqlitePool),
+}
+
+impl Clone for AnyPool {
+    fn clone(&self) -> Self {
+        match self {
+            AnyPool::Postgres(p) => AnyPool::Postgres(p.clone()),
+            AnyPool::MySql(p) => AnyPool::MySql(p.clone()),
+            AnyPool::Sqlite(p) => AnyPool::Sqlite(p.clone()),
+        }
+    }
+}
 
 /// Database manager - handles connection lifecycle
 #[derive(Clone)]
 pub struct DatabaseManager {
     path_config: Arc<PathConfig>,
+    active_pools: Arc<DashMap<String, AnyPool>>,
 }
 
 impl DatabaseManager {
@@ -22,7 +44,124 @@ impl DatabaseManager {
     pub fn new() -> Self {
         Self {
             path_config: Arc::new(PathConfig::new()),
+            active_pools: Arc::new(DashMap::new()),
         }
+    }
+
+    /// Get or create a pool for a connection (async version)
+    pub async fn get_or_create_pool(&self, config: &ConnectionConfig) -> Result<AnyPool> {
+        let connection_id = config.id.as_ref().unwrap().to_string();
+
+        // Check if pool already exists
+        if let Some(pool) = self.active_pools.get(&connection_id) {
+            return Ok(pool.value().clone());
+        }
+
+        // Create new pool based on database type
+        let pool = self.create_pool(config).await?;
+
+        // Store in active pools
+        self.active_pools.insert(connection_id, pool.clone());
+
+        Ok(pool)
+    }
+
+    /// Create a new pool for a connection
+    async fn create_pool(&self, config: &ConnectionConfig) -> Result<AnyPool> {
+        match config.db_type {
+            DatabaseType::PostgreSQL => {
+                let connection_string = Self::build_postgres_connection_string(config);
+                let pool = PgPool::connect(&connection_string).await
+                    .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
+                Ok(AnyPool::Postgres(pool))
+            }
+            DatabaseType::MySQL | DatabaseType::MariaDB => {
+                let connection_string = Self::build_mysql_connection_string(config);
+                let pool = MySqlPool::connect(&connection_string).await
+                    .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
+                Ok(AnyPool::MySql(pool))
+            }
+            DatabaseType::SQLite => {
+                let connection_string = Self::build_sqlite_connection_string(config);
+                let pool = SqlitePool::connect(&connection_string).await
+                    .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
+                Ok(AnyPool::Sqlite(pool))
+            }
+            _ => Err(DatabaseError::ConnectionError("Unsupported database type for pooling".to_string())),
+        }
+    }
+
+    /// Build PostgreSQL connection string
+    fn build_postgres_connection_string(config: &ConnectionConfig) -> String {
+        let auth = if !config.username.is_empty() {
+            if let Some(password) = &config.password {
+                if !password.is_empty() {
+                    format!("{}:{}@", config.username, password)
+                } else {
+                    format!("{}@", config.username)
+                }
+            } else {
+                format!("{}@", config.username)
+            }
+        } else {
+            String::new()
+        };
+
+        let host = if config.host.is_empty() { "localhost" } else { &config.host };
+        let port = if config.port > 0 { format!(":{}", config.port) } else { String::from(":5432") };
+        let dbname = config.database.as_deref().unwrap_or("postgres");
+
+        format!("postgresql://{}{}{}/{}", auth, host, port, dbname)
+    }
+
+    /// Build MySQL connection string
+    fn build_mysql_connection_string(config: &ConnectionConfig) -> String {
+        let auth = if !config.username.is_empty() {
+            if let Some(password) = &config.password {
+                if !password.is_empty() {
+                    format!("{}:{}@", config.username, password)
+                } else {
+                    format!("{}@", config.username)
+                }
+            } else {
+                format!("{}@", config.username)
+            }
+        } else {
+            String::new()
+        };
+
+        let host = if config.host.is_empty() { "localhost" } else { &config.host };
+        let port = if config.port > 0 { format!(":{}", config.port) } else { String::from(":3306") };
+        let dbname = config.database.as_deref().unwrap_or("mysql");
+
+        format!("mysql://{}{}{}/{}", auth, host, port, dbname)
+    }
+
+    /// Build SQLite connection string
+    fn build_sqlite_connection_string(config: &ConnectionConfig) -> String {
+        config.file_path.clone().unwrap_or_else(|| ":memory:".to_string())
+    }
+
+    /// Close and remove a pool
+    pub async fn close_pool(&self, connection_id: &str) -> Result<()> {
+        if let Some((_, pool)) = self.active_pools.remove(connection_id) {
+            // Close the pool
+            match pool {
+                AnyPool::Postgres(p) => p.close().await,
+                AnyPool::MySql(p) => p.close().await,
+                AnyPool::Sqlite(p) => p.close().await,
+            }
+        }
+        Ok(())
+    }
+
+    /// Close all pools (on app shutdown)
+    pub async fn close_all_pools(&self) -> Result<()> {
+        let keys: Vec<_> = self.active_pools.iter().map(|r| r.key().clone()).collect();
+        for key in keys {
+            let _ = self.close_pool(&key).await;
+        }
+        Ok(())
     }
 
     /// List all connections (merged global + project)

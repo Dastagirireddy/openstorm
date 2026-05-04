@@ -33,11 +33,26 @@ export class DatabaseMultiTree extends TailwindElement() {
   @state() private expandedConnections = new Set<string>();
   @state() private expandedNodes: Map<string, Set<string>> = new Map();
   @state() private loadingConnections = new Set<string>();
+  @state() private activeConnections = new Set<string>();
   @state() private selectedNodeId: string | null = null;
   @state() private hoveredNode: string | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
+    this.addEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
+  }
+
+  disconnectedCallback(): void {
+    this.removeEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
+    super.disconnectedCallback();
+  }
+
+  private handleRefreshConnection(e: CustomEvent) {
+    e.stopPropagation();
+    const connectionId = e.detail.connectionId;
+    if (connectionId) {
+      this.refreshConnection(connectionId, new Event('click'));
+    }
   }
 
   private dispatchRemove(connectionId: string) {
@@ -64,11 +79,26 @@ export class DatabaseMultiTree extends TailwindElement() {
 
       this.connectionTrees.set(connectionId, result);
       this.expandedConnections.add(connectionId);
+      this.activeConnections.add(connectionId);
     } catch (err) {
       console.error('Failed to load connection objects:', err);
     } finally {
       this.loadingConnections.delete(connectionId);
       this.requestUpdate();
+    }
+  }
+
+  private async handleDisconnect(connectionId: string, e: Event) {
+    e.stopPropagation();
+    try {
+      await invoke('db_disconnect', { connectionId });
+      this.activeConnections.delete(connectionId);
+      this.connectionTrees.delete(connectionId);
+      this.expandedConnections.delete(connectionId);
+      this.expandedNodes.delete(connectionId);
+      this.requestUpdate();
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
     }
   }
 
@@ -128,13 +158,32 @@ export class DatabaseMultiTree extends TailwindElement() {
   }
 
   private handleConnectionClick(connectionId: string) {
+    this.dispatchEvent(
+      new CustomEvent('node-select', {
+        detail: { connectionId },
+        bubbles: true,
+        composed: true,
+      })
+    );
     this.toggleConnection(connectionId);
   }
 
   private handleNodeClick(connectionId: string, node: DatabaseObject) {
     this.selectedNodeId = node.id;
-    this.toggleNode(connectionId, node.id);
-    if (this.expandedNodes.get(connectionId)?.has(node.id)) {
+    const expanded = this.expandedNodes.get(connectionId) || new Set();
+    const wasExpanded = expanded.has(node.id);
+
+    // Toggle the expanded state
+    if (wasExpanded) {
+      expanded.delete(node.id);
+    } else {
+      expanded.add(node.id);
+    }
+    this.expandedNodes.set(connectionId, expanded);
+    this.requestUpdate();
+
+    // If now expanded, load children
+    if (!wasExpanded) {
       this.loadChildren(connectionId, node);
     }
   }
@@ -186,7 +235,7 @@ export class DatabaseMultiTree extends TailwindElement() {
         const isIndexFolder = metadata['folder'] as string;
         if (isIndexFolder) {
           const count = metadata['count'] as number;
-          return { type: 'Indexes', info: '', count };
+          return { type: '', info: '', count };
         }
         // Actual index - show columns in type
         const indexColumns = metadata['columns'] as string;
@@ -198,16 +247,16 @@ export class DatabaseMultiTree extends TailwindElement() {
       case 'key':
         const keyCount = metadata['count'] as number;
         if (keyCount !== undefined) {
-          return { type: 'Keys', info: '', count: keyCount };
+          return { type: '', info: '', count: keyCount };
         }
         // Actual key - show constraint type and columns
         const constraintType = metadata['constraintType'] as string;
         const keyColumns = metadata['columns'] as string;
         const refTable = metadata['referenceTable'] as string;
         if (constraintType === 'FOREIGN KEY' && refTable) {
-          return { type: 'FK', info: `→ ${refTable}${keyColumns ? `(${keyColumns})` : ''}` };
+          return { type: 'Foreign Key', info: `→ ${refTable}${keyColumns ? `(${keyColumns})` : ''}` };
         }
-        return { type: constraintType || 'KEY', info: keyColumns || '' };
+        return { type: 'Primary Key', info: keyColumns || '' };
       default:
         return { type: '', info: '' };
     }
@@ -216,13 +265,13 @@ export class DatabaseMultiTree extends TailwindElement() {
   private getIconColor(kind: ObjectKind, metadata?: Record<string, unknown>): string {
     if (metadata?.['iconColor']) return metadata['iconColor'] as string;
     const colors: Record<ObjectKind, string> = {
-      connection: '#3B82F6',
-      schema: '#F59E0B',
-      table: '#10B981',
-      view: '#A855F7',
-      column: '#64748B',
-      index: '#F59E0B',
-      key: '#F59E0B',
+      connection: '#60A5FA',
+      schema: '#FBBF24',
+      table: '#34D399',
+      view: '#C084FC',
+      column: '#9CA3AF',
+      index: '#FBBF24',
+      key: '#FBBF24',
     };
     return colors[kind] || 'var(--app-foreground)';
   }
@@ -230,41 +279,62 @@ export class DatabaseMultiTree extends TailwindElement() {
   private getColumnIcon(dataType: string): string {
     const type = dataType.toLowerCase();
     // Integers
-    if (type.includes('int') || type.includes('serial')) return 'mdi:counter';
+    if (type.includes('int') || type.includes('serial')) return 'mdi:numeric';
     // Booleans
-    if (type.includes('bool')) return 'mdi:toggle-switch';
+    if (type.includes('bool')) return 'mdi:checkbox-marked';
     // Text types
-    if (type.includes('char') || type.includes('text')) return 'mdi:text-box';
+    if (type.includes('char') || type.includes('text')) return 'mdi:text';
     // Date/Time
-    if (type.includes('date')) return 'mdi:calendar-clock';
-    if (type.includes('time')) return 'mdi:clock-outline';
+    if (type.includes('date')) return 'mdi:calendar';
+    if (type.includes('time')) return 'mdi:clock-time-four';
     // JSON
-    if (type.includes('json')) return 'mdi:code-json';
+    if (type.includes('json')) return 'mdi:code-braces';
     // UUID
-    if (type.includes('uuid')) return 'mdi:fingerprint';
+    if (type.includes('uuid')) return 'mdi:barcode';
     // Numbers
-    if (type.includes('float') || type.includes('double')) return 'mdi:chart-timeline-variant-shimmer';
-    if (type.includes('decimal') || type.includes('numeric')) return 'mdi:currency-usd';
+    if (type.includes('float') || type.includes('double') || type.includes('decimal') || type.includes('numeric')) return 'mdi:decimal';
     // Binary
-    if (type.includes('blob') || type.includes('byte')) return 'mdi:database-outline';
+    if (type.includes('blob') || type.includes('byte')) return 'mdi:paperclip';
     // Default
-    return 'mdi:variable';
+    return 'mdi:alpha-a-box';
+  }
+
+  private getColumnIconColor(dataType: string): string {
+    const type = dataType.toLowerCase();
+    // Integers - Orange
+    if (type.includes('int') || type.includes('serial')) return '#FB923C';
+    // Booleans - Green
+    if (type.includes('bool')) return '#4ADE80';
+    // Text types - Blue
+    if (type.includes('char') || type.includes('text')) return '#60A5FA';
+    // Date/Time - Purple
+    if (type.includes('date') || type.includes('time')) return '#C084FC';
+    // JSON - Yellow
+    if (type.includes('json')) return '#FACC15';
+    // UUID - Pink
+    if (type.includes('uuid')) return '#F472B6';
+    // Numbers - Teal
+    if (type.includes('float') || type.includes('double') || type.includes('decimal') || type.includes('numeric')) return '#2DD4BF';
+    // Binary - Gray
+    if (type.includes('blob') || type.includes('byte')) return '#9CA3AF';
+    // Default - Slate
+    return '#78716C';
   }
 
   private getDbIcon(dbType: string): string {
     const icons: Record<string, string> = {
-      postgresql: 'simple-icons:postgresql',
-      mysql: 'simple-icons:mysql',
-      sqlite: 'simple-icons:sqlite',
-      mongodb: 'simple-icons:mongodb',
-      redis: 'simple-icons:redis',
-      mariadb: 'simple-icons:mariadb',
-      sqlserver: 'simple-icons:microsoftsqlserver',
-      oracle: 'simple-icons:oracle',
-      cockroachdb: 'simple-icons:cockroachlabs',
-      clickhouse: 'simple-icons:clickhouse',
-      neo4j: 'simple-icons:neo4j',
-      elasticsearch: 'simple-icons:elasticsearch',
+      postgresql: 'logos:postgresql',
+      mysql: 'logos:mysql',
+      sqlite: 'logos:sqlite',
+      mongodb: 'logos:mongodb',
+      redis: 'logos:redis',
+      mariadb: 'logos:mariadb',
+      sqlserver: 'logos:microsoft',
+      oracle: 'logos:oracle',
+      cockroachdb: 'logos:cockroachlabs',
+      clickhouse: 'logos:clickhouse',
+      neo4j: 'logos:neo4j',
+      elasticsearch: 'logos:elastic',
     };
     return icons[dbType] || 'mdi:database';
   }
@@ -296,11 +366,13 @@ export class DatabaseMultiTree extends TailwindElement() {
     const isActualIndex = node.kind === 'index' && !isFolder;
     const isTableFolder = (node.kind === 'table' || node.kind === 'view') && isFolder;
     let displayIcon = node.icon;
+    let columnIconColor = iconColor;
     let isPrimaryKey = false;
 
     if (isActualColumn) {
-      // Actual column - use type-specific icon
+      // Actual column - use type-specific icon with color
       displayIcon = this.getColumnIcon(type);
+      columnIconColor = this.getColumnIconColor(type);
       isPrimaryKey = node.metadata?.['isPrimaryKey'] as boolean;
     } else if (isActualIndex) {
       // Actual index
@@ -333,10 +405,10 @@ export class DatabaseMultiTree extends TailwindElement() {
                 ></iconify-icon>`
               : isLoading
                 ? html`<iconify-icon
-                    icon="mdi:loading"
+                    icon="line-md:loading-loop"
                     class="animate-spin"
-                    width="16"
-                    height="16"
+                    width="18"
+                    height="18"
                     style="color: var(--brand-primary);"
                   ></iconify-icon>`
                 : html`<span class="w-3.5"></span>`}
@@ -349,7 +421,7 @@ export class DatabaseMultiTree extends TailwindElement() {
                   icon=${displayIcon}
                   width="16"
                   height="16"
-                  style="color: ${iconColor};"
+                  style="color: ${isActualColumn ? columnIconColor : iconColor};"
                 ></iconify-icon>
                 <iconify-icon
                   icon="mdi:key"
@@ -365,12 +437,12 @@ export class DatabaseMultiTree extends TailwindElement() {
                 width="16"
                 height="16"
                 class="mr-1.5 flex-shrink-0"
-                style="color: ${iconColor};"
+                style="color: ${isActualColumn ? columnIconColor : iconColor};"
               ></iconify-icon>`}
 
           <!-- Object Name with count -->
           <span class="text-[14px] font-medium whitespace-nowrap" style="color: var(--app-foreground);">
-            ${node.name}${count ? html`&nbsp;<span class="font-mono text-[12px]" style="color: var(--app-muted-foreground); opacity: 0.6;">${count}</span>` : nothing}
+            ${node.name}${count !== undefined && count !== null ? html`&nbsp;<span class="font-mono text-[12px]" style="color: var(--app-muted-foreground); opacity: 0.6;">${count}</span>` : nothing}
           </span>
 
           <!-- Type label for non-folder nodes -->
@@ -389,10 +461,19 @@ export class DatabaseMultiTree extends TailwindElement() {
     `;
   }
 
+  private async refreshConnection(connectionId: string, e: Event) {
+    e.stopPropagation();
+    this.connectionTrees.delete(connectionId);
+    this.expandedConnections.delete(connectionId);
+    this.expandedNodes.delete(connectionId);
+    await this.loadConnectionObjects(connectionId);
+  }
+
   private renderConnectionTree(connection: AnyDataSource) {
     const isExpanded = this.expandedConnections.has(connection.id);
     const trees = this.connectionTrees.get(connection.id) || [];
     const isLoading = this.loadingConnections.has(connection.id);
+    const isActive = this.activeConnections.has(connection.id);
     const dbType = connection.config.dbType || 'database';
     const dbIcon = this.getDbIcon(dbType);
 
@@ -400,7 +481,7 @@ export class DatabaseMultiTree extends TailwindElement() {
       <div class="mb-2">
         <!-- Connection Header Row -->
         <div
-          class="flex items-center h-7 px-2 cursor-pointer rounded hover:bg-[var(--app-hover)] transition-colors duration-150"
+          class="group flex items-center h-8 px-2 cursor-pointer rounded hover:bg-[var(--app-hover)] transition-colors duration-150"
           @click=${() => this.handleConnectionClick(connection.id)}
         >
           <!-- Expand/Collapse Icon -->
@@ -427,16 +508,32 @@ export class DatabaseMultiTree extends TailwindElement() {
             width="16"
             height="16"
             class="mr-2 flex-shrink-0"
-            style="color: var(--app-foreground);"
+            style="color: ${isActive ? 'var(--brand-primary)' : 'var(--app-foreground);'}"
           ></iconify-icon>
 
           <!-- Connection Name with Type Badge -->
           <span class="text-[14px] font-medium truncate flex-1" style="color: var(--app-foreground);">
             ${connection.name}
           </span>
-          <span class="text-[11px] font-medium ml-1.5 px-1.5 py-0.5 rounded" style="color: var(--app-muted-foreground); background: var(--app-selected);">
-            ${dbType}
+          <span class="text-[7px] font-bold ml-2 px-1 py-0.5 rounded" style="color: #6366F1; border: 1px solid #6366F1; letter-spacing: 0.03em;">
+            ${dbType.toUpperCase()}
           </span>
+          ${isActive
+            ? html`
+                <button
+                  @click=${(e: Event) => this.handleDisconnect(connection.id, e)}
+                  class="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--app-hover)] transition-all"
+                  title="Disconnect"
+                >
+                  <iconify-icon
+                    icon="mdi:plug"
+                    width="14"
+                    height="14"
+                    style="color: var(--app-muted-foreground);"
+                  ></iconify-icon>
+                </button>
+              `
+            : nothing}
         </div>
 
         <!-- Connection Children (Schemas, Tables, etc.) -->

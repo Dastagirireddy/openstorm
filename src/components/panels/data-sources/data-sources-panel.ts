@@ -19,6 +19,7 @@ export class DataSourcesPanel extends TailwindElement() {
   @state() private showAddDialog = false;
   @state() private selectedType: DataSourceType | null = null;
   @state() private selectedVendor: DatabaseType | null = null;
+  @state() private selectedConnectionId: string | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -109,6 +110,17 @@ export class DataSourcesPanel extends TailwindElement() {
     this.selectedVendor = null;
   }
 
+  private dispatchRefresh(connectionId: string) {
+    // Dispatch event that database-multi-tree will listen to
+    this.querySelector('database-multi-tree')?.dispatchEvent(
+      new CustomEvent('refresh-connection', {
+        detail: { connectionId },
+        bubbles: false,
+        composed: true,
+      })
+    );
+  }
+
   private renderFormForType(type: DataSourceType) {
     switch (type) {
       case 'database':
@@ -144,7 +156,7 @@ export class DataSourcesPanel extends TailwindElement() {
 
   render() {
     return html`
-      <div class="flex flex-col h-full w-full" style="background-color: var(--app-bg);">
+      <div class="flex flex-col h-full w-full" style="background-color: var(--activitybar-background);">
         <div class="flex flex-col h-full">
           <!-- Header -->
           <div class="flex items-center justify-between px-2.5 py-2 border-b" style="border-color: var(--app-border);">
@@ -152,13 +164,24 @@ export class DataSourcesPanel extends TailwindElement() {
               <div class="w-2 h-2 rounded-full" style="background: var(--brand-primary);"></div>
               <span class="text-[11px] font-semibold tracking-wide" style="color: var(--app-foreground);">DATABASE</span>
             </div>
-            <button
-              @click=${() => (this.showAddDialog = true)}
-              class="p-1.5 hover:bg-[var(--app-hover)] rounded transition-colors"
-              title="Add Connection"
-            >
-              <iconify-icon icon="mdi:plus" width="15" height="15" style="color: var(--app-foreground);"></iconify-icon>
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                @click=${() => this.dispatchRefresh(this.selectedConnectionId)}
+                class="p-1.5 rounded transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
+                style=${!this.selectedConnectionId ? 'color: var(--app-disabled-foreground);' : 'color: var(--app-foreground);'}
+                title=${this.selectedConnectionId ? 'Refresh' : 'Select a connection to refresh'}
+                ?disabled=${!this.selectedConnectionId}
+              >
+                <iconify-icon icon="mdi:refresh" width="15" height="15"></iconify-icon>
+              </button>
+              <button
+                @click=${() => (this.showAddDialog = true)}
+                class="p-1.5 hover:bg-[var(--app-hover)] rounded transition-colors"
+                title="Add Connection"
+              >
+                <iconify-icon icon="mdi:plus" width="15" height="15" style="color: var(--app-foreground);"></iconify-icon>
+              </button>
+            </div>
           </div>
 
           <!-- Database Tree View -->
@@ -168,6 +191,7 @@ export class DataSourcesPanel extends TailwindElement() {
               .dataSources=${this.dataSources}
               .projectPath=${this.projectPath}
               @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
+              @node-select=${(e: CustomEvent) => { this.selectedConnectionId = e.detail.connectionId; }}
             ></database-multi-tree>
           </div>
         </div>

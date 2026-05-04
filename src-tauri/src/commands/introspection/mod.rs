@@ -4,6 +4,7 @@
 //! - Getting database objects (databases, schemas, tables)
 //! - Getting children of database objects
 //! - Getting object details
+//! - Disconnecting database connections
 
 use tauri::State;
 use crate::database::{DatabaseManager, ConnectionConfig};
@@ -12,8 +13,8 @@ use std::path::PathBuf;
 
 /// Get root database objects for a connection
 #[tauri::command]
-pub fn db_get_objects(
-    manager: State<DatabaseManager>,
+pub async fn db_get_objects(
+    manager: State<'_, DatabaseManager>,
     connection_id: String,
     project_path: Option<String>,
 ) -> Result<Vec<DatabaseObject>, String> {
@@ -25,8 +26,8 @@ pub fn db_get_objects(
         .find(|c| c.id == connection_id)
         .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
 
-    // Get the appropriate introspector
-    let introspector = get_introspector(connection.db_type.clone());
+    eprintln!("[db_get_objects] Found connection: {} (type: {:?})", connection.name, connection.db_type);
+    eprintln!("[db_get_objects] Host: {}, Port: {}, Database: {:?}", connection.host, connection.port, connection.database);
 
     // Get password from keychain
     let password_result = manager.get_password(&connection.id);
@@ -47,13 +48,31 @@ pub fn db_get_objects(
         file_path: connection.file_path.clone(),
     };
 
-    introspector.get_root_objects(&config).map_err(|e| e.to_string())
+    eprintln!("[db_get_objects] Creating pool...");
+    // Get or create pool for this connection
+    let pool = manager.get_or_create_pool(&config).await
+        .map_err(|e| {
+            eprintln!("[db_get_objects] Failed to create pool: {}", e);
+            format!("Failed to get connection pool: {}", e)
+        })?;
+    eprintln!("[db_get_objects] Pool created/fetched successfully");
+
+    // Get the appropriate introspector
+    let introspector = get_introspector(connection.db_type.clone());
+
+    eprintln!("[db_get_objects] Calling get_root_objects...");
+    let result = introspector.get_root_objects(&pool, &config).map_err(|e| {
+        eprintln!("[db_get_objects] get_root_objects failed: {}", e);
+        e.to_string()
+    })?;
+    eprintln!("[db_get_objects] Returned {} objects", result.len());
+    Ok(result)
 }
 
 /// Get children of a database object
 #[tauri::command]
-pub fn db_get_children(
-    manager: State<DatabaseManager>,
+pub async fn db_get_children(
+    manager: State<'_, DatabaseManager>,
     connection_id: String,
     parent: DatabaseObject,
     project_path: Option<String>,
@@ -66,11 +85,10 @@ pub fn db_get_children(
         .find(|c| c.id == connection_id)
         .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
 
+    eprintln!("[db_get_children] parent.kind: {:?}, parent.name: {}", parent.kind, parent.name);
+
     // Get password from keychain
     let password = manager.get_password(&connection.id).ok().flatten();
-
-    // Get the appropriate introspector
-    let introspector = get_introspector(connection.db_type.clone());
 
     // Build connection config
     let config = ConnectionConfig {
@@ -87,13 +105,29 @@ pub fn db_get_children(
         file_path: connection.file_path.clone(),
     };
 
-    introspector.get_children(&config, &parent).map_err(|e| e.to_string())
+    // Get or create pool for this connection
+    let pool = manager.get_or_create_pool(&config).await
+        .map_err(|e| {
+            eprintln!("[db_get_children] Failed to create pool: {}", e);
+            format!("Failed to get connection pool: {}", e)
+        })?;
+
+    // Get the appropriate introspector
+    let introspector = get_introspector(connection.db_type.clone());
+
+    eprintln!("[db_get_children] Calling get_children...");
+    let result = introspector.get_children(&pool, &parent).map_err(|e| {
+        eprintln!("[db_get_children] get_children failed: {}", e);
+        e.to_string()
+    })?;
+    eprintln!("[db_get_children] Returned {} children", result.len());
+    Ok(result)
 }
 
 /// Get detailed metadata for a database object
 #[tauri::command]
-pub fn db_get_object_details(
-    manager: State<DatabaseManager>,
+pub async fn db_get_object_details(
+    manager: State<'_, DatabaseManager>,
     connection_id: String,
     object: DatabaseObject,
     project_path: Option<String>,
@@ -106,8 +140,8 @@ pub fn db_get_object_details(
         .find(|c| c.id == connection_id)
         .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
 
-    // Get the appropriate introspector
-    let introspector = get_introspector(connection.db_type.clone());
+    // Get password from keychain
+    let password = manager.get_password(&connection.id).ok().flatten();
 
     // Build connection config
     let config = ConnectionConfig {
@@ -117,14 +151,31 @@ pub fn db_get_object_details(
         host: connection.host.clone(),
         port: connection.port,
         username: connection.username.clone(),
-        password: None,
+        password,
         database: connection.database.clone(),
         scope: connection.scope.clone(),
         options: std::collections::HashMap::new(),
         file_path: connection.file_path.clone(),
     };
 
-    introspector.get_object_details(&config, &object).map_err(|e| e.to_string())
+    // Get or create pool for this connection
+    let pool = manager.get_or_create_pool(&config).await
+        .map_err(|e| format!("Failed to get connection pool: {}", e))?;
+
+    // Get the appropriate introspector
+    let introspector = get_introspector(connection.db_type.clone());
+
+    introspector.get_object_details(&pool, &object).map_err(|e| e.to_string())
+}
+
+/// Close a database connection (remove from active pools)
+#[tauri::command]
+pub async fn db_disconnect(
+    manager: State<'_, DatabaseManager>,
+    connection_id: String,
+) -> Result<(), String> {
+    manager.close_pool(&connection_id).await
+        .map_err(|e| format!("Failed to disconnect: {}", e))
 }
 
 fn get_introspector(db_type: crate::database::DatabaseType) -> Box<dyn DatabaseIntrospector> {
