@@ -13,6 +13,255 @@ impl MySqlIntrospector {
         Self
     }
 
+    async fn get_database_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let db_name = parent.metadata.as_ref()
+            .and_then(|m| m.get("database"))
+            .and_then(|v| v.as_str())
+            .unwrap_or(&parent.name);
+
+        // Get counts for each object type
+        let table_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.tables
+             WHERE table_schema = ? AND table_type = 'BASE TABLE'"
+        )
+        .bind(db_name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        let view_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.views
+             WHERE table_schema = ?"
+        )
+        .bind(db_name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        let function_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.routines
+             WHERE routine_schema = ? AND routine_type = 'FUNCTION'"
+        )
+        .bind(db_name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        let procedure_count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM information_schema.routines
+             WHERE routine_schema = ? AND routine_type = 'PROCEDURE'"
+        )
+        .bind(db_name)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+
+        // Build folders array
+        let mut folders = vec![
+            DatabaseObject {
+                id: format!("tables_folder:{}", db_name),
+                name: "Tables".to_string(),
+                kind: ObjectKind::Table,
+                icon: "mdi:table-multiple".to_string(),
+                children: Some(vec![]), // Placeholder - will be loaded on expand
+                expanded: false,
+                metadata: Some(json!({
+                    "database": db_name,
+                    "folder": "tables",
+                    "count": table_count,
+                    "iconColor": "#34D399"
+                })),
+            },
+            DatabaseObject {
+                id: format!("views_folder:{}", db_name),
+                name: "Views".to_string(),
+                kind: ObjectKind::View,
+                icon: "mdi:database-view".to_string(),
+                children: Some(vec![]), // Placeholder - will be loaded on expand
+                expanded: false,
+                metadata: Some(json!({
+                    "database": db_name,
+                    "folder": "views",
+                    "count": view_count,
+                    "iconColor": "#C084FC"
+                })),
+            },
+        ];
+
+        // Add Functions folder if there are functions
+        if function_count > 0 {
+            folders.push(DatabaseObject {
+                id: format!("functions_folder:{}", db_name),
+                name: "Functions".to_string(),
+                kind: ObjectKind::Table,
+                icon: "mdi:math-function".to_string(),
+                children: Some(vec![]), // Placeholder - will be loaded on expand
+                expanded: false,
+                metadata: Some(json!({
+                    "database": db_name,
+                    "folder": "functions",
+                    "count": function_count,
+                    "iconColor": "#60A5FA"
+                })),
+            });
+        }
+
+        // Add Procedures folder if there are procedures
+        if procedure_count > 0 {
+            folders.push(DatabaseObject {
+                id: format!("procedures_folder:{}", db_name),
+                name: "Procedures".to_string(),
+                kind: ObjectKind::Table,
+                icon: "mdi:code-braces".to_string(),
+                children: Some(vec![]), // Placeholder - will be loaded on expand
+                expanded: false,
+                metadata: Some(json!({
+                    "database": db_name,
+                    "folder": "procedures",
+                    "count": procedure_count,
+                    "iconColor": "#A78BFA"
+                })),
+            });
+        }
+
+        // Filter out empty folders
+        folders.retain(|f| {
+            let count = f.metadata.as_ref().and_then(|m| m.get("count")).and_then(|v| v.as_i64()).unwrap_or(0);
+            count > 0
+        });
+
+        folders
+    }
+
+    async fn get_tables_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let db_name = parent.metadata.as_ref()
+            .and_then(|m| m.get("database"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let tables: Vec<(String, String)> = sqlx::query_as(
+            "SELECT CAST(table_name AS CHAR) AS table_name, CAST(table_type AS CHAR) AS table_type
+             FROM information_schema.tables
+             WHERE table_schema = ? AND table_type = 'BASE TABLE'
+             ORDER BY table_name"
+        )
+        .bind(db_name)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        tables.iter().map(|(name, _)| DatabaseObject {
+            id: format!("table:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::Table,
+            icon: "mdi:table".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "database": db_name,
+                "table": name,
+                "iconColor": "#34D399"
+            })),
+        }).collect()
+    }
+
+    async fn get_views_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let db_name = parent.metadata.as_ref()
+            .and_then(|m| m.get("database"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let views: Vec<(String,)> = sqlx::query_as(
+            "SELECT CAST(table_name AS CHAR) AS table_name
+             FROM information_schema.views
+             WHERE table_schema = ?
+             ORDER BY table_name"
+        )
+        .bind(db_name)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        views.iter().map(|(name,)| DatabaseObject {
+            id: format!("view:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::View,
+            icon: "mdi:database-view".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "database": db_name,
+                "view": name,
+                "iconColor": "#C084FC"
+            })),
+        }).collect()
+    }
+
+    async fn get_functions_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let db_name = parent.metadata.as_ref()
+            .and_then(|m| m.get("database"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let functions: Vec<(String, String)> = sqlx::query_as(
+            "SELECT CAST(routine_name AS CHAR) AS routine_name,
+                    COALESCE(CAST(dtd_identifier AS CHAR) AS CHAR), '') as arguments
+             FROM information_schema.routines
+             WHERE routine_schema = ? AND routine_type = 'FUNCTION'
+             ORDER BY routine_name"
+        )
+        .bind(db_name)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        functions.iter().map(|(name, _)| DatabaseObject {
+            id: format!("function:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::Table,
+            icon: "mdi:math-function".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "database": db_name,
+                "function": name,
+                "iconColor": "#60A5FA"
+            })),
+        }).collect()
+    }
+
+    async fn get_procedures_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let db_name = parent.metadata.as_ref()
+            .and_then(|m| m.get("database"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let procedures: Vec<(String,)> = sqlx::query_as(
+            "SELECT CAST(routine_name AS CHAR) AS routine_name
+             FROM information_schema.routines
+             WHERE routine_schema = ? AND routine_type = 'PROCEDURE'
+             ORDER BY routine_name"
+        )
+        .bind(db_name)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        procedures.iter().map(|(name,)| DatabaseObject {
+            id: format!("procedure:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::Table,
+            icon: "mdi:code-braces".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "database": db_name,
+                "procedure": name,
+                "iconColor": "#A78BFA"
+            })),
+        }).collect()
+    }
+
     async fn get_table_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let db_name = parent.metadata.as_ref()
             .and_then(|m| m.get("database"))
@@ -61,7 +310,7 @@ impl MySqlIntrospector {
                 name: "Columns".to_string(),
                 kind: ObjectKind::Column,
                 icon: "mdi:format-list-bulleted".to_string(),
-                children: None,
+                children: Some(vec![]), // Placeholder - will be loaded on expand
                 expanded: false,
                 metadata: Some(json!({
                     "database": db_name,
@@ -76,7 +325,7 @@ impl MySqlIntrospector {
                 name: "Indexes".to_string(),
                 kind: ObjectKind::Index,
                 icon: "oui:index-runtime".to_string(),
-                children: None,
+                children: Some(vec![]), // Placeholder - will be loaded on expand
                 expanded: false,
                 metadata: Some(json!({
                     "database": db_name,
@@ -91,7 +340,7 @@ impl MySqlIntrospector {
                 name: "Keys".to_string(),
                 kind: ObjectKind::Key,
                 icon: "mdi:key-chain".to_string(),
-                children: None,
+                children: Some(vec![]), // Placeholder - will be loaded on expand
                 expanded: false,
                 metadata: Some(json!({
                     "database": db_name,
@@ -278,34 +527,18 @@ impl DatabaseIntrospector for MySqlIntrospector {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                // Get tables directly from the connected database (skip database list)
-                eprintln!("[MySqlIntrospector] Querying tables for schema: {}", db_name);
-                let tables: Vec<(String, String)> = sqlx::query_as(
-                    "SELECT CAST(table_name AS CHAR) AS table_name, CAST(table_type AS CHAR) AS table_type FROM information_schema.tables
-                     WHERE table_schema = ? AND table_type = 'BASE TABLE'
-                     ORDER BY table_name"
-                )
-                .bind(db_name)
-                .fetch_all(pool)
-                .await
-                .map_err(|e| {
-                    eprintln!("[MySqlIntrospector] Query failed: {}", e);
-                    crate::database::DatabaseError::ConnectionError(format!("Failed to query tables: {}", e))
-                })?;
-
-                eprintln!("[MySqlIntrospector] Found {} tables: {:?}", tables.len(), tables.iter().map(|(n, _)| n.as_str()).collect::<Vec<_>>());
-
-                Ok(tables.iter()
-                    .map(|(name, _)| DatabaseObject {
-                        id: format!("table:{}", name),
-                        name: name.clone(),
-                        kind: ObjectKind::Table,
-                        icon: "mdi:table".to_string(),
+                // Return database node as the root object (IntelliJ-style)
+                Ok(vec![
+                    DatabaseObject {
+                        id: format!("database:{}", db_name),
+                        name: db_name.to_string(),
+                        kind: ObjectKind::Database,
+                        icon: "mdi:database".to_string(),
                         children: None,
                         expanded: false,
-                        metadata: Some(json!({ "database": db_name, "table": name })),
-                    })
-                    .collect())
+                        metadata: Some(json!({ "database": db_name, "iconColor": "#60A5FA" })),
+                    }
+                ])
             })
         })
     }
@@ -320,11 +553,28 @@ impl DatabaseIntrospector for MySqlIntrospector {
         Ok(tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 match parent.kind {
-                    ObjectKind::Table | ObjectKind::View => self.get_table_children(pool, parent).await,
-                    ObjectKind::Column => self.get_column_children(pool, parent).await,
-                    ObjectKind::Index => self.get_index_children(pool, parent).await,
-                    ObjectKind::Key => self.get_key_children(pool, parent).await,
-                    _ => Vec::new(),
+                    ObjectKind::Database => self.get_database_children(pool, parent).await,
+                    // Handle folder types via metadata
+                    _ => {
+                        let folder = parent.metadata.as_ref()
+                            .and_then(|m| m.get("folder"))
+                            .and_then(|v| v.as_str());
+                        match folder {
+                            Some("tables") => self.get_tables_folder_children(pool, parent).await,
+                            Some("views") => self.get_views_folder_children(pool, parent).await,
+                            Some("functions") => self.get_functions_folder_children(pool, parent).await,
+                            Some("procedures") => self.get_procedures_folder_children(pool, parent).await,
+                            _ => {
+                                match parent.kind {
+                                    ObjectKind::Table | ObjectKind::View => self.get_table_children(pool, parent).await,
+                                    ObjectKind::Column => self.get_column_children(pool, parent).await,
+                                    ObjectKind::Index => self.get_index_children(pool, parent).await,
+                                    ObjectKind::Key => self.get_key_children(pool, parent).await,
+                                    _ => Vec::new(),
+                                }
+                            }
+                        }
+                    }
                 }
             })
         }))

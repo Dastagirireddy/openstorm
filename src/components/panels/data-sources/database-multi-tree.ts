@@ -22,7 +22,7 @@ export interface DatabaseObject {
   metadata?: Record<string, unknown>;
 }
 
-export type ObjectKind = 'connection' | 'schema' | 'table' | 'view' | 'column';
+export type ObjectKind = 'connection' | 'database' | 'schema' | 'table' | 'view' | 'column' | 'sequence' | 'function' | 'extension' | 'index' | 'key';
 
 @customElement('database-multi-tree')
 export class DatabaseMultiTree extends TailwindElement() {
@@ -127,14 +127,46 @@ export class DatabaseMultiTree extends TailwindElement() {
 
   private async loadChildren(connectionId: string, node: DatabaseObject) {
     const expanded = this.expandedNodes.get(connectionId) || new Set();
-    if (!expanded.has(node.id) || node.children != null) return;
+    if (!expanded.has(node.id)) return;
+
+    console.log('[loadChildren] node.metadata:', JSON.stringify(node.metadata));
+    console.log('[loadChildren] node.children:', node.children);
+    console.log('[loadChildren] node.kind:', node.kind);
+
+    // Check if children are already loaded
+    // - children === null/undefined: not loaded yet
+    // - children === []: placeholder, needs loading
+    // - children === [...]: already loaded
+    const hasChildrenFlag = node.metadata?.['hasChildren'] as boolean;
+    const hasChildrenArray = Array.isArray(node.children);
+    const childrenAlreadyLoaded = hasChildrenArray && node.children!.length > 0;
+
+    console.log('[loadChildren] hasChildrenArray:', hasChildrenArray, 'childrenAlreadyLoaded:', childrenAlreadyLoaded);
+
+    // Don't reload if children are already loaded and we're not forcing a refresh
+    if (childrenAlreadyLoaded) {
+      console.log('[loadChildren] Children already loaded, skipping');
+      return;
+    }
+
+    // If children is an empty array (placeholder), we need to load from backend
+    console.log('[loadChildren] Loading children for node:', node.id, node.name);
 
     try {
+      console.log('[loadChildren] Invoking db_get_children with parent:', JSON.stringify({
+        id: node.id,
+        name: node.name,
+        kind: node.kind,
+        metadata: node.metadata
+      }));
+
       const children = await invoke<DatabaseObject[]>('db_get_children', {
         connectionId,
         parent: node,
         projectPath: this.projectPath,
       });
+
+      console.log('[loadChildren] Loaded', children.length, 'children for node:', node.name);
 
       const trees = this.connectionTrees.get(connectionId) || [];
       this.updateNodeWithChildren(trees, node.id, children);
@@ -169,9 +201,15 @@ export class DatabaseMultiTree extends TailwindElement() {
   }
 
   private handleNodeClick(connectionId: string, node: DatabaseObject) {
+    console.log('[handleNodeClick] Clicked node:', node.id, node.name, 'kind:', node.kind);
+    console.log('[handleNodeClick] node.metadata:', node.metadata);
+    console.log('[handleNodeClick] node.children:', node.children);
+
     this.selectedNodeId = node.id;
     const expanded = this.expandedNodes.get(connectionId) || new Set();
     const wasExpanded = expanded.has(node.id);
+
+    console.log('[handleNodeClick] wasExpanded:', wasExpanded);
 
     // Toggle the expanded state
     if (wasExpanded) {
@@ -184,6 +222,7 @@ export class DatabaseMultiTree extends TailwindElement() {
 
     // If now expanded, load children
     if (!wasExpanded) {
+      console.log('[handleNodeClick] Calling loadChildren');
       this.loadChildren(connectionId, node);
     }
   }
@@ -194,14 +233,37 @@ export class DatabaseMultiTree extends TailwindElement() {
     switch (node.kind) {
       case 'connection':
         return { type: (metadata['dbType'] as string) || 'Database', info: '' };
-      case 'schema':
+      case 'database':
         return { type: '', info: '' };
+      case 'schema':
+        // Show object count for schemas if available
+        const objectCount = metadata['objectCount'] as number;
+        return { type: '', info: '', count: objectCount };
       case 'table':
         // Check if it's a Tables folder
         const isTableFolder = metadata['folder'] as string;
         if (isTableFolder) {
           const count = metadata['count'] as number;
           return { type: 'Tables', info: '', count };
+        }
+        // Handle Database Objects folders (access_methods, casts, languages, virtual_views, db_objects)
+        const dbObjectsFolder = metadata['folder'] as string;
+        if (dbObjectsFolder) {
+          const count = metadata['count'] as number;
+          switch (dbObjectsFolder) {
+            case 'access_methods':
+              return { type: 'Access Methods', info: '', count };
+            case 'casts':
+              return { type: 'Casts', info: '', count };
+            case 'languages':
+              return { type: 'Languages', info: '', count };
+            case 'virtual_views':
+              return { type: 'Virtual Views', info: '', count };
+            case 'db_objects':
+              return { type: 'Database Objects', info: '', count };
+            default:
+              return { type: dbObjectsFolder.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()), info: '', count };
+          }
         }
         // Actual table - show table type
         const tableType = metadata['type'] as string;
@@ -218,6 +280,33 @@ export class DatabaseMultiTree extends TailwindElement() {
         }
         // Actual view
         return { type: 'VIEW', info: '' };
+      case 'sequence':
+        // Check if it's a Sequences folder
+        const isSequenceFolder = metadata['folder'] as string;
+        if (isSequenceFolder) {
+          const count = metadata['count'] as number;
+          return { type: 'Sequences', info: '', count };
+        }
+        // Actual sequence
+        return { type: 'SEQUENCE', info: '' };
+      case 'function':
+        // Check if it's a Functions folder
+        const isFunctionFolder = metadata['folder'] as string;
+        if (isFunctionFolder) {
+          const count = metadata['count'] as number;
+          return { type: 'Functions', info: '', count };
+        }
+        // Actual function - name already includes arguments
+        return { type: 'FUNCTION', info: '' };
+      case 'extension':
+        // Check if it's an Extensions folder
+        const isExtensionFolder = metadata['folder'] as string;
+        if (isExtensionFolder) {
+          const count = metadata['count'] as number;
+          return { type: 'Extensions', info: '', count };
+        }
+        // Actual extension
+        return { type: 'EXTENSION', info: '' };
       case 'column':
         // Check if it's a folder or actual column
         const isFolder = metadata['folder'] as string;
@@ -266,10 +355,14 @@ export class DatabaseMultiTree extends TailwindElement() {
     if (metadata?.['iconColor']) return metadata['iconColor'] as string;
     const colors: Record<ObjectKind, string> = {
       connection: '#60A5FA',
+      database: '#60A5FA',
       schema: '#FBBF24',
       table: '#34D399',
       view: '#C084FC',
       column: '#9CA3AF',
+      sequence: '#F472B6',
+      function: '#60A5FA',
+      extension: '#A78BFA',
       index: '#FBBF24',
       key: '#FBBF24',
     };
@@ -346,7 +439,8 @@ export class DatabaseMultiTree extends TailwindElement() {
   ) {
     const expanded = this.expandedNodes.get(connectionId) || new Set();
     const isNodeExpanded = expanded.has(node.id);
-    const hasChildren = node.children != null && node.children.length > 0;
+    // hasChildren: show chevron if children exists (even empty array placeholder)
+    const hasChildren = node.children != null;
     const isLoading = isNodeExpanded && node.children == null;
     const iconColor = this.getIconColor(node.kind, node.metadata);
     const isSelected = this.selectedNodeId === node.id;
@@ -365,6 +459,10 @@ export class DatabaseMultiTree extends TailwindElement() {
     const isActualColumn = node.kind === 'column' && !isFolder;
     const isActualIndex = node.kind === 'index' && !isFolder;
     const isTableFolder = (node.kind === 'table' || node.kind === 'view') && isFolder;
+    const isSequenceFolder = node.kind === 'sequence' && isFolder;
+    const isFunctionFolder = node.kind === 'function' && isFolder;
+    const isExtensionFolder = node.kind === 'extension' && isFolder;
+    const isDatabaseObjectsFolder = isFolder && ['access_methods', 'casts', 'languages', 'virtual_views', 'db_objects'].includes(isFolder);
     let displayIcon = node.icon;
     let columnIconColor = iconColor;
     let isPrimaryKey = false;
@@ -380,8 +478,8 @@ export class DatabaseMultiTree extends TailwindElement() {
     } else if (node.kind === 'key') {
       // Key node
       displayIcon = 'mdi:key';
-    } else if (isTableFolder) {
-      // Table/View folder - use folder icon
+    } else if (isTableFolder || isSequenceFolder || isFunctionFolder || isExtensionFolder || isDatabaseObjectsFolder) {
+      // Folder types - use provided icon
       displayIcon = node.icon;
     }
 
