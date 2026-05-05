@@ -6,6 +6,46 @@ use crate::database::{Result, ConnectionConfig, manager::AnyPool};
 use super::traits::{DatabaseIntrospector, DatabaseObject, ObjectKind};
 use serde_json::json;
 
+/// Helper to create a leaf node (no children)
+fn leaf_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: None,
+        expanded: false,
+        has_children: false,
+        metadata: Some(metadata),
+    }
+}
+
+/// Helper to create a folder node (can have children)
+fn folder_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: Some(vec![]),
+        expanded: false,
+        has_children: true,
+        metadata: Some(metadata),
+    }
+}
+
 pub struct SqliteIntrospector;
 
 impl SqliteIntrospector {
@@ -23,21 +63,19 @@ impl SqliteIntrospector {
 
         eprintln!("[SqliteIntrospector] Found {} columns for table {}: {:?}", columns.len(), parent.name, columns.iter().map(|(_,n,_,_,_,_)| n.as_str()).collect::<Vec<_>>());
 
-        columns.iter().map(|(_, name, dtype, notnull, _, pk)| DatabaseObject {
-            id: format!("column:{}.{}", parent.name, name),
-            name: name.clone(),
-            kind: ObjectKind::Column,
-            icon: "mdi:form-textbox".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        columns.iter().map(|(_, name, dtype, notnull, _, pk)| leaf_node(
+            format!("column:{}.{}", parent.name, name),
+            name.clone(),
+            ObjectKind::Column,
+            "mdi:form-textbox".to_string(),
+            json!({
                 "table": parent.name,
                 "column": name,
                 "type": dtype,
                 "nullable": !notnull,
                 "primary_key": *pk
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 }
 
@@ -69,6 +107,7 @@ impl DatabaseIntrospector for SqliteIntrospector {
                         icon: "mdi:table".to_string(),
                         children: None,
                         expanded: false,
+                        has_children: true, // Tables have Columns folder
                         metadata: Some(json!({ "name": name })),
                     })
                     .collect::<Vec<_>>())

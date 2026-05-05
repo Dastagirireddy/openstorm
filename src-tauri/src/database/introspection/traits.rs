@@ -17,6 +17,9 @@ pub struct DatabaseObject {
     pub children: Option<Vec<DatabaseObject>>,
     pub expanded: bool,
     pub metadata: Option<serde_json::Value>,
+    /// Whether this node can have children (determines if expand chevron is shown)
+    #[serde(default)]
+    pub has_children: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

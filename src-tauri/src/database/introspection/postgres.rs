@@ -8,6 +8,46 @@ use serde_json::json;
 
 pub struct PostgresIntrospector;
 
+/// Helper to create a leaf node (no children)
+fn leaf_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: None,
+        expanded: false,
+        metadata: Some(metadata),
+        has_children: false,
+    }
+}
+
+/// Helper to create a folder node (can have children)
+fn folder_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: Some(vec![]), // Placeholder - will be loaded on expand
+        expanded: false,
+        metadata: Some(metadata),
+        has_children: true,
+    }
+}
+
 impl PostgresIntrospector {
     pub fn new() -> Self {
         Self
@@ -84,92 +124,82 @@ impl PostgresIntrospector {
 
         // Access Methods
         if access_methods_count > 0 {
-            db_objects_children.push(DatabaseObject {
-                id: format!("access_methods_folder:{}", db_name),
-                name: "Access Methods".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:tree".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            db_objects_children.push(folder_node(
+                format!("access_methods_folder:{}", db_name),
+                "Access Methods".to_string(),
+                ObjectKind::Table,
+                "mdi:tree".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "access_methods",
                     "count": access_methods_count,
                     "iconColor": "#FBBF24"
-                })),
-            });
+                }),
+            ));
         }
 
         // Casts
         if casts_count > 0 {
-            db_objects_children.push(DatabaseObject {
-                id: format!("casts_folder:{}", db_name),
-                name: "Casts".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:swap-horizontal".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            db_objects_children.push(folder_node(
+                format!("casts_folder:{}", db_name),
+                "Casts".to_string(),
+                ObjectKind::Table,
+                "mdi:swap-horizontal".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "casts",
                     "count": casts_count,
                     "iconColor": "#60A5FA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Extensions
         if extensions_count > 0 {
-            db_objects_children.push(DatabaseObject {
-                id: format!("extensions_folder:{}", db_name),
-                name: "Extensions".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:puzzle".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            db_objects_children.push(folder_node(
+                format!("extensions_folder:{}", db_name),
+                "Extensions".to_string(),
+                ObjectKind::Table,
+                "mdi:puzzle".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "extensions",
                     "count": extensions_count,
                     "iconColor": "#A78BFA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Languages
         if languages_count > 0 {
-            db_objects_children.push(DatabaseObject {
-                id: format!("languages_folder:{}", db_name),
-                name: "Languages".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:code-tags".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            db_objects_children.push(folder_node(
+                format!("languages_folder:{}", db_name),
+                "Languages".to_string(),
+                ObjectKind::Table,
+                "mdi:code-tags".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "languages",
                     "count": languages_count,
                     "iconColor": "#F472B6"
-                })),
-            });
+                }),
+            ));
         }
 
         // Virtual Views (system catalog monitoring views)
         if virtual_views_count > 0 {
-            db_objects_children.push(DatabaseObject {
-                id: format!("virtual_views_folder:{}", db_name),
-                name: "Virtual Views".to_string(),
-                kind: ObjectKind::View,
-                icon: "mdi:eye-outline".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            db_objects_children.push(folder_node(
+                format!("virtual_views_folder:{}", db_name),
+                "Virtual Views".to_string(),
+                ObjectKind::View,
+                "mdi:eye-outline".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "virtual_views",
                     "count": virtual_views_count,
                     "iconColor": "#2DD4BF"
-                })),
-            });
+                }),
+            ));
         }
 
         // Database Objects folder
@@ -208,6 +238,7 @@ impl PostgresIntrospector {
                 icon: "ic:round-schema".to_string(),
                 children: None,
                 expanded: false,
+                has_children: true, // Schemas have Tables, Views, etc. folders
                 metadata: Some(json!({
                     "database": parent.name,
                     "schema": name,
@@ -226,6 +257,7 @@ impl PostgresIntrospector {
                 icon: "mdi:database-cog".to_string(),
                 children: Some(db_objects_children),
                 expanded: false,
+                has_children: true,
                 metadata: Some(json!({
                     "database": db_name,
                     "folder": "db_objects",
@@ -292,88 +324,78 @@ impl PostgresIntrospector {
 
         // Build folders array with all object types
         let mut folders = vec![
-            DatabaseObject {
-                id: format!("tables_folder:{}", schema_name),
-                name: "Tables".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:table-multiple".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folder_node(
+                format!("tables_folder:{}", schema_name),
+                "Tables".to_string(),
+                ObjectKind::Table,
+                "mdi:table-multiple".to_string(),
+                json!({
                     "schema": schema_name,
                     "folder": "tables",
                     "count": table_count,
                     "iconColor": "#34D399"
-                })),
-            },
-            DatabaseObject {
-                id: format!("views_folder:{}", schema_name),
-                name: "Views".to_string(),
-                kind: ObjectKind::View,
-                icon: "mdi:database-view".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("views_folder:{}", schema_name),
+                "Views".to_string(),
+                ObjectKind::View,
+                "mdi:database-view".to_string(),
+                json!({
                     "schema": schema_name,
                     "folder": "views",
                     "count": view_count,
                     "iconColor": "#C084FC"
-                })),
-            },
+                }),
+            ),
         ];
 
         // Add Sequences folder if there are sequences
         if sequence_count > 0 {
-            folders.push(DatabaseObject {
-                id: format!("sequences_folder:{}", schema_name),
-                name: "Sequences".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:counter".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folders.push(folder_node(
+                format!("sequences_folder:{}", schema_name),
+                "Sequences".to_string(),
+                ObjectKind::Table,
+                "mdi:counter".to_string(),
+                json!({
                     "schema": schema_name,
                     "folder": "sequences",
                     "count": sequence_count,
                     "iconColor": "#F472B6"
-                })),
-            });
+                }),
+            ));
         }
 
         // Add Functions folder if there are functions
         if function_count > 0 {
-            folders.push(DatabaseObject {
-                id: format!("functions_folder:{}", schema_name),
-                name: "Functions".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:math-function".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folders.push(folder_node(
+                format!("functions_folder:{}", schema_name),
+                "Functions".to_string(),
+                ObjectKind::Table,
+                "mdi:math-function".to_string(),
+                json!({
                     "schema": schema_name,
                     "folder": "functions",
                     "count": function_count,
                     "iconColor": "#60A5FA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Add Extensions folder if there are extensions
         if extension_count > 0 {
-            folders.push(DatabaseObject {
-                id: format!("extensions_folder:{}", schema_name),
-                name: "Extensions".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:puzzle".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folders.push(folder_node(
+                format!("extensions_folder:{}", schema_name),
+                "Extensions".to_string(),
+                ObjectKind::Table,
+                "mdi:puzzle".to_string(),
+                json!({
                     "schema": schema_name,
                     "folder": "extensions",
                     "count": extension_count,
                     "iconColor": "#A78BFA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Filter out empty folders
@@ -402,19 +424,17 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         sequences.iter()
-            .map(|(name,)| DatabaseObject {
-                id: format!("sequence:{}.{}", schema_name, name),
-                name: name.clone(),
-                kind: ObjectKind::Table,
-                icon: "mdi:counter".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name,)| leaf_node(
+                format!("sequence:{}.{}", schema_name, name),
+                name.clone(),
+                ObjectKind::Table,
+                "mdi:counter".to_string(),
+                json!({
                     "schema": schema_name,
                     "sequence": name,
                     "iconColor": "#F472B6"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -438,20 +458,18 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         functions.iter()
-            .map(|(name, args)| DatabaseObject {
-                id: format!("function:{}.{}", schema_name, name),
-                name: format!("{}({})", name, args),
-                kind: ObjectKind::Table,
-                icon: "mdi:math-function".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, args)| leaf_node(
+                format!("function:{}.{}", schema_name, name),
+                format!("{}({})", name, args),
+                ObjectKind::Table,
+                "mdi:math-function".to_string(),
+                json!({
                     "schema": schema_name,
                     "function": name,
                     "arguments": args,
                     "iconColor": "#60A5FA"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -468,19 +486,17 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         extensions.iter()
-            .map(|(name, desc)| DatabaseObject {
-                id: format!("extension:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::Table,
-                icon: "mdi:puzzle".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, desc)| leaf_node(
+                format!("extension:{}", name),
+                name.clone(),
+                ObjectKind::Table,
+                "mdi:puzzle".to_string(),
+                json!({
                     "extension": name,
                     "description": desc,
                     "iconColor": "#A78BFA"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -495,19 +511,17 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         access_methods.iter()
-            .map(|(name, handler)| DatabaseObject {
-                id: format!("access_method:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::Table,
-                icon: "mdi:tree".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, handler)| leaf_node(
+                format!("access_method:{}", name),
+                name.clone(),
+                ObjectKind::Table,
+                "mdi:tree".to_string(),
+                json!({
                     "access_method": name,
                     "handler": handler,
                     "iconColor": "#FBBF24"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -543,21 +557,19 @@ impl PostgresIntrospector {
         eprintln!("[PostgresIntrospector] get_casts_folder_children - Returning {} cast objects", casts.len());
 
         casts.iter()
-            .map(|(source, target, context)| DatabaseObject {
-                id: format!("cast:{}->{}", source, target),
-                name: format!("{} → {}", source, target),
-                kind: ObjectKind::Table,
-                icon: "mdi:swap-horizontal".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(source, target, context)| leaf_node(
+                format!("cast:{}->{}", source, target),
+                format!("{} → {}", source, target),
+                ObjectKind::Table,
+                "mdi:swap-horizontal".to_string(),
+                json!({
                     "cast": format!("{}->{}", source, target),
                     "sourceType": source,
                     "targetType": target,
                     "context": context,
                     "iconColor": "#60A5FA"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -574,19 +586,17 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         languages.iter()
-            .map(|(name, trusted)| DatabaseObject {
-                id: format!("language:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::Table,
-                icon: "mdi:code-tags".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, trusted)| leaf_node(
+                format!("language:{}", name),
+                name.clone(),
+                ObjectKind::Table,
+                "mdi:code-tags".to_string(),
+                json!({
                     "language": name,
                     "isTrusted": trusted,
                     "iconColor": "#F472B6"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -602,21 +612,19 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         roles.iter()
-            .map(|(name, superuser, inherit, create_role)| DatabaseObject {
-                id: format!("role:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::Role,
-                icon: "mdi:account".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, superuser, inherit, create_role)| leaf_node(
+                format!("role:{}", name),
+                name.clone(),
+                ObjectKind::Role,
+                "mdi:account".to_string(),
+                json!({
                     "role": name,
                     "isSuperuser": superuser,
                     "canInherit": inherit,
                     "canCreateRole": create_role,
                     "iconColor": "#F472B6"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -634,20 +642,18 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         tablespaces.iter()
-            .map(|(name, owner, size)| DatabaseObject {
-                id: format!("tablespace:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::Tablespace,
-                icon: "mdi:folder-network".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, owner, size)| leaf_node(
+                format!("tablespace:{}", name),
+                name.clone(),
+                ObjectKind::Tablespace,
+                "mdi:folder-network".to_string(),
+                json!({
                     "tablespace": name,
                     "owner": owner,
                     "size": size,
                     "iconColor": "#FBBF24"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -677,20 +683,18 @@ impl PostgresIntrospector {
         .unwrap_or_default();
 
         system_views.iter()
-            .map(|(schema, name, desc)| DatabaseObject {
-                id: format!("virtual_view:{}", name),
-                name: name.clone(),
-                kind: ObjectKind::View,
-                icon: "mdi:eye-outline".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(schema, name, desc)| leaf_node(
+                format!("virtual_view:{}", name),
+                name.clone(),
+                ObjectKind::View,
+                "mdi:eye-outline".to_string(),
+                json!({
                     "virtual_view": name,
                     "schema": schema,
                     "description": desc,
                     "iconColor": "#2DD4BF"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 
@@ -717,6 +721,7 @@ impl PostgresIntrospector {
             icon: "bi:table".to_string(),
             children: None,
             expanded: false,
+            has_children: true, // Tables have Columns, Indexes, Keys folders
             metadata: Some(json!({
                 "schema": schema_name,
                 "table": name,
@@ -748,6 +753,7 @@ impl PostgresIntrospector {
             icon: "mdi:database-view".to_string(),
             children: None,
             expanded: false,
+            has_children: true, // Views have Columns, Indexes, Keys folders
             metadata: Some(json!({
                 "schema": schema_name,
                 "table": name,
@@ -817,51 +823,45 @@ impl PostgresIntrospector {
 
         // Return folder nodes with counts
         vec![
-            DatabaseObject {
-                id: format!("columns:{}.{}", schema_name, table_name),
-                name: "Columns".to_string(),
-                kind: ObjectKind::Column,
-                icon: "mdi:format-list-bulleted".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folder_node(
+                format!("columns:{}.{}", schema_name, table_name),
+                "Columns".to_string(),
+                ObjectKind::Column,
+                "mdi:format-list-bulleted".to_string(),
+                json!({
                     "schema": schema_name,
                     "table": table_name,
                     "folder": "columns",
                     "count": column_count,
                     "iconColor": "#9CA3AF"
-                })),
-            },
-            DatabaseObject {
-                id: format!("indexes:{}.{}", schema_name, table_name),
-                name: "Indexes".to_string(),
-                kind: ObjectKind::Index,
-                icon: "oui:index-runtime".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("indexes:{}.{}", schema_name, table_name),
+                "Indexes".to_string(),
+                ObjectKind::Index,
+                "oui:index-runtime".to_string(),
+                json!({
                     "schema": schema_name,
                     "table": table_name,
                     "folder": "indexes",
                     "count": index_count,
                     "iconColor": "#FBBF24"
-                })),
-            },
-            DatabaseObject {
-                id: format!("keys:{}.{}", schema_name, table_name),
-                name: "Keys".to_string(),
-                kind: ObjectKind::Key,
-                icon: "mdi:key-chain".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("keys:{}.{}", schema_name, table_name),
+                "Keys".to_string(),
+                ObjectKind::Key,
+                "mdi:key-chain".to_string(),
+                json!({
                     "schema": schema_name,
                     "table": table_name,
                     "folder": "keys",
                     "count": key_count,
                     "iconColor": "#FBBF24"
-                })),
-            },
+                }),
+            ),
         ]
     }
 
@@ -900,14 +900,12 @@ impl PostgresIntrospector {
         .await
         .unwrap_or_default();
 
-        columns.iter().map(|(name, dtype, nullable, is_pk)| DatabaseObject {
-            id: format!("column:{}.{}.{}", schema_name, table_name, name),
-            name: name.clone(),
-            kind: ObjectKind::Column,
-            icon: "mdi:letter-a".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        columns.iter().map(|(name, dtype, nullable, is_pk)| leaf_node(
+            format!("column:{}.{}.{}", schema_name, table_name, name),
+            name.clone(),
+            ObjectKind::Column,
+            "mdi:letter-a".to_string(),
+            json!({
                 "schema": schema_name,
                 "table": table_name,
                 "column": name,
@@ -915,8 +913,8 @@ impl PostgresIntrospector {
                 "isNullable": nullable == "YES",
                 "isPrimaryKey": is_pk,
                 "iconColor": "#64748B"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_index_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -966,14 +964,12 @@ impl PostgresIntrospector {
             }
         };
 
-        indexes.iter().map(|(name, def, unique, columns)| DatabaseObject {
-            id: format!("index:{}.{}.{}", schema_name, table_name, name),
-            name: name.clone(),
-            kind: ObjectKind::Index,
-            icon: "mdi:database-outline".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        indexes.iter().map(|(name, def, unique, columns)| leaf_node(
+            format!("index:{}.{}.{}", schema_name, table_name, name),
+            name.clone(),
+            ObjectKind::Index,
+            "mdi:database-outline".to_string(),
+            json!({
                 "schema": schema_name,
                 "table": table_name,
                 "indexName": name,
@@ -981,8 +977,8 @@ impl PostgresIntrospector {
                 "isUnique": unique,
                 "columns": columns,
                 "iconColor": "#F59E0B"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_key_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -1048,14 +1044,12 @@ impl PostgresIntrospector {
                     true
                 }
             })
-            .map(|(name, ctype, columns, ref_table)| DatabaseObject {
-                id: format!("key:{}:{}.{}.{}", ctype, schema_name, table_name, name),
-                name: name.clone(),
-                kind: ObjectKind::Key,
-                icon: "mdi:key".to_string(),
-                children: None,
-                expanded: false,
-                metadata: Some(json!({
+            .map(|(name, ctype, columns, ref_table)| leaf_node(
+                format!("key:{}:{}.{}.{}", ctype, schema_name, table_name, name),
+                name.clone(),
+                ObjectKind::Key,
+                "mdi:key".to_string(),
+                json!({
                     "schema": schema_name,
                     "table": table_name,
                     "keyName": name,
@@ -1063,8 +1057,8 @@ impl PostgresIntrospector {
                     "columns": columns,
                     "referenceTable": ref_table,
                     "iconColor": "#F59E0B"
-                })),
-            })
+                }),
+            ))
             .collect()
     }
 }
@@ -1100,37 +1094,33 @@ impl DatabaseIntrospector for PostgresIntrospector {
                 let mut server_objects_children = vec![];
 
                 if roles_count > 0 {
-                    server_objects_children.push(DatabaseObject {
-                        id: format!("roles_folder:{}", connected_db),
-                        name: "Roles".to_string(),
-                        kind: ObjectKind::Role,
-                        icon: "mdi:account-group".to_string(),
-                        children: Some(vec![]),
-                        expanded: false,
-                        metadata: Some(json!({
+                    server_objects_children.push(folder_node(
+                        format!("roles_folder:{}", connected_db),
+                        "Roles".to_string(),
+                        ObjectKind::Role,
+                        "mdi:account-group".to_string(),
+                        json!({
                             "database": connected_db,
                             "folder": "roles",
                             "count": roles_count,
                             "iconColor": "#F472B6"
-                        })),
-                    });
+                        }),
+                    ));
                 }
 
                 if tablespaces_count > 0 {
-                    server_objects_children.push(DatabaseObject {
-                        id: format!("tablespaces_folder:{}", connected_db),
-                        name: "Tablespaces".to_string(),
-                        kind: ObjectKind::Tablespace,
-                        icon: "mdi:folder-network".to_string(),
-                        children: Some(vec![]),
-                        expanded: false,
-                        metadata: Some(json!({
+                    server_objects_children.push(folder_node(
+                        format!("tablespaces_folder:{}", connected_db),
+                        "Tablespaces".to_string(),
+                        ObjectKind::Tablespace,
+                        "mdi:folder-network".to_string(),
+                        json!({
                             "database": connected_db,
                             "folder": "tablespaces",
                             "count": tablespaces_count,
                             "iconColor": "#FBBF24"
-                        })),
-                    });
+                        }),
+                    ));
                 }
 
                 // Return both Database and Server Objects as siblings
@@ -1142,6 +1132,7 @@ impl DatabaseIntrospector for PostgresIntrospector {
                         icon: "mdi:database".to_string(),
                         children: None,
                         expanded: false,
+                        has_children: true, // Database has schemas
                         metadata: Some(json!({ "database": connected_db, "iconColor": "#60A5FA" })),
                     }
                 ];
@@ -1155,6 +1146,7 @@ impl DatabaseIntrospector for PostgresIntrospector {
                         icon: "mdi:server".to_string(),
                         children: Some(server_objects_children),
                         expanded: false,
+                        has_children: true,
                         metadata: Some(json!({
                             "folder": "server_objects",
                             "iconColor": "#9CA3AF"

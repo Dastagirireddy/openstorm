@@ -6,6 +6,46 @@ use crate::database::{Result, ConnectionConfig, manager::AnyPool};
 use super::traits::{DatabaseIntrospector, DatabaseObject, ObjectKind};
 use serde_json::json;
 
+/// Helper to create a leaf node (no children)
+fn leaf_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: None,
+        expanded: false,
+        has_children: false,
+        metadata: Some(metadata),
+    }
+}
+
+/// Helper to create a folder node (can have children)
+fn folder_node(
+    id: String,
+    name: String,
+    kind: ObjectKind,
+    icon: String,
+    metadata: serde_json::Value,
+) -> DatabaseObject {
+    DatabaseObject {
+        id,
+        name,
+        kind,
+        icon,
+        children: Some(vec![]), // Placeholder - will be loaded on expand
+        expanded: false,
+        has_children: true,
+        metadata: Some(metadata),
+    }
+}
+
 pub struct MySqlIntrospector;
 
 impl MySqlIntrospector {
@@ -58,70 +98,62 @@ impl MySqlIntrospector {
 
         // Build folders array
         let mut folders = vec![
-            DatabaseObject {
-                id: format!("tables_folder:{}", db_name),
-                name: "Tables".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:table-multiple".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folder_node(
+                format!("tables_folder:{}", db_name),
+                "Tables".to_string(),
+                ObjectKind::Table,
+                "mdi:table-multiple".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "tables",
                     "count": table_count,
                     "iconColor": "#34D399"
-                })),
-            },
-            DatabaseObject {
-                id: format!("views_folder:{}", db_name),
-                name: "Views".to_string(),
-                kind: ObjectKind::View,
-                icon: "mdi:database-view".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("views_folder:{}", db_name),
+                "Views".to_string(),
+                ObjectKind::View,
+                "mdi:database-view".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "views",
                     "count": view_count,
                     "iconColor": "#C084FC"
-                })),
-            },
+                }),
+            ),
         ];
 
         // Add Functions folder if there are functions
         if function_count > 0 {
-            folders.push(DatabaseObject {
-                id: format!("functions_folder:{}", db_name),
-                name: "Functions".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:math-function".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folders.push(folder_node(
+                format!("functions_folder:{}", db_name),
+                "Functions".to_string(),
+                ObjectKind::Table,
+                "mdi:math-function".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "functions",
                     "count": function_count,
                     "iconColor": "#60A5FA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Add Procedures folder if there are procedures
         if procedure_count > 0 {
-            folders.push(DatabaseObject {
-                id: format!("procedures_folder:{}", db_name),
-                name: "Procedures".to_string(),
-                kind: ObjectKind::Table,
-                icon: "mdi:code-braces".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folders.push(folder_node(
+                format!("procedures_folder:{}", db_name),
+                "Procedures".to_string(),
+                ObjectKind::Table,
+                "mdi:code-braces".to_string(),
+                json!({
                     "database": db_name,
                     "folder": "procedures",
                     "count": procedure_count,
                     "iconColor": "#A78BFA"
-                })),
-            });
+                }),
+            ));
         }
 
         // Filter out empty folders
@@ -157,6 +189,7 @@ impl MySqlIntrospector {
             icon: "mdi:table".to_string(),
             children: None,
             expanded: false,
+            has_children: true, // Tables have Columns, Indexes, Keys folders
             metadata: Some(json!({
                 "database": db_name,
                 "table": name,
@@ -189,6 +222,7 @@ impl MySqlIntrospector {
             icon: "mdi:database-view".to_string(),
             children: None,
             expanded: false,
+            has_children: true, // Views have Columns, Indexes, Keys folders
             metadata: Some(json!({
                 "database": db_name,
                 "view": name,
@@ -215,19 +249,17 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        functions.iter().map(|(name, _)| DatabaseObject {
-            id: format!("function:{}", name),
-            name: name.clone(),
-            kind: ObjectKind::Table,
-            icon: "mdi:math-function".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        functions.iter().map(|(name, _)| leaf_node(
+            format!("function:{}", name),
+            name.clone(),
+            ObjectKind::Table,
+            "mdi:math-function".to_string(),
+            json!({
                 "database": db_name,
                 "function": name,
                 "iconColor": "#60A5FA"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_procedures_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -247,19 +279,17 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        procedures.iter().map(|(name,)| DatabaseObject {
-            id: format!("procedure:{}", name),
-            name: name.clone(),
-            kind: ObjectKind::Table,
-            icon: "mdi:code-braces".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        procedures.iter().map(|(name,)| leaf_node(
+            format!("procedure:{}", name),
+            name.clone(),
+            ObjectKind::Table,
+            "mdi:code-braces".to_string(),
+            json!({
                 "database": db_name,
                 "procedure": name,
                 "iconColor": "#A78BFA"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_users_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -273,19 +303,17 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        users.iter().map(|(user, host)| DatabaseObject {
-            id: format!("user:{}@{}", user, host),
-            name: format!("{}@{}", user, host),
-            kind: ObjectKind::Role,
-            icon: "mdi:account".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        users.iter().map(|(user, host)| leaf_node(
+            format!("user:{}@{}", user, host),
+            format!("{}@{}", user, host),
+            ObjectKind::Role,
+            "mdi:account".to_string(),
+            json!({
                 "user": user,
                 "host": host,
                 "iconColor": "#F472B6"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_engines_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -301,20 +329,18 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        engines.iter().map(|(name, support, comment)| DatabaseObject {
-            id: format!("engine:{}", name),
-            name: name.clone(),
-            kind: ObjectKind::Engine,
-            icon: "mdi:engine".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        engines.iter().map(|(name, support, comment)| leaf_node(
+            format!("engine:{}", name),
+            name.clone(),
+            ObjectKind::Engine,
+            "mdi:engine".to_string(),
+            json!({
                 "engine": name,
                 "support": support,
                 "comment": comment,
                 "iconColor": "#FBBF24"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_plugins_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -330,20 +356,18 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        plugins.iter().map(|(name, ptype, desc)| DatabaseObject {
-            id: format!("plugin:{}", name),
-            name: name.clone(),
-            kind: ObjectKind::Plugin,
-            icon: "mdi:puzzle".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        plugins.iter().map(|(name, ptype, desc)| leaf_node(
+            format!("plugin:{}", name),
+            name.clone(),
+            ObjectKind::Plugin,
+            "mdi:puzzle".to_string(),
+            json!({
                 "plugin": name,
                 "type": ptype,
                 "description": desc,
                 "iconColor": "#A78BFA"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_table_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -389,51 +413,45 @@ impl MySqlIntrospector {
 
         // Return folder nodes with counts (matching PostgreSQL structure)
         vec![
-            DatabaseObject {
-                id: format!("columns:{}.{}", db_name, table_name),
-                name: "Columns".to_string(),
-                kind: ObjectKind::Column,
-                icon: "mdi:format-list-bulleted".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+            folder_node(
+                format!("columns:{}.{}", db_name, table_name),
+                "Columns".to_string(),
+                ObjectKind::Column,
+                "mdi:format-list-bulleted".to_string(),
+                json!({
                     "database": db_name,
                     "table": table_name,
                     "folder": "columns",
                     "count": column_count,
                     "iconColor": "#9CA3AF"
-                })),
-            },
-            DatabaseObject {
-                id: format!("indexes:{}.{}", db_name, table_name),
-                name: "Indexes".to_string(),
-                kind: ObjectKind::Index,
-                icon: "oui:index-runtime".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("indexes:{}.{}", db_name, table_name),
+                "Indexes".to_string(),
+                ObjectKind::Index,
+                "oui:index-runtime".to_string(),
+                json!({
                     "database": db_name,
                     "table": table_name,
                     "folder": "indexes",
                     "count": index_count,
                     "iconColor": "#FBBF24"
-                })),
-            },
-            DatabaseObject {
-                id: format!("keys:{}.{}", db_name, table_name),
-                name: "Keys".to_string(),
-                kind: ObjectKind::Key,
-                icon: "mdi:key-chain".to_string(),
-                children: Some(vec![]), // Placeholder - will be loaded on expand
-                expanded: false,
-                metadata: Some(json!({
+                }),
+            ),
+            folder_node(
+                format!("keys:{}.{}", db_name, table_name),
+                "Keys".to_string(),
+                ObjectKind::Key,
+                "mdi:key-chain".to_string(),
+                json!({
                     "database": db_name,
                     "table": table_name,
                     "folder": "keys",
                     "count": key_count,
                     "iconColor": "#FBBF24"
-                })),
-            },
+                }),
+            ),
         ]
     }
 
@@ -473,22 +491,20 @@ impl MySqlIntrospector {
             }
         };
 
-        columns.iter().map(|(name, dtype, nullable)| DatabaseObject {
-            id: format!("column:{}.{}.{}", db_name, table_name, name),
-            name: name.clone(),
-            kind: ObjectKind::Column,
-            icon: "mdi:letter-a".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        columns.iter().map(|(name, dtype, nullable)| leaf_node(
+            format!("column:{}.{}.{}", db_name, table_name, name),
+            name.clone(),
+            ObjectKind::Column,
+            "mdi:letter-a".to_string(),
+            json!({
                 "database": db_name,
                 "table": table_name,
                 "column": name,
                 "dataType": dtype,
                 "isNullable": nullable == "YES",
                 "iconColor": "#64748B"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_index_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -513,22 +529,20 @@ impl MySqlIntrospector {
         .await
         .unwrap_or_default();
 
-        indexes.iter().map(|(name, non_unique, columns)| DatabaseObject {
-            id: format!("index:{}.{}.{}", db_name, table_name, name),
-            name: name.clone(),
-            kind: ObjectKind::Index,
-            icon: "mdi:database-outline".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        indexes.iter().map(|(name, non_unique, columns)| leaf_node(
+            format!("index:{}.{}.{}", db_name, table_name, name),
+            name.clone(),
+            ObjectKind::Index,
+            "mdi:database-outline".to_string(),
+            json!({
                 "database": db_name,
                 "table": table_name,
                 "indexName": name,
                 "isUnique": !non_unique,
                 "columns": columns,
                 "iconColor": "#F59E0B"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 
     async fn get_key_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
@@ -580,14 +594,12 @@ impl MySqlIntrospector {
             }
         };
 
-        keys.into_iter().map(|(name, ctype, columns, ref_table)| DatabaseObject {
-            id: format!("key:{}:{}.{}.{}", ctype, db_name, table_name, name),
-            name: name.clone(),
-            kind: ObjectKind::Key,
-            icon: "mdi:key".to_string(),
-            children: None,
-            expanded: false,
-            metadata: Some(json!({
+        keys.into_iter().map(|(name, ctype, columns, ref_table)| leaf_node(
+            format!("key:{}:{}.{}.{}", ctype, db_name, table_name, name),
+            name.clone(),
+            ObjectKind::Key,
+            "mdi:key".to_string(),
+            json!({
                 "database": db_name,
                 "table": table_name,
                 "keyName": name,
@@ -595,8 +607,8 @@ impl MySqlIntrospector {
                 "columns": columns,
                 "referenceTable": ref_table,
                 "iconColor": "#F59E0B"
-            })),
-        }).collect()
+            }),
+        )).collect()
     }
 }
 
@@ -637,51 +649,45 @@ impl DatabaseIntrospector for MySqlIntrospector {
                 let mut server_objects_children = vec![];
 
                 if users_count > 0 {
-                    server_objects_children.push(DatabaseObject {
-                        id: format!("users_folder:{}", db_name),
-                        name: "Users".to_string(),
-                        kind: ObjectKind::Role,
-                        icon: "mdi:account-group".to_string(),
-                        children: Some(vec![]),
-                        expanded: false,
-                        metadata: Some(json!({
+                    server_objects_children.push(folder_node(
+                        format!("users_folder:{}", db_name),
+                        "Users".to_string(),
+                        ObjectKind::Role,
+                        "mdi:account-group".to_string(),
+                        json!({
                             "folder": "users",
                             "count": users_count,
                             "iconColor": "#F472B6"
-                        })),
-                    });
+                        }),
+                    ));
                 }
 
                 if engines_count > 0 {
-                    server_objects_children.push(DatabaseObject {
-                        id: format!("engines_folder:{}", db_name),
-                        name: "Engines".to_string(),
-                        kind: ObjectKind::Engine,
-                        icon: "mdi:engine".to_string(),
-                        children: Some(vec![]),
-                        expanded: false,
-                        metadata: Some(json!({
+                    server_objects_children.push(folder_node(
+                        format!("engines_folder:{}", db_name),
+                        "Engines".to_string(),
+                        ObjectKind::Engine,
+                        "mdi:engine".to_string(),
+                        json!({
                             "folder": "engines",
                             "count": engines_count,
                             "iconColor": "#FBBF24"
-                        })),
-                    });
+                        }),
+                    ));
                 }
 
                 if plugins_count > 0 {
-                    server_objects_children.push(DatabaseObject {
-                        id: format!("plugins_folder:{}", db_name),
-                        name: "Plugins".to_string(),
-                        kind: ObjectKind::Plugin,
-                        icon: "mdi:puzzle".to_string(),
-                        children: Some(vec![]),
-                        expanded: false,
-                        metadata: Some(json!({
+                    server_objects_children.push(folder_node(
+                        format!("plugins_folder:{}", db_name),
+                        "Plugins".to_string(),
+                        ObjectKind::Plugin,
+                        "mdi:puzzle".to_string(),
+                        json!({
                             "folder": "plugins",
                             "count": plugins_count,
                             "iconColor": "#A78BFA"
-                        })),
-                    });
+                        }),
+                    ));
                 }
 
                 // Return both Database and Server Objects as siblings
@@ -693,6 +699,7 @@ impl DatabaseIntrospector for MySqlIntrospector {
                         icon: "mdi:database".to_string(),
                         children: None,
                         expanded: false,
+                        has_children: true,
                         metadata: Some(json!({ "database": db_name, "iconColor": "#60A5FA" })),
                     }
                 ];
@@ -706,6 +713,7 @@ impl DatabaseIntrospector for MySqlIntrospector {
                         icon: "mdi:server".to_string(),
                         children: Some(server_objects_children),
                         expanded: false,
+                        has_children: true,
                         metadata: Some(json!({
                             "folder": "server_objects",
                             "iconColor": "#9CA3AF"
