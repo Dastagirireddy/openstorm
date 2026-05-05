@@ -159,27 +159,33 @@ export class DataSourcesPanel extends TailwindElement() {
       <div class="flex flex-col h-full w-full" style="background-color: var(--activitybar-background);">
         <div class="flex flex-col h-full">
           <!-- Header -->
-          <div class="flex items-center justify-between px-2.5 py-2 border-b" style="border-color: var(--app-border);">
-            <div class="flex items-center gap-2">
-              <div class="w-2 h-2 rounded-full" style="background: var(--brand-primary);"></div>
-              <span class="text-[11px] font-semibold tracking-wide" style="color: var(--app-foreground);">DATABASE</span>
+          <div class="flex items-center justify-between h-[35px] px-3 border-b shrink-0"
+               style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-border);">
+            <div class="flex items-center gap-1.5">
+              <iconify-icon icon="mdi:database" style="color: var(--brand-primary);" width="14"></iconify-icon>
+              <span class="text-[10px] font-bold uppercase tracking-wide" style="color: var(--app-disabled-foreground);">Database</span>
             </div>
-            <div class="flex items-center gap-1">
+            <div class="flex items-center gap-0">
               <button
-                @click=${() => this.dispatchRefresh(this.selectedConnectionId)}
-                class="p-1.5 rounded transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
-                style=${!this.selectedConnectionId ? 'color: var(--app-disabled-foreground);' : 'color: var(--app-foreground);'}
+                @click=${() => this.selectedConnectionId && this.dispatchRefresh(this.selectedConnectionId)}
+                class="p-1 cursor-pointer"
+                style=${!this.selectedConnectionId ? 'color: var(--app-disabled-foreground); opacity: 0.4; cursor: not-allowed;' : 'color: var(--app-disabled-foreground);'}
+                @mouseenter=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                @mouseleave=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                 title=${this.selectedConnectionId ? 'Refresh' : 'Select a connection to refresh'}
                 ?disabled=${!this.selectedConnectionId}
               >
-                <iconify-icon icon="mdi:refresh" width="15" height="15"></iconify-icon>
+                <iconify-icon icon="mdi:refresh" width="14" height="14"></iconify-icon>
               </button>
               <button
                 @click=${() => (this.showAddDialog = true)}
-                class="p-1.5 hover:bg-[var(--app-hover)] rounded transition-colors"
+                class="p-1 cursor-pointer"
+                style="color: var(--app-disabled-foreground);"
+                @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+                @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
                 title="Add Connection"
               >
-                <iconify-icon icon="mdi:plus" width="15" height="15" style="color: var(--app-foreground);"></iconify-icon>
+                <iconify-icon icon="mdi:plus" width="14" height="14"></iconify-icon>
               </button>
             </div>
           </div>
@@ -187,7 +193,6 @@ export class DataSourcesPanel extends TailwindElement() {
           <!-- Database Tree View -->
           <div class="flex-1 overflow-hidden">
             <database-multi-tree
-              class="overflow-y-auto"
               .dataSources=${this.dataSources}
               .projectPath=${this.projectPath}
               @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}

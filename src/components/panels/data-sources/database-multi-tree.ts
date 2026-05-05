@@ -42,6 +42,16 @@ export class DatabaseMultiTree extends TailwindElement() {
     this.addEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
   }
 
+  protected willUpdate(changedProperties: Map<string, unknown>): void {
+    super.willUpdate(changedProperties);
+    if (changedProperties.has('dataSources')) {
+      // Data sources changed - will trigger re-render
+    }
+    if (changedProperties.has('projectPath')) {
+      // Project path changed
+    }
+  }
+
   disconnectedCallback(): void {
     this.removeEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
     super.disconnectedCallback();
@@ -129,44 +139,24 @@ export class DatabaseMultiTree extends TailwindElement() {
     const expanded = this.expandedNodes.get(connectionId) || new Set();
     if (!expanded.has(node.id)) return;
 
-    console.log('[loadChildren] node.metadata:', JSON.stringify(node.metadata));
-    console.log('[loadChildren] node.children:', node.children);
-    console.log('[loadChildren] node.kind:', node.kind);
-
     // Check if children are already loaded
     // - children === null/undefined: not loaded yet
     // - children === []: placeholder, needs loading
     // - children === [...]: already loaded
-    const hasChildrenFlag = node.metadata?.['hasChildren'] as boolean;
     const hasChildrenArray = Array.isArray(node.children);
     const childrenAlreadyLoaded = hasChildrenArray && node.children!.length > 0;
 
-    console.log('[loadChildren] hasChildrenArray:', hasChildrenArray, 'childrenAlreadyLoaded:', childrenAlreadyLoaded);
-
-    // Don't reload if children are already loaded and we're not forcing a refresh
+    // Don't reload if children are already loaded
     if (childrenAlreadyLoaded) {
-      console.log('[loadChildren] Children already loaded, skipping');
       return;
     }
 
-    // If children is an empty array (placeholder), we need to load from backend
-    console.log('[loadChildren] Loading children for node:', node.id, node.name);
-
     try {
-      console.log('[loadChildren] Invoking db_get_children with parent:', JSON.stringify({
-        id: node.id,
-        name: node.name,
-        kind: node.kind,
-        metadata: node.metadata
-      }));
-
       const children = await invoke<DatabaseObject[]>('db_get_children', {
         connectionId,
         parent: node,
         projectPath: this.projectPath,
       });
-
-      console.log('[loadChildren] Loaded', children.length, 'children for node:', node.name);
 
       const trees = this.connectionTrees.get(connectionId) || [];
       this.updateNodeWithChildren(trees, node.id, children);
@@ -201,17 +191,21 @@ export class DatabaseMultiTree extends TailwindElement() {
   }
 
   private handleNodeClick(connectionId: string, node: DatabaseObject) {
-    console.log('[handleNodeClick] Clicked node:', node.id, node.name, 'kind:', node.kind);
-    console.log('[handleNodeClick] node.metadata:', node.metadata);
-    console.log('[handleNodeClick] node.children:', node.children);
-
     this.selectedNodeId = node.id;
+    this.dispatchEvent(
+      new CustomEvent('node-select', {
+        detail: { connectionId, nodeId: node.id },
+        bubbles: true,
+        composed: true,
+      })
+    );
+    this.requestUpdate();
+  }
+
+  private handleNodeExpand(connectionId: string, node: DatabaseObject) {
     const expanded = this.expandedNodes.get(connectionId) || new Set();
     const wasExpanded = expanded.has(node.id);
 
-    console.log('[handleNodeClick] wasExpanded:', wasExpanded);
-
-    // Toggle the expanded state
     if (wasExpanded) {
       expanded.delete(node.id);
     } else {
@@ -220,9 +214,7 @@ export class DatabaseMultiTree extends TailwindElement() {
     this.expandedNodes.set(connectionId, expanded);
     this.requestUpdate();
 
-    // If now expanded, load children
     if (!wasExpanded) {
-      console.log('[handleNodeClick] Calling loadChildren');
       this.loadChildren(connectionId, node);
     }
   }
@@ -439,8 +431,14 @@ export class DatabaseMultiTree extends TailwindElement() {
   ) {
     const expanded = this.expandedNodes.get(connectionId) || new Set();
     const isNodeExpanded = expanded.has(node.id);
-    // hasChildren: show chevron if children exists (even empty array placeholder)
-    const hasChildren = node.children != null;
+    // Show chevron if: children array exists OR metadata indicates hasChildren OR it's a folder-like node
+    const hasChildrenMetadata = node.metadata?.['hasChildren'] as boolean;
+    const isFolderLike = node.metadata?.['folder'] as string;
+    const canHaveChildren = node.kind === 'database' || node.kind === 'schema' ||
+                            node.kind === 'table' || node.kind === 'view' ||
+                            node.kind === 'sequence' || node.kind === 'function' ||
+                            node.kind === 'extension' || node.kind === 'index';
+    const hasChildren = node.children != null || hasChildrenMetadata || (isFolderLike && node.kind !== 'column') || canHaveChildren;
     const isLoading = isNodeExpanded && node.children == null;
     const iconColor = this.getIconColor(node.kind, node.metadata);
     const isSelected = this.selectedNodeId === node.id;
@@ -448,10 +446,7 @@ export class DatabaseMultiTree extends TailwindElement() {
     const { type, info, count } = this.getNodeTypeInfo(node);
 
     const rowClasses = `
-      flex items-center h-6 px-2 cursor-pointer rounded
-      transition-colors duration-100
-      ${isSelected ? 'bg-[var(--app-selected)]' : ''}
-      ${!isSelected && isHovered ? 'bg-[var(--app-hover)]' : ''}
+      flex items-center gap-1 h-6 cursor-pointer transition-colors duration-100 w-full
     `.trim();
 
     // Determine display icon based on node kind and metadata
@@ -483,23 +478,42 @@ export class DatabaseMultiTree extends TailwindElement() {
       displayIcon = node.icon;
     }
 
+    const indent = level * 16;
+    const showGuideLine = level > 0;
+
     return html`
-      <div>
+      <div style="position: relative;">
+        ${showGuideLine
+          ? html`
+              <!-- Vertical line from parent -->
+              <div style="position: absolute; left: ${indent}px; top: 0; bottom: 0; width: 1px; background-color: var(--app-border); pointer-events: none;"></div>
+              <!-- Horizontal L-shaped line -->
+              <div style="position: absolute; left: ${indent}px; top: 12px; width: 10px; height: 1px; background-color: var(--app-border); pointer-events: none;"></div>
+            `
+          : nothing}
         <div
           class=${rowClasses}
-          style="padding-left: ${level * 16 + 8}px;"
+          style="padding-left: ${indent + 8}px; background-color: ${isSelected ? 'var(--app-selection-background)' : (isHovered ? 'var(--app-toolbar-hover)' : 'transparent')};"
           @click=${() => this.handleNodeClick(connectionId, node)}
           @mouseenter=${() => { this.hoveredNode = node.id; }}
           @mouseleave=${() => { this.hoveredNode = null; }}
         >
-          <!-- Expand/Collapse Icon -->
-          <span class="w-4 h-4 flex items-center justify-center mr-1 flex-shrink-0">
+          <!-- Expand/Collapse Icon (clickable only for expand/collapse) -->
+          <span
+            class="w-4 h-4 flex items-center justify-center flex-shrink-0 cursor-pointer"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              if (hasChildren || isLoading) {
+                this.handleNodeExpand(connectionId, node);
+              }
+            }}
+          >
             ${hasChildren
               ? html`<iconify-icon
                   icon=${isNodeExpanded ? 'mdi:chevron-down' : 'mdi:chevron-right'}
                   width="20"
                   height="20"
-                  style="color: var(--app-muted-foreground);"
+                  style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-disabled-foreground)'};"
                 ></iconify-icon>`
               : isLoading
                 ? html`<iconify-icon
@@ -519,14 +533,14 @@ export class DatabaseMultiTree extends TailwindElement() {
                   icon=${displayIcon}
                   width="16"
                   height="16"
-                  style="color: ${isActualColumn ? columnIconColor : iconColor};"
+                  style="color: ${isSelected ? 'var(--app-selection-foreground)' : (isActualColumn ? columnIconColor : iconColor)};"
                 ></iconify-icon>
                 <iconify-icon
                   icon="mdi:key"
                   width="9"
                   height="9"
                   class="absolute -bottom-0.5 -right-0.5"
-                  style="color: #F59E0B;"
+                  style="color: ${isSelected ? 'var(--app-selection-foreground)' : '#F59E0B'};"
                   title="Primary Key"
                 ></iconify-icon>
               </div>`
@@ -535,17 +549,17 @@ export class DatabaseMultiTree extends TailwindElement() {
                 width="16"
                 height="16"
                 class="mr-1.5 flex-shrink-0"
-                style="color: ${isActualColumn ? columnIconColor : iconColor};"
+                style="color: ${isSelected ? 'var(--app-selection-foreground)' : (isActualColumn ? columnIconColor : iconColor)};"
               ></iconify-icon>`}
 
           <!-- Object Name with count -->
-          <span class="text-[14px] font-medium whitespace-nowrap" style="color: var(--app-foreground);">
-            ${node.name}${count !== undefined && count !== null ? html`&nbsp;<span class="font-mono text-[12px]" style="color: var(--app-muted-foreground); opacity: 0.6;">${count}</span>` : nothing}
+          <span class="text-[13px] font-medium truncate flex-shrink-0" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'}; max-width: calc(100% - 120px);">
+            ${node.name}${count !== undefined && count !== null ? html`&nbsp;<span class="font-mono text-[11px]" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-disabled-foreground)'}; opacity: ${isSelected ? '0.8' : '0.6'};">${count}</span>` : nothing}
           </span>
 
           <!-- Type label for non-folder nodes -->
           ${type && !count
-            ? html`<span class="text-[12px] font-medium ml-1.5 px-1.5 py-0.5 rounded" style="color: var(--app-muted-foreground); opacity: 0.7; background: var(--app-selected);">
+            ? html`<span class="text-[11px] font-medium px-1.5 py-0.5 rounded flex-shrink-0" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'}; opacity: ${isSelected ? '0.9' : '0.8'}; background: ${isSelected ? 'rgba(255, 255, 255, 0.2)' : 'rgba(128, 128, 128, 0.15)'};">
                 ${type}
               </span>`
             : nothing}
@@ -553,7 +567,7 @@ export class DatabaseMultiTree extends TailwindElement() {
 
         <!-- Children -->
         ${isNodeExpanded && node.children && node.children.length > 0
-          ? html`<div>${node.children.map(child => this.renderTreeNodeRow(connectionId, child, level + 1))}</div>`
+          ? html`<div style="position: relative; overflow-x: hidden;">${node.children.map(child => this.renderTreeNodeRow(connectionId, child, level + 1))}</div>`
           : nothing}
       </div>
     `;
@@ -579,24 +593,33 @@ export class DatabaseMultiTree extends TailwindElement() {
       <div class="mb-2">
         <!-- Connection Header Row -->
         <div
-          class="group flex items-center h-8 px-2 cursor-pointer rounded hover:bg-[var(--app-hover)] transition-colors duration-150"
+          class="group flex items-center h-6 px-2 cursor-pointer transition-colors duration-100 w-full"
+          style="${this.hoveredNode === connection.id ? 'background-color: var(--app-toolbar-hover);' : ''}"
           @click=${() => this.handleConnectionClick(connection.id)}
+          @mouseenter=${() => { this.hoveredNode = connection.id; }}
+          @mouseleave=${() => { this.hoveredNode = null; }}
         >
-          <!-- Expand/Collapse Icon -->
-          <span class="w-4 h-4 flex items-center justify-center mr-2 flex-shrink-0">
+          <!-- Expand/Collapse Icon (clickable only for expand/collapse) -->
+          <span
+            class="w-4 h-4 flex items-center justify-center mr-1 flex-shrink-0 cursor-pointer"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this.toggleConnection(connection.id);
+            }}
+          >
             ${isLoading
               ? html`<iconify-icon
-                  icon="mdi:loading"
+                  icon="line-md:loading-loop"
                   class="animate-spin"
-                  width="14"
-                  height="14"
+                  width="18"
+                  height="18"
                   style="color: var(--brand-primary);"
                 ></iconify-icon>`
               : html`<iconify-icon
                   icon=${isExpanded ? 'mdi:chevron-down' : 'mdi:chevron-right'}
                   width="20"
                   height="20"
-                  style="color: var(--app-muted-foreground);"
+                  style="color: var(--app-disabled-foreground);"
                 ></iconify-icon>`}
           </span>
 
@@ -605,29 +628,29 @@ export class DatabaseMultiTree extends TailwindElement() {
             icon="${dbIcon}"
             width="16"
             height="16"
-            class="mr-2 flex-shrink-0"
+            class="mr-1.5 flex-shrink-0"
             style="color: ${isActive ? 'var(--brand-primary)' : 'var(--app-foreground);'}"
           ></iconify-icon>
 
           <!-- Connection Name with Type Badge -->
-          <span class="text-[14px] font-medium truncate flex-1" style="color: var(--app-foreground);">
+          <span class="text-[13px] font-medium truncate flex-shrink-0" style="color: var(--app-foreground);">
             ${connection.name}
           </span>
-          <span class="text-[7px] font-bold ml-2 px-1 py-0.5 rounded" style="color: #6366F1; border: 1px solid #6366F1; letter-spacing: 0.03em;">
+          <span class="text-[9px] font-bold ml-1.5 px-1.5 py-0.5 rounded flex-shrink-0" style="color: #6366F1; background-color: rgba(99, 102, 241, 0.1); letter-spacing: 0.03em;">
             ${dbType.toUpperCase()}
           </span>
           ${isActive
             ? html`
                 <button
                   @click=${(e: Event) => this.handleDisconnect(connection.id, e)}
-                  class="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[var(--app-hover)] transition-all"
+                  class="ml-2 p-1 rounded opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                  style="color: var(--app-disabled-foreground);"
                   title="Disconnect"
                 >
                   <iconify-icon
                     icon="mdi:plug"
                     width="14"
                     height="14"
-                    style="color: var(--app-muted-foreground);"
                   ></iconify-icon>
                 </button>
               `
@@ -636,11 +659,11 @@ export class DatabaseMultiTree extends TailwindElement() {
 
         <!-- Connection Children (Schemas, Tables, etc.) -->
         ${isExpanded && trees.length > 0
-          ? html`<div class="mt-0.5 pl-4">${trees.map(node => this.renderTreeNodeRow(connection.id, node, 0))}</div>`
+          ? html`<div class="mt-0.5 overflow-x-hidden">${trees.map(node => this.renderTreeNodeRow(connection.id, node, 1))}</div>`
           : nothing}
 
         ${isExpanded && trees.length === 0 && !isLoading
-          ? html`<div class="px-6 py-2 text-[10px]" style="color: var(--app-disabled-foreground);">
+          ? html`<div class="px-6 py-2 text-[11px] truncate" style="color: var(--app-disabled-foreground);">
               No objects found
             </div>`
           : nothing}
@@ -651,23 +674,25 @@ export class DatabaseMultiTree extends TailwindElement() {
   render() {
     if (this.dataSources.length === 0) {
       return html`
-        <div class="flex flex-col items-center justify-center h-full py-6 text-center px-4">
-          <iconify-icon
-            icon="mdi:database-outline"
-            width="40"
-            height="40"
-            style="color: var(--app-disabled-foreground); opacity: 0.6;"
-          ></iconify-icon>
-          <p class="text-[11px] mt-3 font-medium" style="color: var(--app-foreground);">No database connections</p>
-          <p class="text-[10px] mt-1" style="color: var(--app-disabled-foreground);">
-            Click + to add a connection
+        <div class="flex flex-col items-center justify-center h-full text-center px-6">
+          <div class="w-16 h-16 mb-4 rounded-xl flex items-center justify-center" style="background-color: var(--app-tab-inactive);">
+            <iconify-icon
+              icon="mdi:database-outline"
+              width="32"
+              height="32"
+              style="color: var(--app-disabled-foreground);"
+            ></iconify-icon>
+          </div>
+          <h3 class="text-[13px] font-semibold mb-1" style="color: var(--app-foreground);">No Database Connections</h3>
+          <p class="text-[12px] mb-4 max-w-[200px]" style="color: var(--app-disabled-foreground);">
+            Click the + button to add a new connection
           </p>
         </div>
       `;
     }
 
     return html`
-      <div class="flex flex-col h-full w-full overflow-y-auto px-1 pb-2">
+      <div class="flex flex-col h-full w-full overflow-x-hidden overflow-y-auto py-1">
         ${this.dataSources.map(connection => this.renderConnectionTree(connection))}
       </div>
     `;
