@@ -262,6 +262,90 @@ impl MySqlIntrospector {
         }).collect()
     }
 
+    async fn get_users_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let users: Vec<(String, String)> = sqlx::query_as(
+            "SELECT CAST(user AS CHAR) AS user, CAST(host AS CHAR) AS host
+             FROM mysql.user
+             WHERE user NOT LIKE 'mysql.%'
+             ORDER BY user, host"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        users.iter().map(|(user, host)| DatabaseObject {
+            id: format!("user:{}@{}", user, host),
+            name: format!("{}@{}", user, host),
+            kind: ObjectKind::Role,
+            icon: "mdi:account".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "user": user,
+                "host": host,
+                "iconColor": "#F472B6"
+            })),
+        }).collect()
+    }
+
+    async fn get_engines_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let engines: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT CAST(engine AS CHAR) AS engine,
+                    CAST(support AS CHAR) AS support,
+                    CAST(comment AS CHAR) AS comment
+             FROM information_schema.engines
+             WHERE engine != 'MEMORY'
+             ORDER BY engine"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        engines.iter().map(|(name, support, comment)| DatabaseObject {
+            id: format!("engine:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::Engine,
+            icon: "mdi:engine".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "engine": name,
+                "support": support,
+                "comment": comment,
+                "iconColor": "#FBBF24"
+            })),
+        }).collect()
+    }
+
+    async fn get_plugins_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let plugins: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT CAST(plugin_name AS CHAR) AS plugin_name,
+                    CAST(plugin_type AS CHAR) AS plugin_type,
+                    CAST(plugin_description AS CHAR) AS plugin_description
+             FROM information_schema.plugins
+             WHERE plugin_status = 'ACTIVE'
+             ORDER BY plugin_name"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        plugins.iter().map(|(name, ptype, desc)| DatabaseObject {
+            id: format!("plugin:{}", name),
+            name: name.clone(),
+            kind: ObjectKind::Plugin,
+            icon: "mdi:puzzle".to_string(),
+            children: None,
+            expanded: false,
+            metadata: Some(json!({
+                "plugin": name,
+                "type": ptype,
+                "description": desc,
+                "iconColor": "#A78BFA"
+            })),
+        }).collect()
+    }
+
     async fn get_table_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let db_name = parent.metadata.as_ref()
             .and_then(|m| m.get("database"))
@@ -527,8 +611,81 @@ impl DatabaseIntrospector for MySqlIntrospector {
 
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                // Return database node as the root object (IntelliJ-style)
-                Ok(vec![
+                // Get server-level objects counts
+                let users_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM mysql.user WHERE user NOT LIKE 'mysql.%'"
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+                let engines_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM information_schema.engines WHERE engine != 'MEMORY'"
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+                let plugins_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM information_schema.plugins WHERE plugin_status = 'ACTIVE'"
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+                // Build server objects children
+                let mut server_objects_children = vec![];
+
+                if users_count > 0 {
+                    server_objects_children.push(DatabaseObject {
+                        id: format!("users_folder:{}", db_name),
+                        name: "Users".to_string(),
+                        kind: ObjectKind::Role,
+                        icon: "mdi:account-group".to_string(),
+                        children: Some(vec![]),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "folder": "users",
+                            "count": users_count,
+                            "iconColor": "#F472B6"
+                        })),
+                    });
+                }
+
+                if engines_count > 0 {
+                    server_objects_children.push(DatabaseObject {
+                        id: format!("engines_folder:{}", db_name),
+                        name: "Engines".to_string(),
+                        kind: ObjectKind::Engine,
+                        icon: "mdi:engine".to_string(),
+                        children: Some(vec![]),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "folder": "engines",
+                            "count": engines_count,
+                            "iconColor": "#FBBF24"
+                        })),
+                    });
+                }
+
+                if plugins_count > 0 {
+                    server_objects_children.push(DatabaseObject {
+                        id: format!("plugins_folder:{}", db_name),
+                        name: "Plugins".to_string(),
+                        kind: ObjectKind::Plugin,
+                        icon: "mdi:puzzle".to_string(),
+                        children: Some(vec![]),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "folder": "plugins",
+                            "count": plugins_count,
+                            "iconColor": "#A78BFA"
+                        })),
+                    });
+                }
+
+                // Return both Database and Server Objects as siblings
+                let mut result = vec![
                     DatabaseObject {
                         id: format!("database:{}", db_name),
                         name: db_name.to_string(),
@@ -538,7 +695,25 @@ impl DatabaseIntrospector for MySqlIntrospector {
                         expanded: false,
                         metadata: Some(json!({ "database": db_name, "iconColor": "#60A5FA" })),
                     }
-                ])
+                ];
+
+                // Add Server Objects as sibling if it has children
+                if !server_objects_children.is_empty() {
+                    result.push(DatabaseObject {
+                        id: "server_objects".to_string(),
+                        name: "Server Objects".to_string(),
+                        kind: ObjectKind::Role,
+                        icon: "mdi:server".to_string(),
+                        children: Some(server_objects_children),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "folder": "server_objects",
+                            "iconColor": "#9CA3AF"
+                        })),
+                    });
+                }
+
+                Ok(result)
             })
         })
     }
@@ -560,6 +735,22 @@ impl DatabaseIntrospector for MySqlIntrospector {
                             .and_then(|m| m.get("folder"))
                             .and_then(|v| v.as_str());
                         match folder {
+                            Some("server_objects") => {
+                                eprintln!("[MySqlIntrospector] get_children - returning server_objects pre-populated children");
+                                return parent.children.clone().unwrap_or_default();
+                            }
+                            Some("users") => {
+                                eprintln!("[MySqlIntrospector] get_children - calling get_users_folder_children");
+                                return self.get_users_folder_children(pool, parent).await;
+                            }
+                            Some("engines") => {
+                                eprintln!("[MySqlIntrospector] get_children - calling get_engines_folder_children");
+                                return self.get_engines_folder_children(pool, parent).await;
+                            }
+                            Some("plugins") => {
+                                eprintln!("[MySqlIntrospector] get_children - calling get_plugins_folder_children");
+                                return self.get_plugins_folder_children(pool, parent).await;
+                            }
                             Some("tables") => self.get_tables_folder_children(pool, parent).await,
                             Some("views") => self.get_views_folder_children(pool, parent).await,
                             Some("functions") => self.get_functions_folder_children(pool, parent).await,

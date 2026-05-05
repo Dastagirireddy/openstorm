@@ -32,6 +32,10 @@ pub enum ObjectKind {
     Procedure,
     Collection, // MongoDB
     Key,        // Redis
+    Role,       // Database role/user
+    Tablespace, // Tablespace (PostgreSQL)
+    Engine,     // Storage engine (MySQL)
+    Plugin,     // Server plugin (MySQL)
 }
 
 /// Database introspector interface

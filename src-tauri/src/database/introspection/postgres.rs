@@ -45,7 +45,7 @@ impl PostgresIntrospector {
         .await
         .unwrap_or(0);
 
-        let views_count: i64 = sqlx::query_scalar(
+        let _views_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM pg_views WHERE schemaname NOT IN ('pg_catalog', 'information_schema')"
         )
         .fetch_one(pool)
@@ -219,7 +219,7 @@ impl PostgresIntrospector {
 
         // Add Database Objects folder if it has children
         if !db_objects_children.is_empty() {
-            result.insert(0, DatabaseObject {
+            result.push(DatabaseObject {
                 id: format!("db_objects_folder:{}", db_name),
                 name: "Database Objects".to_string(),
                 kind: ObjectKind::Table,
@@ -585,6 +585,67 @@ impl PostgresIntrospector {
                     "language": name,
                     "isTrusted": trusted,
                     "iconColor": "#F472B6"
+                })),
+            })
+            .collect()
+    }
+
+    async fn get_roles_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let roles: Vec<(String, bool, bool, bool)> = sqlx::query_as(
+            "SELECT rolname, rolsuper, rolinherit, rolcreaterole
+             FROM pg_roles
+             WHERE rolname NOT LIKE 'pg_%'
+             ORDER BY rolname"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        roles.iter()
+            .map(|(name, superuser, inherit, create_role)| DatabaseObject {
+                id: format!("role:{}", name),
+                name: name.clone(),
+                kind: ObjectKind::Role,
+                icon: "mdi:account".to_string(),
+                children: None,
+                expanded: false,
+                metadata: Some(json!({
+                    "role": name,
+                    "isSuperuser": superuser,
+                    "canInherit": inherit,
+                    "canCreateRole": create_role,
+                    "iconColor": "#F472B6"
+                })),
+            })
+            .collect()
+    }
+
+    async fn get_tablespaces_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+        let tablespaces: Vec<(String, String, i64)> = sqlx::query_as(
+            "SELECT spcname,
+                    pg_catalog.pg_get_userbyid(spcowner) as owner,
+                    pg_size_pretty(pg_tablespace_size(spcname)) as size
+             FROM pg_tablespace
+             WHERE spcname NOT IN ('pg_default', 'pg_global')
+             ORDER BY spcname"
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        tablespaces.iter()
+            .map(|(name, owner, size)| DatabaseObject {
+                id: format!("tablespace:{}", name),
+                name: name.clone(),
+                kind: ObjectKind::Tablespace,
+                icon: "mdi:folder-network".to_string(),
+                children: None,
+                expanded: false,
+                metadata: Some(json!({
+                    "tablespace": name,
+                    "owner": owner,
+                    "size": size,
+                    "iconColor": "#FBBF24"
                 })),
             })
             .collect()
@@ -1010,18 +1071,70 @@ impl PostgresIntrospector {
 
 impl DatabaseIntrospector for PostgresIntrospector {
     fn get_root_objects(&self, pool: &AnyPool, config: &ConnectionConfig) -> Result<Vec<DatabaseObject>> {
-        let connected_db = config.database.as_deref().unwrap_or("postgres");
-
         let AnyPool::Postgres(pool) = pool else {
             return Err(crate::database::DatabaseError::ConnectionError("Wrong pool type".to_string()));
         };
+
+        let connected_db = config.database.as_deref().unwrap_or("postgres");
 
         eprintln!("[PostgresIntrospector] get_root_objects - connected_db: {}", connected_db);
 
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
-                // Return database node as the root object (IntelliJ-style)
-                vec![
+                // Get server-level objects counts
+                let roles_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM pg_roles WHERE rolname NOT LIKE 'pg_%'"
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+                let tablespaces_count: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM pg_tablespace WHERE spcname NOT IN ('pg_default', 'pg_global')"
+                )
+                .fetch_one(pool)
+                .await
+                .unwrap_or(0);
+
+                // Build server objects children
+                let mut server_objects_children = vec![];
+
+                if roles_count > 0 {
+                    server_objects_children.push(DatabaseObject {
+                        id: format!("roles_folder:{}", connected_db),
+                        name: "Roles".to_string(),
+                        kind: ObjectKind::Role,
+                        icon: "mdi:account-group".to_string(),
+                        children: Some(vec![]),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "database": connected_db,
+                            "folder": "roles",
+                            "count": roles_count,
+                            "iconColor": "#F472B6"
+                        })),
+                    });
+                }
+
+                if tablespaces_count > 0 {
+                    server_objects_children.push(DatabaseObject {
+                        id: format!("tablespaces_folder:{}", connected_db),
+                        name: "Tablespaces".to_string(),
+                        kind: ObjectKind::Tablespace,
+                        icon: "mdi:folder-network".to_string(),
+                        children: Some(vec![]),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "database": connected_db,
+                            "folder": "tablespaces",
+                            "count": tablespaces_count,
+                            "iconColor": "#FBBF24"
+                        })),
+                    });
+                }
+
+                // Return both Database and Server Objects as siblings
+                let mut result = vec![
                     DatabaseObject {
                         id: format!("database:{}", connected_db),
                         name: connected_db.to_string(),
@@ -1031,7 +1144,25 @@ impl DatabaseIntrospector for PostgresIntrospector {
                         expanded: false,
                         metadata: Some(json!({ "database": connected_db, "iconColor": "#60A5FA" })),
                     }
-                ]
+                ];
+
+                // Add Server Objects as sibling if it has children
+                if !server_objects_children.is_empty() {
+                    result.push(DatabaseObject {
+                        id: "server_objects".to_string(),
+                        name: "Server Objects".to_string(),
+                        kind: ObjectKind::Role,
+                        icon: "mdi:server".to_string(),
+                        children: Some(server_objects_children),
+                        expanded: false,
+                        metadata: Some(json!({
+                            "folder": "server_objects",
+                            "iconColor": "#9CA3AF"
+                        })),
+                    });
+                }
+
+                result
             })
         });
 
@@ -1063,6 +1194,18 @@ impl DatabaseIntrospector for PostgresIntrospector {
                 eprintln!("[PostgresIntrospector] get_children - parent.kind: {:?}", parent.kind);
 
                 match folder {
+                    Some("server_objects") => {
+                        eprintln!("[PostgresIntrospector] get_children - returning server_objects pre-populated children");
+                        return parent.children.clone().unwrap_or_default();
+                    }
+                    Some("roles") => {
+                        eprintln!("[PostgresIntrospector] get_children - calling get_roles_folder_children");
+                        return self.get_roles_folder_children(pool, parent).await;
+                    }
+                    Some("tablespaces") => {
+                        eprintln!("[PostgresIntrospector] get_children - calling get_tablespaces_folder_children");
+                        return self.get_tablespaces_folder_children(pool, parent).await;
+                    }
                     Some("access_methods") => {
                         eprintln!("[PostgresIntrospector] get_children - calling get_access_methods_folder_children");
                         return self.get_access_methods_folder_children(pool, parent).await;
