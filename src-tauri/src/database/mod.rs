@@ -16,8 +16,11 @@ pub mod types;
 pub mod manager;
 pub mod providers;
 pub mod introspection;
+pub mod query;
+pub mod workspace;
 
 pub use error::{DatabaseError, Result};
 pub use manager::{DatabaseManager, AnyPool};
 pub use types::{ConnectionConfig, ConnectionInfo, ConnectionScope, DatabaseType};
 pub use providers::DatabaseProvider;
+pub use query::{QueryExecutor, QueryResult, SavedQuery};

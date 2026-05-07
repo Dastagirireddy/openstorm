@@ -428,6 +428,12 @@ fn main() {
             commands::database::db_make_connection_global,
             commands::database::db_make_connection_project,
 
+            // === Database Query Execution ===
+            commands::database::db_execute_query,
+            commands::database::db_save_query,
+            commands::database::db_load_queries,
+            commands::database::db_delete_query,
+
             // === Database Introspection ===
             commands::introspection::db_get_objects,
             commands::introspection::db_get_children,

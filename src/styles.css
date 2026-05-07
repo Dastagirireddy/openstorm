@@ -7,9 +7,10 @@
 :root {
   /* Application */
   --app-bg: #ffffff;
+  --app-background: #ffffff;
   --app-foreground: #1a1a1a;
   --app-secondary-foreground: #6b7280;
-  --app-disabled-foreground: #8a8a8a;
+  --app-disabled-foreground: #9ca3af;
   --app-disabled-background: #e5e5e5;
   --app-border: #e5e7eb;
   --app-focus-border: #6366f1;
@@ -24,6 +25,7 @@
   --app-button-hover: #4f46e5;
   --app-toolbar-hover: #e8e8e8;
   --app-toolbar-active: #d0d0d0;
+  --app-toolbar-background: #f3f4f6;
   --app-badge-bg: #f3f4f6;
   --app-badge-border: #e5e7eb;
   --app-badge-shadow: rgba(0, 0, 0, 0.1);
@@ -161,6 +163,16 @@
   /* Brand colors */
   --brand-primary: #5b47c9;
   --brand-primary-hover: #4a37a8;
+  --brand-secondary: #8b5cf6;
+
+  /* Additional UI surfaces */
+  --app-workbench: #f9fafb;
+  --app-toolbar-background: #f3f4f6;
+
+  /* Semantic colors */
+  --error: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
 
   /* Git status colors */
   --git-added: #84cc16;

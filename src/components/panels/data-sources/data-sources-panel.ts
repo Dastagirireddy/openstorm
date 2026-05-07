@@ -121,6 +121,32 @@ export class DataSourcesPanel extends TailwindElement() {
     );
   }
 
+  private handleNodeSelect(e: CustomEvent) {
+    const { connectionId, nodeId, node } = e.detail;
+    this.selectedConnectionId = connectionId;
+
+    // Find the connection to get its type
+    const connection = this.dataSources.find(c => c.id === connectionId);
+    if (!connection) return;
+
+    const dialect = connection.config.dbType === 'mysql' ? 'mysql' : 'postgresql';
+
+    // Dispatch event to open query editor in main editor area
+    this.dispatchEvent(
+      new CustomEvent('open-query-editor', {
+        detail: {
+          connectionId,
+          connectionName: connection.name,
+          dialect,
+          tableName: nodeId,
+          projectPath: this.projectPath,
+        },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
   private renderFormForType(type: DataSourceType) {
     switch (type) {
       case 'database':
@@ -157,48 +183,46 @@ export class DataSourcesPanel extends TailwindElement() {
   render() {
     return html`
       <div class="flex flex-col h-full w-full" style="background-color: var(--activitybar-background);">
-        <div class="flex flex-col h-full">
-          <!-- Header -->
-          <div class="flex items-center justify-between h-[35px] px-3 border-b shrink-0"
-               style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-border);">
-            <div class="flex items-center gap-1.5">
-              <iconify-icon icon="mdi:database" style="color: var(--brand-primary);" width="14"></iconify-icon>
-              <span class="text-[10px] font-bold uppercase tracking-wide" style="color: var(--app-disabled-foreground);">Database</span>
-            </div>
-            <div class="flex items-center gap-0">
-              <button
-                @click=${() => this.selectedConnectionId && this.dispatchRefresh(this.selectedConnectionId)}
-                class="p-1 cursor-pointer"
-                style=${!this.selectedConnectionId ? 'color: var(--app-disabled-foreground); opacity: 0.4; cursor: not-allowed;' : 'color: var(--app-disabled-foreground);'}
-                @mouseenter=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
-                @mouseleave=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
-                title=${this.selectedConnectionId ? 'Refresh' : 'Select a connection to refresh'}
-                ?disabled=${!this.selectedConnectionId}
-              >
-                <iconify-icon icon="mdi:refresh" width="14" height="14"></iconify-icon>
-              </button>
-              <button
-                @click=${() => (this.showAddDialog = true)}
-                class="p-1 cursor-pointer"
-                style="color: var(--app-disabled-foreground);"
-                @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
-                @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
-                title="Add Connection"
-              >
-                <iconify-icon icon="mdi:plus" width="14" height="14"></iconify-icon>
-              </button>
-            </div>
+        <!-- Header -->
+        <div class="flex items-center justify-between h-[35px] px-3 border-b shrink-0"
+             style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-border);">
+          <div class="flex items-center gap-1.5">
+            <iconify-icon icon="mdi:database" style="color: var(--brand-primary);" width="14"></iconify-icon>
+            <span class="text-[10px] font-bold uppercase tracking-wide" style="color: var(--app-disabled-foreground);">Database</span>
           </div>
+          <div class="flex items-center gap-0">
+            <button
+              @click=${() => this.selectedConnectionId && this.dispatchRefresh(this.selectedConnectionId)}
+              class="p-1 cursor-pointer"
+              style=${!this.selectedConnectionId ? 'color: var(--app-disabled-foreground); opacity: 0.4; cursor: not-allowed;' : 'color: var(--app-disabled-foreground);'}
+              @mouseenter=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+              @mouseleave=${(e: Event) => { if (this.selectedConnectionId) (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
+              title=${this.selectedConnectionId ? 'Refresh' : 'Select a connection to refresh'}
+              ?disabled=${!this.selectedConnectionId}
+            >
+              <iconify-icon icon="mdi:refresh" width="14" height="14"></iconify-icon>
+            </button>
+            <button
+              @click=${() => (this.showAddDialog = true)}
+              class="p-1 cursor-pointer"
+              style="color: var(--app-disabled-foreground);"
+              @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'}
+              @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
+              title="Add Connection"
+            >
+              <iconify-icon icon="mdi:plus" width="14" height="14"></iconify-icon>
+            </button>
+          </div>
+        </div>
 
-          <!-- Database Tree View -->
-          <div class="flex-1 overflow-hidden">
-            <database-multi-tree
-              .dataSources=${this.dataSources}
-              .projectPath=${this.projectPath}
-              @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
-              @node-select=${(e: CustomEvent) => { this.selectedConnectionId = e.detail.connectionId; }}
-            ></database-multi-tree>
-          </div>
+        <!-- Database Tree View -->
+        <div class="flex-1 overflow-hidden">
+          <database-multi-tree
+            .dataSources=${this.dataSources}
+            .projectPath=${this.projectPath}
+            @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
+            @node-select=${(e: CustomEvent) => this.handleNodeSelect(e)}
+          ></database-multi-tree>
         </div>
 
         <!-- Add Data Source Dialog -->

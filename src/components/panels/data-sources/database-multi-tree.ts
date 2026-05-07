@@ -195,7 +195,7 @@ export class DatabaseMultiTree extends TailwindElement() {
     this.selectedNodeKey = `${connectionId}:${node.id}`;
     this.dispatchEvent(
       new CustomEvent('node-select', {
-        detail: { connectionId, nodeId: node.id },
+        detail: { connectionId, nodeId: node.id, node },
         bubbles: true,
         composed: true,
       })
@@ -599,10 +599,10 @@ export class DatabaseMultiTree extends TailwindElement() {
     const dbIcon = this.getDbIcon(dbType);
 
     return html`
-      <div class="mb-2 pb-2 border-b" style="border-color: rgba(128, 128, 128, 0.3);">
+      <div class="mb-2 pb-2 border-b" style="border-color: var(--app-border);">
         <!-- Connection Header Row -->
         <div
-          class="group flex items-center h-8 px-2 cursor-pointer transition-colors duration-100 w-full rounded"
+          class="group flex items-center h-8 px-2 cursor-pointer transition-colors duration-100 w-full"
           style="${this.hoveredNode === connection.id ? 'background-color: var(--app-toolbar-hover);' : ''}"
           @click=${() => this.handleConnectionClick(connection.id)}
           @mouseenter=${() => { this.hoveredNode = connection.id; }}
@@ -648,7 +648,7 @@ export class DatabaseMultiTree extends TailwindElement() {
           <span class="text-[13px] font-medium truncate flex-1 min-w-0" style="color: var(--app-foreground);">
             ${connection.name}
           </span>
-          <span class="text-[10px] font-bold ml-2 px-2 py-0.5 rounded flex-shrink-0" style="color: #6366F1; background-color: rgba(99, 102, 241, 0.12); letter-spacing: 0.02em;">
+          <span class="text-[10px] font-bold ml-2 px-2 py-0.5 rounded flex-shrink-0" style="color: var(--folder-build-color); background-color: var(--folder-build-bg); letter-spacing: 0.02em;">
             ${dbType.toUpperCase()}
           </span>
           ${isActive

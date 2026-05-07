@@ -26,6 +26,7 @@ export interface EditorTab {
   lastUsed?: number;
   cursorLine?: number;
   cursorCol?: number;
+  metadata?: Record<string, any>;
 }
 
 /**

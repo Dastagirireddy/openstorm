@@ -4,10 +4,13 @@
 //! - Listing, adding, updating, and removing database connections
 //! - Testing connections
 //! - Moving connections between global and project scope
+//! - Query execution and workspace persistence
 
 use tauri::State;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use crate::database::{DatabaseManager, ConnectionConfig, ConnectionInfo, ConnectionScope};
+use crate::database::query::{QueryExecutor, QueryResult};
+use crate::database::workspace::queries::{QueriesWorkspace, SavedQuery};
 use serde::{Deserialize, Serialize};
 
 /// Connection info returned to frontend (matches AnyDataSource structure)
@@ -226,4 +229,87 @@ impl From<ConnectionConfigDto> for ConnectionConfig {
             file_path: dto.file_path,
         }
     }
+}
+
+// ============================================================================
+// Query Execution Commands
+// ============================================================================
+
+/// Execute a SQL query and return results
+#[tauri::command]
+pub async fn db_execute_query(
+    connection_id: String,
+    query: String,
+    project_path: String,
+    manager: State<'_, DatabaseManager>,
+) -> Result<QueryResult, String> {
+    // Get the connection config to retrieve pool
+    let project = Path::new(&project_path);
+    let connections = manager.list_connections(Some(project));
+
+    let connection = connections.iter()
+        .find(|c| c.id == connection_id)
+        .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+
+    let mut config = ConnectionConfig {
+        id: Some(connection.id.clone()),
+        name: connection.name.clone(),
+        db_type: connection.db_type.clone(),
+        host: connection.host.clone(),
+        port: connection.port,
+        username: connection.username.clone(),
+        password: manager.get_password(&connection_id).ok().flatten(),
+        database: connection.database.clone(),
+        scope: connection.scope.clone(),
+        options: std::collections::HashMap::new(),
+        file_path: connection.file_path.clone(),
+    };
+
+    // Get or create pool
+    let pool = manager.get_or_create_pool(&config).await
+        .map_err(|e| e.to_string())?;
+
+    // Execute query
+    QueryExecutor::execute(&pool, &query).await
+        .map_err(|e| e.to_string())
+}
+
+/// Save a query to workspace
+#[tauri::command]
+pub fn db_save_query(
+    project_path: String,
+    query: SavedQuery,
+) -> Result<(), String> {
+    let workspace = QueriesWorkspace::new(Path::new(&project_path));
+    workspace.save_query(&query)
+        .map_err(|e| e.to_string())
+}
+
+/// Load all saved queries for a connection
+#[tauri::command]
+pub fn db_load_queries(
+    project_path: String,
+    connection_id: Option<String>,
+) -> Result<Vec<SavedQuery>, String> {
+    let workspace = QueriesWorkspace::new(Path::new(&project_path));
+
+    let queries = match connection_id {
+        Some(id) => workspace.load_queries_for_connection(&id)
+            .map_err(|e| e.to_string())?,
+        None => workspace.load_queries()
+            .map_err(|e| e.to_string())?,
+    };
+
+    Ok(queries.queries)
+}
+
+/// Delete a saved query
+#[tauri::command]
+pub fn db_delete_query(
+    project_path: String,
+    query_id: String,
+) -> Result<(), String> {
+    let workspace = QueriesWorkspace::new(Path::new(&project_path));
+    workspace.delete_query(&query_id)
+        .map_err(|e| e.to_string())
 }

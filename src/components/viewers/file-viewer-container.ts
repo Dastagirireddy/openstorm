@@ -16,16 +16,27 @@ import type { EditorTab } from '../../lib/types/file-types.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
 import { dispatch } from '../../lib/types/events.js';
 import type { TextViewer } from '../../viewers/builtin/text-viewer.js';
+import '../panels/data-sources/query-editor/database-query-editor.js';
+
+export interface QueryEditorTabInfo {
+  connectionId: string;
+  connectionName: string;
+  dialect: 'postgresql' | 'mysql';
+  tableName: string;
+  projectPath?: string | null;
+}
 
 @customElement('file-viewer-container')
 export class FileViewerContainer extends TailwindElement() {
   @property({ type: Array }) tabs: EditorTab[] = [];
   @property({ type: String }) activeTabId: string = '';
+  @property({ type: String }) projectPath: string | null = null;
 
   @state() private viewerTag: string | null = null;
   @state() private filePath: string = '';
   @state() private content: string = '';
   @state() private toolbarActions: ViewerAction[] = [];
+  @state() private queryEditorInfo: QueryEditorTabInfo | null = null;
 
   // Viewer-specific state for text editor compatibility
   @state() private breakpoints: Map<string, any[]> = new Map();
@@ -45,6 +56,7 @@ export class FileViewerContainer extends TailwindElement() {
   private _boundHandleDebugStopped!: (e: CustomEvent) => void;
   private _boundHandleClearEditor!: () => void;
   private _boundHandleViewerActionsChanged!: (e: CustomEvent<{ actions: ViewerAction[] }>) => void;
+  private _boundHandleOpenQueryEditor!: (e: CustomEvent<QueryEditorTabInfo>) => void;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -59,39 +71,43 @@ export class FileViewerContainer extends TailwindElement() {
     this._boundHandleDebugStopped = (e: CustomEvent) => this.handleDebugStopped(e);
     this._boundHandleClearEditor = () => this.handleClearEditor();
     this._boundHandleViewerActionsChanged = (e: CustomEvent<{ actions: ViewerAction[] }>) => this.handleViewerActionsChanged(e);
+    this._boundHandleOpenQueryEditor = (e: CustomEvent<QueryEditorTabInfo>) => this.handleOpenQueryEditor(e);
 
     // Listen for open-file-external events
-    document.addEventListener('open-file-external', this._boundHandleOpenFileExternal);
+    document.addEventListener('open-file-external', this._boundHandleOpenFileExternal as EventListener);
     // Listen for save-file events
-    document.addEventListener('save-file', this._boundHandleSaveFile);
+    document.addEventListener('save-file', this._boundHandleSaveFile as EventListener);
     // Listen for content-changed events from viewers and re-dispatch them
-    document.addEventListener('content-changed', this._boundHandleContentChanged);
+    document.addEventListener('content-changed', this._boundHandleContentChanged as EventListener);
     // Listen for format-code events
-    document.addEventListener('format-code', this._boundHandleFormatCode);
+    document.addEventListener('format-code', this._boundHandleFormatCode as EventListener);
     // Listen for format-code-request events for formatting
-    document.addEventListener('format-code-request', this._boundHandleFormatCodeRequest);
+    document.addEventListener('format-code-request', this._boundHandleFormatCodeRequest as EventListener);
     // Listen for debug events
-    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
-    document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
-    document.addEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted as EventListener);
+    document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded as EventListener);
+    document.addEventListener('debug-stopped', this._boundHandleDebugStopped as EventListener);
     // Listen for clear-editor events (when all tabs are closed)
-    document.addEventListener('clear-editor', this._boundHandleClearEditor);
+    document.addEventListener('clear-editor', this._boundHandleClearEditor as EventListener);
     // Listen for viewer actions changed events
-    document.addEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
+    document.addEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged as EventListener);
+    // Listen for open-query-editor events
+    document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
   }
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('open-file-external', this._boundHandleOpenFileExternal);
-    document.removeEventListener('save-file', this._boundHandleSaveFile);
-    document.removeEventListener('content-changed', this._boundHandleContentChanged);
-    document.removeEventListener('format-code', this._boundHandleFormatCode);
-    document.removeEventListener('format-code-request', this._boundHandleFormatCodeRequest);
-    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
-    document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
-    document.removeEventListener('debug-stopped', this._boundHandleDebugStopped);
-    document.removeEventListener('clear-editor', this._boundHandleClearEditor);
-    document.removeEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged);
+    document.removeEventListener('open-file-external', this._boundHandleOpenFileExternal as EventListener);
+    document.removeEventListener('save-file', this._boundHandleSaveFile as EventListener);
+    document.removeEventListener('content-changed', this._boundHandleContentChanged as EventListener);
+    document.removeEventListener('format-code', this._boundHandleFormatCode as EventListener);
+    document.removeEventListener('format-code-request', this._boundHandleFormatCodeRequest as EventListener);
+    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted as EventListener);
+    document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded as EventListener);
+    document.removeEventListener('debug-stopped', this._boundHandleDebugStopped as EventListener);
+    document.removeEventListener('clear-editor', this._boundHandleClearEditor as EventListener);
+    document.removeEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged as EventListener);
+    document.removeEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
   }
 
   private handleClearEditor(): void {
@@ -99,6 +115,7 @@ export class FileViewerContainer extends TailwindElement() {
     this.filePath = '';
     this.content = '';
     this.toolbarActions = [];
+    this.queryEditorInfo = null;
   }
 
   private handleContentChanged(e: CustomEvent<{ path: string; content: string; isModified?: boolean }>): void {
@@ -117,13 +134,41 @@ export class FileViewerContainer extends TailwindElement() {
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
 
+    // Handle query editor initialization when queryEditorInfo changes
+    if (changedProperties.has('queryEditorInfo') && this.queryEditorInfo) {
+      // Query editor info was set via handleOpenQueryEditor
+      // Ensure viewerTag is set correctly
+      if (this.viewerTag !== 'database-query-editor') {
+        this.viewerTag = 'database-query-editor';
+      }
+    }
+
     // Handle tab change
     if (changedProperties.has('activeTabId')) {
       // New active tab
       if (this.activeTabId) {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
         if (tab) {
-          this.openFile(tab.path, tab.content);
+          // Check if this is a query editor tab
+          if (tab.id.startsWith('query:')) {
+            // Parse query editor info from tab
+            const parts = tab.id.split(':');
+            if (parts.length >= 3) {
+              const connectionId = parts[1];
+              const tableName = parts.slice(2).join(':');
+              this.queryEditorInfo = {
+                connectionId,
+                connectionName: tab.name,
+                dialect: tab.metadata?.dialect || 'postgresql',
+                tableName,
+                projectPath: tab.metadata?.projectPath || this.projectPath,
+              };
+              this.viewerTag = 'database-query-editor';
+              this.filePath = tab.id;
+            }
+          } else {
+            this.openFile(tab.path, tab.content);
+          }
           return;
         }
       }
@@ -133,15 +178,33 @@ export class FileViewerContainer extends TailwindElement() {
       this.filePath = '';
       this.content = '';
       this.toolbarActions = [];
+      this.queryEditorInfo = null;
     }
 
     // Handle case where tabs array changed but activeTabId stayed the same
     // (e.g., clicking same file in explorer when it's already active)
     if (changedProperties.has('tabs') && this.activeTabId) {
       const tab = this.tabs.find(t => t.id === this.activeTabId);
-      if (tab && this.filePath === tab.path) {
-        // Same file is still active, but tabs changed - refresh content
-        this.openFile(tab.path, tab.content);
+      if (tab) {
+        if (tab.id.startsWith('query:')) {
+          // Update query editor info
+          const parts = tab.id.split(':');
+          if (parts.length >= 3) {
+            const connectionId = parts[1];
+            const tableName = parts.slice(2).join(':');
+            this.queryEditorInfo = {
+              connectionId,
+              connectionName: tab.name,
+              dialect: tab.metadata?.dialect || 'postgresql',
+              tableName,
+            };
+            this.viewerTag = 'database-query-editor';
+            this.filePath = tab.id;
+          }
+        } else if (this.filePath === tab.path) {
+          // Same file is still active, but tabs changed - refresh content
+          this.openFile(tab.path, tab.content);
+        }
       }
     }
   }
@@ -149,6 +212,23 @@ export class FileViewerContainer extends TailwindElement() {
   private handleOpenFileExternal(e: CustomEvent<{ path: string; content: string }>): void {
     const { path, content } = e.detail;
     this.openFile(path, content);
+  }
+
+  private handleOpenQueryEditor(e: CustomEvent<QueryEditorTabInfo>): void {
+    const { connectionId, connectionName, dialect, tableName, projectPath } = e.detail;
+    console.log('[FileViewerContainer] handleOpenQueryEditor, projectPath:', projectPath || this.projectPath);
+    // Create a unique ID for the query editor tab
+    const queryEditorId = `query:${connectionId}:${tableName || 'new'}`;
+    this.queryEditorInfo = {
+      connectionId,
+      connectionName,
+      dialect,
+      tableName,
+      projectPath: projectPath || this.projectPath,
+    };
+    this.viewerTag = 'database-query-editor';
+    this.filePath = queryEditorId;
+    this.requestUpdate();
   }
 
   private handleSaveFile(): void {
@@ -335,7 +415,7 @@ export class FileViewerContainer extends TailwindElement() {
 
   render() {
     return html`
-      <div class="flex flex-col h-full overflow-hidden" style="background-color: var(--app-bg);">
+      <div class="flex flex-col h-full min-h-0" style="background-color: var(--app-bg);">
         ${this.toolbarActions.length > 0
           ? html`<div class="h-[35px] shrink-0 border-b border-[var(--app-border)] flex items-center px-2 gap-1" style="background-color: var(--app-toolbar-background);">
               ${this.toolbarActions.map(action => html`
@@ -366,16 +446,27 @@ export class FileViewerContainer extends TailwindElement() {
               `)}
             </div>`
           : ''}
-        <div class="flex-1 overflow-hidden relative">
-          ${this.viewerTag === 'text-viewer'
-            ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></text-viewer>`
-            : this.viewerTag === 'image-viewer'
-              ? html`<image-viewer key=${this.filePath} .filePath=${this.filePath}></image-viewer>`
-              : this.viewerTag === 'svg-viewer'
-                ? html`<svg-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></svg-viewer>`
-                : this.viewerTag === 'markdown-viewer'
-                  ? html`<markdown-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content}></markdown-viewer>`
-                  : ''}
+        <div class="flex-1 overflow-hidden relative min-h-0">
+          ${this.viewerTag === 'database-query-editor' && this.queryEditorInfo
+            ? html`<database-query-editor
+                class="h-full w-full"
+                .projectPath=${this.queryEditorInfo.projectPath || this.projectPath}
+                .connectionId=${this.queryEditorInfo.connectionId}
+                .connectionName=${this.queryEditorInfo.connectionName}
+                .dialect=${this.queryEditorInfo.dialect}
+                .tableName=${this.queryEditorInfo.tableName}
+              ></database-query-editor>`
+            : this.viewerTag === 'text-viewer'
+              ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} class="h-full"></text-viewer>`
+              : this.viewerTag === 'image-viewer'
+                ? html`<image-viewer key=${this.filePath} .filePath=${this.filePath} class="h-full"></image-viewer>`
+                : this.viewerTag === 'svg-viewer'
+                  ? html`<svg-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} class="h-full"></svg-viewer>`
+                  : this.viewerTag === 'markdown-viewer'
+                    ? html`<markdown-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} class="h-full"></markdown-viewer>`
+                    : html`<div class="flex items-center justify-center h-full" style="color: var(--app-disabled-foreground);">
+                        <p class="text-sm">No file open</p>
+                      </div>`}
         </div>
       </div>
     `;

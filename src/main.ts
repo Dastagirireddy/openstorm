@@ -101,7 +101,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private appConsoleVisible = false;
   @state() private appConsoleHeight = 200;
   @state() private gitPanelVisible = false;
-  @state() private activeStatusBarPanel: 'terminal' | 'app-console' | null = 'terminal';
+  @state() private activeStatusBarPanel: 'terminal' | 'app-console' | null = null;
   @state() private gitBranch = 'main';
   @state() private gitPanelHeight = 300;
   @state() private isGitPanelResizing = false;
@@ -112,14 +112,19 @@ export class OpenStormApp extends TailwindElement() {
   @state() private showTerminalNotification = false;
   @state() private showConsoleNotification = false;
 
+  private _boundHandleOpenQueryEditor!: (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => void;
+
   connectedCallback(): void {
     super.connectedCallback();
+    this._boundHandleOpenQueryEditor = (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => this.handleOpenQueryEditor(e);
     this.setupKeyboardShortcuts();
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
     this.setupMenuHandler();
     this.setupQuickSearchHandler();
+    // Listen for open-query-editor events
+    document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
   }
 
   private setupQuickSearchHandler(): void {
@@ -274,7 +279,13 @@ export class OpenStormApp extends TailwindElement() {
         dispatch('toggle-git-log', { visible: this.gitPanelVisible });
       } else if (tab === 'terminal' || tab === 'app-console') {
         // Toggle: if already active, close it; otherwise switch to it
-        this.activeStatusBarPanel = this.activeStatusBarPanel === tab ? null : tab;
+        const wasActive = this.activeStatusBarPanel === tab;
+        this.activeStatusBarPanel = wasActive ? null : tab;
+
+        // Create terminal on first open (not auto-created anymore)
+        if (tab === 'terminal' && !wasActive && !this.terminalCreated) {
+          this.terminalCreated = true;
+        }
 
         // Close git panel when opening terminal/console
         if (this.activeStatusBarPanel !== null && this.gitPanelVisible) {
@@ -346,6 +357,11 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("open-recent-project", this.handleOpenRecentProject);
     // Handle go-to-location events from Cmd+Click navigation
     document.addEventListener("go-to-location", this.handleGoToLocation);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    document.removeEventListener('open-query-editor', this._boundHandleOpenQueryEditor);
   }
 
   private handleLocateFile = (): void => {
@@ -785,9 +801,42 @@ export class OpenStormApp extends TailwindElement() {
       console.error("Failed to start file watcher:", error);
     }
 
-    // Auto-create terminal when project is opened
-    this.terminalCreated = true;
+    // Terminal is no longer auto-created by default
+    // User can open it manually from the status bar
   };
+
+  private handleOpenQueryEditor(e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>): void {
+    const { connectionId, connectionName, dialect, tableName } = e.detail;
+    console.log('[main.ts] handleOpenQueryEditor called, projectPath:', this.projectPath);
+    // Create a unique ID for the query editor tab
+    const queryEditorId = `query:${connectionId}:${tableName || 'new'}`;
+
+    // Check if this query editor is already open
+    const existingTab = this.tabs.find(t => t.id === queryEditorId);
+    if (existingTab) {
+      this.activeTabId = existingTab.id;
+      this.activeFilePath = queryEditorId;
+      this.tabs = this.tabs.map(t =>
+        t.id === queryEditorId ? { ...t, lastUsed: Date.now() } : t,
+      );
+      return;
+    }
+
+    // Create a new tab for the query editor
+    const newTab: EditorTab = {
+      id: queryEditorId,
+      name: tableName || `Query: ${connectionName}`,
+      path: queryEditorId,
+      modified: false,
+      content: '',
+      lastUsed: Date.now(),
+      metadata: { dialect, connectionId, connectionName, tableName, projectPath: this.projectPath },
+    };
+    this.tabs = [...this.tabs, newTab];
+    this.activeTabId = queryEditorId;
+    this.activeFilePath = queryEditorId;
+    this.enforceTabLimit();
+  }
 
   private closeTab(tabId: string): void {
     const tabIndex = this.tabs.findIndex((t) => t.id === tabId);
@@ -947,7 +996,8 @@ export class OpenStormApp extends TailwindElement() {
                           <!-- File Viewer Container -->
                           <file-viewer-container
                             id="editor"
-                            class="flex-1 flex flex-col overflow-hidden"
+                            class="flex-1 flex flex-col overflow-hidden min-h-0"
+                            .projectPath=${this.projectPath}
                             .tabs=${this.tabs}
                             .activeTabId=${this.activeTabId}
                             @folder-opened=${this.handleFolderOpened}
@@ -961,7 +1011,7 @@ export class OpenStormApp extends TailwindElement() {
                       <!-- Data Sources Panel on the right (shown when database activity is active) -->
                       ${showDatabase
                         ? html`
-                            <div class="shrink-0 border-l" style="width: 400px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                            <div class="shrink-0 border-l" style="width: 300px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
                               <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
                             </div>
                           `
@@ -1020,7 +1070,8 @@ export class OpenStormApp extends TailwindElement() {
                         <!-- File Viewer Container -->
                         <file-viewer-container
                           id="editor"
-                          class="flex-1 flex flex-col overflow-hidden"
+                          class="flex-1 flex flex-col overflow-hidden min-h-0"
+                          .projectPath=${this.projectPath}
                           .tabs=${this.tabs}
                           .activeTabId=${this.activeTabId}
                           @folder-opened=${this.handleFolderOpened}
@@ -1054,6 +1105,7 @@ export class OpenStormApp extends TailwindElement() {
                       <file-viewer-container
                         id="editor"
                         class="flex-1 flex flex-col overflow-hidden"
+                        .projectPath=${this.projectPath}
                         .tabs=${this.tabs}
                         .activeTabId=${this.activeTabId}
                         @folder-opened=${this.handleFolderOpened}
