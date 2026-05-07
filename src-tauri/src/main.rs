@@ -433,6 +433,7 @@ fn main() {
             commands::database::db_save_query,
             commands::database::db_load_queries,
             commands::database::db_delete_query,
+            commands::database::db_export_query,
 
             // === Database Introspection ===
             commands::introspection::db_get_objects,

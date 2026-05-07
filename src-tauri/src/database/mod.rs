@@ -18,6 +18,7 @@ pub mod providers;
 pub mod introspection;
 pub mod query;
 pub mod workspace;
+pub mod export;
 
 pub use error::{DatabaseError, Result};
 pub use manager::{DatabaseManager, AnyPool};

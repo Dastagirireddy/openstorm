@@ -12,6 +12,7 @@ import { html, nothing, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
+import { eventLog } from '../../../../services/event-log.js';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
@@ -82,6 +83,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   @state() private showSavedQueriesPanel = false;
   @state() private expandedFrameIds: Set<string> = new Set();
   @state() private focusMode: boolean = false;
+  @state() private showDownloadMenu: boolean = false;
+  @state() private downloadFrameId: string | null = null;
 
   private editorView: EditorView | null = null;
   private editorInitialized = false;
@@ -116,7 +119,12 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   }
 
   private handleClickOutside(e: MouseEvent): void {
-    // Close any open dropdowns when clicking outside
+    // Close download menu when clicking outside
+    if (this.showDownloadMenu) {
+      this.showDownloadMenu = false;
+      this.downloadFrameId = null;
+      this.requestUpdate();
+    }
   }
 
   override firstUpdated(): void {
@@ -302,16 +310,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       console.log('[QueryEditor] Frames updated, count:', this.frames.length);
     } catch (err) {
       console.error('[QueryEditor] Query failed:', err);
-      const frame: QueryFrame = {
-        id: `frame-${Date.now()}`,
-        sql: this.sql,
-        results: null,
-        error: err instanceof Error ? err.message : 'Query execution failed',
-        viewMode: 'table',
-        timestamp: Date.now(),
-      };
-      this.frames = [frame, ...this.frames];
-      this.activeFrameId = frame.id;
+      const errorMessage = typeof err === 'string' ? err : (err as Error)?.message || 'Query execution failed';
+      this.addEventLog('Query failed', 'error', errorMessage);
     } finally {
       this.isRunning = false;
       this.requestUpdate();
@@ -329,6 +329,10 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     if (this.editorView) {
       this.editorView.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: '' } });
     }
+  }
+
+  private addEventLog(text: string, type: 'success' | 'error' | 'info', details?: string) {
+    eventLog.log(text, type, details, 'Database');
   }
 
   private handleKeyDown(e: KeyboardEvent) {
@@ -450,13 +454,81 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     this.expandedFrameIds.add(frame.id);
   }
 
+  private async exportToJSON(frame: QueryFrame) {
+    await this.exportFromBackend('json', frame);
+    this.showDownloadMenu = false;
+  }
+
+  private async exportToCSV(frame: QueryFrame) {
+    await this.exportFromBackend('csv', frame);
+    this.showDownloadMenu = false;
+  }
+
+  private async exportToXLSX(frame: QueryFrame) {
+    await this.exportFromBackend('xlsx', frame);
+    this.showDownloadMenu = false;
+  }
+
+  private async exportFromBackend(format: 'csv' | 'json' | 'xlsx', frame: QueryFrame) {
+    if (!frame.results || !this.connectionId || !this.projectPath) return;
+
+    try {
+      const timestamp = Date.now();
+      const filename = `query-results-${timestamp}.${format === 'xlsx' ? 'xls' : format}`;
+
+      // Use Tauri dialog to get save location
+      const { save } = await import('@tauri-apps/plugin-dialog');
+      const filePath = await save({
+        defaultPath: filename,
+        filters: [{
+          name: format.toUpperCase(),
+          extensions: [format === 'xlsx' ? 'xls' : format],
+        }],
+      });
+
+      if (!filePath) return; // User cancelled
+
+      const { invoke } = await import('@tauri-apps/api/core');
+      const result = await invoke('db_export_query', {
+        connectionId: this.connectionId,
+        query: frame.sql,
+        projectPath: this.projectPath,
+        format,
+        destinationPath: filePath,
+        maxRows: 100_000,
+      });
+
+      const exportResult = result as { success: boolean; filePath: string; rowsExported: number; error?: string };
+
+      if (exportResult.success) {
+        // Show success notification
+        this.copyToClipboard(`Exported ${exportResult.rowsExported} rows to ${exportResult.filePath}`);
+      } else {
+        console.error('Export failed:', exportResult.error);
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+    }
+  }
+
   private downloadBlob(blob: Blob, filename: string) {
+    // Fallback for small exports - prefer backend export
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  private toggleDownloadMenu(frameId: string) {
+    if (this.downloadFrameId === frameId && this.showDownloadMenu) {
+      this.showDownloadMenu = false;
+      this.downloadFrameId = null;
+    } else {
+      this.showDownloadMenu = true;
+      this.downloadFrameId = frameId;
+    }
   }
 
   private setActiveFrame(frameId: string) {
@@ -644,14 +716,48 @@ export class DatabaseQueryEditor extends TailwindElement(css`
                       </span>
                     `;
                   })()}
-                  <button
-                    class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
-                    style="color: var(--app-foreground); background: transparent;"
-                    title="Download CSV"
-                    @click=${(e: Event) => { e.stopPropagation(); this.exportToCSV(frame); }}
-                  >
-                    <iconify-icon icon="mdi:download" width="14"></iconify-icon>
-                  </button>
+                  <div style="position: relative;">
+                    <button
+                      class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
+                      style="color: var(--app-foreground); background: transparent;"
+                      title="Download"
+                      @click=${(e: Event) => { e.stopPropagation(); this.toggleDownloadMenu(frame.id); }}
+                    >
+                      <iconify-icon icon="mdi:download" width="14"></iconify-icon>
+                    </button>
+                    ${this.showDownloadMenu && this.downloadFrameId === frame.id ? html`
+                      <div
+                        class="absolute right-0 top-7 z-50 rounded shadow-lg border min-w-[140px]"
+                        style="background: var(--app-background); border-color: var(--app-border);"
+                        @click=${(e: Event) => e.stopPropagation()}
+                      >
+                        <button
+                          class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-[var(--app-tab-inactive)] transition-colors"
+                          style="color: var(--app-foreground);"
+                          @click=${() => this.exportToJSON(frame)}
+                        >
+                          <iconify-icon icon="mdi:code-json" width="14"></iconify-icon>
+                          JSON
+                        </button>
+                        <button
+                          class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-[var(--app-tab-inactive)] transition-colors"
+                          style="color: var(--app-foreground);"
+                          @click=${() => this.exportToCSV(frame)}
+                        >
+                          <iconify-icon icon="mdi:file-delimited" width="14"></iconify-icon>
+                          CSV
+                        </button>
+                        <button
+                          class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-[var(--app-tab-inactive)] transition-colors"
+                          style="color: var(--app-foreground);"
+                          @click=${() => this.exportToXLSX(frame)}
+                        >
+                          <iconify-icon icon="mdi:microsoft-excel" width="14"></iconify-icon>
+                          Excel
+                        </button>
+                      </div>
+                    ` : nothing}
+                  </div>
                   <button
                     class="w-6 h-6 flex items-center justify-center rounded transition-colors hover:bg-[var(--app-toolbar-hover)]"
                     style="color: var(--app-foreground); background: transparent;"
@@ -768,15 +874,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
   private copyToClipboard(text: string) {
     navigator.clipboard.writeText(text);
-  }
-
-  private downloadBlob(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
   }
 
   private renderTableView(frame: QueryFrame, rows: Record<string, unknown>[], _startIndex: number, _totalPages: number) {
@@ -1277,7 +1374,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
                   <!-- Results Tabs -->
                   <div class="flex items-center gap-2 mb-2">
                     <span class="text-xs font-medium" style="color: var(--app-foreground);">
-                      ${this.frames.length} result${this.frames.length > 1 ? 's' : ''}
+                      ${this.frames.filter(f => f.results).length} result${this.frames.filter(f => f.results).length !== 1 ? 's' : ''}
                     </span>
                     <div class="flex-1"></div>
                     <button
@@ -1289,7 +1386,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
                       Clear All
                     </button>
                   </div>
-                  ${this.frames.map(frame => this.renderResultCard(frame, frame.id === this.activeFrameId))}
+                  ${this.frames.filter(frame => frame.results).map(frame => this.renderResultCard(frame, frame.id === this.activeFrameId))}
                 </div>
               `}
         </div>

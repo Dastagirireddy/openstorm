@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use crate::database::{DatabaseManager, ConnectionConfig, ConnectionInfo, ConnectionScope};
 use crate::database::query::{QueryExecutor, QueryResult};
 use crate::database::workspace::queries::{QueriesWorkspace, SavedQuery};
+use crate::database::export::{ExportFormat, ExportOptions, ExportResult};
 use serde::{Deserialize, Serialize};
 
 /// Connection info returned to frontend (matches AnyDataSource structure)
@@ -311,5 +312,64 @@ pub fn db_delete_query(
 ) -> Result<(), String> {
     let workspace = QueriesWorkspace::new(Path::new(&project_path));
     workspace.delete_query(&query_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Export query results to file (CSV, JSON, or XLSX)
+#[tauri::command]
+pub async fn db_export_query(
+    connection_id: String,
+    query: String,
+    project_path: String,
+    format: String,
+    destination_path: String,
+    max_rows: Option<u64>,
+    manager: State<'_, DatabaseManager>,
+) -> Result<ExportResult, String> {
+    // Get the connection config
+    let project = Path::new(&project_path);
+    let connections = manager.list_connections(Some(project));
+
+    let connection = connections.iter()
+        .find(|c| c.id == connection_id)
+        .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+
+    let mut config = ConnectionConfig {
+        id: Some(connection.id.clone()),
+        name: connection.name.clone(),
+        db_type: connection.db_type.clone(),
+        host: connection.host.clone(),
+        port: connection.port,
+        username: connection.username.clone(),
+        password: manager.get_password(&connection_id).ok().flatten(),
+        database: connection.database.clone(),
+        scope: connection.scope.clone(),
+        options: std::collections::HashMap::new(),
+        file_path: connection.file_path.clone(),
+    };
+
+    // Get or create pool
+    let pool = manager.get_or_create_pool(&config).await
+        .map_err(|e| e.to_string())?;
+
+    // Parse format
+    let export_format = match format.to_lowercase().as_str() {
+        "csv" => ExportFormat::Csv,
+        "json" => ExportFormat::Json,
+        "xlsx" | "xls" => ExportFormat::Xlsx,
+        _ => return Err(format!("Unsupported export format: {}", format)),
+    };
+
+    // Build export options
+    let options = ExportOptions {
+        format: export_format,
+        max_rows,
+        include_headers: true,
+        destination_path,
+    };
+
+    // Execute export
+    crate::database::export::QueryExporter::export(&pool, &query, options)
+        .await
         .map_err(|e| e.to_string())
 }

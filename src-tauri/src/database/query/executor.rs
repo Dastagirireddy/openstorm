@@ -1,6 +1,6 @@
 /// Query execution service
 ///
-/// Executes SQL queries against PostgreSQL and MySQL databases.
+/// Executes SQL queries against PostgreSQL, MySQL, and SQLite databases.
 /// Enforces a default LIMIT to prevent IDE freezing on large result sets.
 
 use crate::database::{DatabaseError, AnyPool};
@@ -52,10 +52,8 @@ impl QueryExecutor {
             AnyPool::MySql(pool) => {
                 Self::execute_mysql(pool, &query_with_limit).await?
             }
-            _ => {
-                return Err(DatabaseError::QueryFailed(
-                    "Query execution only supports PostgreSQL and MySQL".into()
-                ));
+            AnyPool::Sqlite(pool) => {
+                Self::execute_sqlite(pool, &query_with_limit).await?
             }
         };
 
@@ -154,6 +152,48 @@ impl QueryExecutor {
         Ok((columns, rows, row_count))
     }
 
+    /// Execute query on SQLite
+    async fn execute_sqlite(
+        pool: &sqlx::SqlitePool,
+        query: &str,
+    ) -> Result<(Vec<ColumnInfo>, Vec<serde_json::Value>, u64), DatabaseError> {
+        let rows = sqlx::query(query)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+
+        let row_count = rows.len() as u64;
+
+        let columns = if let Some(first_row) = rows.first() {
+            first_row
+                .columns()
+                .iter()
+                .map(|col| ColumnInfo {
+                    name: col.name().to_string(),
+                    type_name: Some(col.type_info().name().to_string()),
+                    nullable: None,
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        let rows: Vec<serde_json::Value> = rows
+            .into_iter()
+            .map(|row| {
+                let mut map = serde_json::Map::new();
+                for (i, col) in row.columns().iter().enumerate() {
+                    let col_name = col.name();
+                    let value = Self::extract_sqlite_value(&row, i);
+                    map.insert(col_name.to_string(), value);
+                }
+                serde_json::Value::Object(map)
+            })
+            .collect();
+
+        Ok((columns, rows, row_count))
+    }
+
     /// Extract PostgreSQL row value as JSON
     fn extract_pg_value(row: &sqlx::postgres::PgRow, index: usize) -> serde_json::Value {
         // Try to get value as various types
@@ -205,6 +245,46 @@ impl QueryExecutor {
 
     /// Extract MySQL row value as JSON
     fn extract_mysql_value(row: &sqlx::mysql::MySqlRow, index: usize) -> serde_json::Value {
+        // Try string first (most common fallback)
+        if let Ok(val) = row.try_get::<String, _>(index) {
+            return serde_json::json!(val);
+        }
+
+        // Try integer
+        if let Ok(val) = row.try_get::<i64, _>(index) {
+            return serde_json::json!(val);
+        }
+
+        // Try float
+        if let Ok(val) = row.try_get::<f64, _>(index) {
+            return serde_json::json!(val);
+        }
+
+        // Try boolean
+        if let Ok(val) = row.try_get::<bool, _>(index) {
+            return serde_json::json!(val);
+        }
+
+        // Try JSON
+        if let Ok(val) = row.try_get::<serde_json::Value, _>(index) {
+            return val;
+        }
+
+        // Try date/time
+        if let Ok(val) = row.try_get::<chrono::NaiveDateTime, _>(index) {
+            return serde_json::json!(val.to_string());
+        }
+
+        if let Ok(val) = row.try_get::<chrono::NaiveDate, _>(index) {
+            return serde_json::json!(val.to_string());
+        }
+
+        // Default to NULL
+        serde_json::Value::Null
+    }
+
+    /// Extract SQLite row value as JSON
+    fn extract_sqlite_value(row: &sqlx::sqlite::SqliteRow, index: usize) -> serde_json::Value {
         // Try string first (most common fallback)
         if let Ok(val) = row.try_get::<String, _>(index) {
             return serde_json::json!(val);

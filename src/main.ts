@@ -23,6 +23,9 @@ import {
 import { ThemeService } from "./lib/services/theme-service.js";
 ThemeService.getInstance().initialize();
 
+// Initialize global event log service
+import { eventLog } from "./services/event-log.js";
+
 // Import iconify-icon web component and register icon collections
 import "iconify-icon";
 import { addCollection } from 'iconify-icon';
@@ -48,6 +51,7 @@ addCollection(lucide);
 // Core components (always loaded)
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
+import "./services/global-event-log.js";
 import "./components/navigation/activity-bar.js";
 import "./components/navigation/right-activity-bar.js";
 import "./components/explorer/project-explorer.js";
