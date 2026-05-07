@@ -46,6 +46,16 @@ export interface QueryFrame {
   timestamp: number;
 }
 
+export interface SavedQuery {
+  id: string;
+  title: string;
+  sql: string;
+  connection_id: string;
+  last_run?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 @customElement('database-query-editor')
 export class DatabaseQueryEditor extends TailwindElement(css`
   :host {
@@ -78,7 +88,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   @state() private queryHistory: string[] = [];
   @state() private showHistoryPanel = false;
   @state() private tableFilter: string = '';
-  @state() private savedQueries: { name: string; sql: string; createdAt: number }[] = [];
+  @state() private savedQueries: SavedQuery[] = [];
   @state() private showSaveQueryDialog = false;
   @state() private showSavedQueriesPanel = false;
   @state() private expandedFrameIds: Set<string> = new Set();
@@ -107,6 +117,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     this._boundHandleClear = this.handleClear.bind(this);
     this._boundHandleClickOutside = this.handleClickOutside.bind(this);
     document.addEventListener('click', this._boundHandleClickOutside);
+    // Load saved queries
+    this.loadSavedQueries();
   }
 
   override disconnectedCallback(): void {
@@ -333,6 +345,60 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
   private addEventLog(text: string, type: 'success' | 'error' | 'info', details?: string) {
     eventLog.log(text, type, details, 'Database');
+  }
+
+  private async loadSavedQueries() {
+    if (!this.projectPath || !this.connectionId) return;
+
+    try {
+      const queries = await invoke<SavedQuery[]>('db_load_queries', {
+        projectPath: this.projectPath,
+        connectionId: this.connectionId,
+      });
+      this.savedQueries = queries;
+    } catch (err) {
+      console.error('[QueryEditor] Failed to load saved queries:', err);
+    }
+  }
+
+  private async saveQueryToBackend(title: string, sql: string) {
+    if (!this.projectPath || !this.connectionId) return;
+
+    const query: SavedQuery = {
+      id: `query-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title,
+      sql,
+      connection_id: this.connectionId,
+      last_run: undefined,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    try {
+      await invoke('db_save_query', {
+        projectPath: this.projectPath,
+        query,
+      });
+      await this.loadSavedQueries();
+      return true;
+    } catch (err) {
+      console.error('[QueryEditor] Failed to save query:', err);
+      return false;
+    }
+  }
+
+  private async deleteQueryFromBackend(queryId: string) {
+    if (!this.projectPath) return;
+
+    try {
+      await invoke('db_delete_query', {
+        projectPath: this.projectPath,
+        queryId,
+      });
+      await this.loadSavedQueries();
+    } catch (err) {
+      console.error('[QueryEditor] Failed to delete query:', err);
+    }
   }
 
   private handleKeyDown(e: KeyboardEvent) {
@@ -569,10 +635,12 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     this.showSaveQueryDialog = true;
   }
 
-  private confirmSaveQuery(name: string) {
+  private async confirmSaveQuery(name: string) {
     if (!name.trim()) return;
-    this.savedQueries = [{ name, sql: this.sql.trim(), createdAt: Date.now() }, ...this.savedQueries];
-    this.showSaveQueryDialog = false;
+    const success = await this.saveQueryToBackend(name, this.sql.trim());
+    if (success) {
+      this.showSaveQueryDialog = false;
+    }
   }
 
   private loadSavedQuery(sql: string) {
@@ -1271,7 +1339,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
               ? html`<p class="text-xs text-center py-4" style="color: var(--app-disabled-foreground);">No saved queries</p>`
               : html`
                   <div class="space-y-1">
-                    ${this.savedQueries.map((saved, idx) => html`
+                    ${this.savedQueries.map((saved) => html`
                       <div
                         class="text-xs p-2 rounded cursor-pointer hover:bg-indigo-500/10 transition-colors group"
                         style="color: var(--app-foreground);"
@@ -1279,13 +1347,13 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
                       >
                         <div class="flex items-start justify-between gap-2">
                           <div class="flex-1 min-w-0">
-                            <div class="font-medium mb-0.5">${saved.name}</div>
+                            <div class="font-medium mb-0.5">${saved.title}</div>
                             <code class="truncate block text-[10px]" style="font-family: 'JetBrains Mono', monospace; color: var(--app-disabled-foreground);">${saved.sql.substring(0, 50)}${saved.sql.length > 50 ? '...' : ''}</code>
                           </div>
                           <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
                               class="p-0.5 rounded hover:bg-gray-500/20"
-                              @click=${(e: Event) => { e.stopPropagation(); this.savedQueries = this.savedQueries.filter((_, i) => i !== idx); }}
+                              @click=${(e: Event) => { e.stopPropagation(); this.deleteQueryFromBackend(saved.id); }}
                             >
                               <iconify-icon icon="mdi:trash-can" width="12" style="color: var(--app-disabled-foreground);"></iconify-icon>
                             </button>
