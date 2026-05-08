@@ -900,7 +900,6 @@ export class OpenStormApp extends TailwindElement() {
 
   private handleOpenQueryEditor(e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>): void {
     const { connectionId, connectionName, dialect, tableName } = e.detail;
-    console.log('[main.ts] handleOpenQueryEditor called, projectPath:', this.projectPath);
     // Create a unique ID for the query editor tab
     const queryEditorId = `query:${connectionId}:${tableName || 'new'}`;
 

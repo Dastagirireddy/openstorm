@@ -151,26 +151,23 @@ export class FileViewerContainer extends TailwindElement() {
         if (tab) {
           // Check if this is a query editor tab
           if (tab.id.startsWith('query:')) {
-            // Parse query editor info from tab
-            const parts = tab.id.split(':');
-            if (parts.length >= 3) {
-              const connectionId = parts[1];
-              const tableName = parts.slice(2).join(':');
-              // Force re-render by clearing first
-              this.viewerTag = null;
-              this.queryEditorInfo = null;
-              requestAnimationFrame(() => {
-                this.queryEditorInfo = {
-                  connectionId,
-                  connectionName: tab.name,
-                  dialect: tab.metadata?.dialect || 'postgresql',
-                  tableName,
-                  projectPath: tab.metadata?.projectPath || this.projectPath,
-                };
-                this.viewerTag = 'database-query-editor';
-                this.filePath = tab.id;
-              });
-            }
+            // Get connection info from metadata (not from parsing tab ID to avoid issues with colons in file paths)
+            const connectionId = tab.metadata?.connectionId || '';
+            const tableName = tab.metadata?.tableName || '';
+            // Force re-render by clearing first
+            this.viewerTag = null;
+            this.queryEditorInfo = null;
+            requestAnimationFrame(() => {
+              this.queryEditorInfo = {
+                connectionId,
+                connectionName: tab.name,
+                dialect: tab.metadata?.dialect || 'postgresql',
+                tableName,
+                projectPath: tab.metadata?.projectPath || this.projectPath,
+              };
+              this.viewerTag = 'database-query-editor';
+              this.filePath = tab.id;
+            });
           } else {
             this.openFile(tab.path, tab.content);
           }
@@ -192,20 +189,17 @@ export class FileViewerContainer extends TailwindElement() {
       const tab = this.tabs.find(t => t.id === this.activeTabId);
       if (tab) {
         if (tab.id.startsWith('query:')) {
-          // Update query editor info
-          const parts = tab.id.split(':');
-          if (parts.length >= 3) {
-            const connectionId = parts[1];
-            const tableName = parts.slice(2).join(':');
-            this.queryEditorInfo = {
-              connectionId,
-              connectionName: tab.name,
-              dialect: tab.metadata?.dialect || 'postgresql',
-              tableName,
-            };
-            this.viewerTag = 'database-query-editor';
-            this.filePath = tab.id;
-          }
+          // Get connection info from metadata (not from parsing tab ID to avoid issues with colons in file paths)
+          const connectionId = tab.metadata?.connectionId || '';
+          const tableName = tab.metadata?.tableName || '';
+          this.queryEditorInfo = {
+            connectionId,
+            connectionName: tab.name,
+            dialect: tab.metadata?.dialect || 'postgresql',
+            tableName,
+          };
+          this.viewerTag = 'database-query-editor';
+          this.filePath = tab.id;
         } else if (this.filePath === tab.path) {
           // Same file is still active, but tabs changed - refresh content
           this.openFile(tab.path, tab.content);
@@ -221,7 +215,6 @@ export class FileViewerContainer extends TailwindElement() {
 
   private handleOpenQueryEditor(e: CustomEvent<QueryEditorTabInfo>): void {
     const { connectionId, connectionName, dialect, tableName, projectPath } = e.detail;
-    console.log('[FileViewerContainer] handleOpenQueryEditor, projectPath:', projectPath || this.projectPath);
     // Create a unique ID for the query editor tab
     const queryEditorId = `query:${connectionId}:${tableName || 'new'}`;
     this.queryEditorInfo = {

@@ -173,11 +173,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     await new Promise(resolve => setTimeout(resolve, 50));
 
     const container = this.renderRoot.querySelector('#editor-container') as HTMLElement;
-    console.log('[QueryEditor] initEditor - container found:', !!container, 'editorView exists:', !!this.editorView);
     if (!container || this.editorView) {
-      if (!container) {
-        console.error('[QueryEditor] Editor container not found!');
-      }
       return;
     }
 
@@ -187,7 +183,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       ? sql({ dialect: PostgreSQL })
       : sql({ dialect: MySQL });
 
-    // Light theme that matches the app's theme
     const lightTheme = EditorView.theme({
       '&': {
         backgroundColor: 'var(--app-bg)',
@@ -224,7 +219,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       },
     });
 
-    // Syntax highlighting for light theme
     const lightHighlightStyle = HighlightStyle.define([
       { tag: tags.keyword, color: 'var(--app-keyword)' },
       { tag: tags.typeName, color: 'var(--app-type)' },
@@ -241,7 +235,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       extensions: [
         EditorState.tabSize.of(4),
         history(),
-        // Custom keymap MUST come before defaultKeymap to take precedence
         keymap.of([{
           key: 'Mod-Enter',
           run: () => {
@@ -272,31 +265,16 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       ],
       parent: container,
     });
-    console.log('[QueryEditor] Editor initialized successfully');
   }
 
   private async handleRun() {
-    console.log('[QueryEditor] Run button clicked');
-    const debugInfo = {
-      hasSql: !!this.sql?.trim(),
-      sql: this.sql?.substring(0, 100),
-      connectionId: this.connectionId,
-      projectPath: this.projectPath,
-      isRunning: this.isRunning
-    };
-    console.log('[QueryEditor] State:', debugInfo);
-
-    // Show alert for debugging
     if (!this.connectionId) {
-      alert('Missing connectionId: ' + this.connectionId);
       return;
     }
     if (!this.projectPath) {
-      alert('Missing projectPath: ' + this.projectPath);
       return;
     }
     if (!this.sql.trim()) {
-      alert('Empty SQL query');
       return;
     }
 
@@ -308,7 +286,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
     this.isRunning = true;
     this.requestUpdate();
-    console.log('[QueryEditor] Calling db_execute_query...');
 
     try {
       const results = await invoke('db_execute_query', {
@@ -316,7 +293,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
         query: this.sql,
         projectPath: this.projectPath,
       });
-      console.log('[QueryEditor] Query succeeded:', results);
 
       const frame: QueryFrame = {
         id: `frame-${Date.now()}`,
@@ -328,29 +304,23 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       };
 
       if (this.multiCardMode) {
-        // Multi-card mode: add new frame to the top
         this.frames = [frame, ...this.frames].slice(0, this.maxFrames);
       } else {
-        // Single-card mode: replace the latest frame (or create first one)
         this.frames = this.frames.length > 0
           ? [frame, ...this.frames.slice(1)]
           : [frame];
       }
 
       this.activeFrameId = frame.id;
-      // Collapse all other frames, expand only the new one
       this.expandedFrameIds.clear();
       this.expandedFrameIds.add(frame.id);
       this.tablePage = 1;
-      console.log('[QueryEditor] Frames updated, count:', this.frames.length, 'mode:', this.multiCardMode ? 'multi' : 'single');
     } catch (err) {
-      console.error('[QueryEditor] Query failed:', err);
       const errorMessage = typeof err === 'string' ? err : (err as Error)?.message || 'Query execution failed';
       this.addEventLog('Query failed', 'error', errorMessage);
     } finally {
       this.isRunning = false;
       this.requestUpdate();
-      console.log('[QueryEditor] Run completed');
     }
   }
 
@@ -770,7 +740,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     const endIndex = Math.min(startIndex + this.tablePageSize, frame.results?.rowCount || 0);
     const paginatedRows = frame.results?.rows.slice(startIndex, endIndex) || [];
 
-    console.log('[QueryEditor] renderResultCard called for frame:', frame.id, 'isActive:', isActive, 'hasResults:', !!frame.results);
     return html`
       <div
         class="border rounded-lg overflow-hidden transition-all ${isActive ? 'ring-2 ring-indigo-500 shadow-lg' : 'hover:shadow-md'}"
@@ -985,12 +954,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   }
 
   private renderTableView(frame: QueryFrame, rows: Record<string, unknown>[], _startIndex: number, _totalPages: number) {
-    console.log('[QueryEditor] renderTableView called:', {
-      rowCount: rows.length,
-      viewMode: frame.viewMode,
-      hasResults: !!frame.results,
-      columns: frame.results?.columns?.length || 0
-    });
     // Recalculate based on filtered data
     const sortedRows = this.getSortedRows(rows);
     const filteredRows = this.getFilteredRows(sortedRows);
@@ -999,15 +962,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     const startIndex = (currentPage - 1) * this.tablePageSize;
     const endIndex = Math.min(startIndex + this.tablePageSize, filteredRows.length);
     const paginatedRows = filteredRows.slice(startIndex, endIndex);
-    // Use backend row count for pagination display (shows actual returned rows)
     const backendRowCount = frame.results?.rowCount || 0;
     const isTruncated = frame.results?.truncated || false;
-    console.log('[QueryEditor] renderTableView data:', {
-      sortedRows: sortedRows.length,
-      filteredRows: filteredRows.length,
-      paginatedRows: paginatedRows.length,
-      startIndex, endIndex
-    });
     if (frame.viewMode === 'json') {
       return html`
         <div class="flex flex-col h-full">
@@ -1194,7 +1150,6 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
   }
 
   override render() {
-    console.log('[QueryEditor] render() called, frames:', this.frames.length, 'activeFrameId:', this.activeFrameId);
     const activeFrame = this.frames.find(f => f.id === this.activeFrameId) || this.frames[0];
 
     return html`
@@ -1212,7 +1167,6 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
               style="color: var(--success);"
               title="Run Query (⌘ + ↩)"
               @click=${(e: MouseEvent) => {
-                console.log('[QueryEditor] Run button CLICKED!');
                 e.preventDefault();
                 e.stopPropagation();
                 this._boundHandleRun();
@@ -1232,7 +1186,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
             >
               <iconify-icon icon="mdi:stop" width="16" height="16"></iconify-icon>
             </button>
-            <div class="w-6 h-px my-1" style="background: var(--app-border, rgba(255,255,255,0.1));"></div>
+            <div class="w-6 h-[1px] my-1" style="background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.15), transparent);"></div>
             <button
               class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
               style="color: var(--app-keyword);"
@@ -1291,7 +1245,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
             >
               <iconify-icon icon="mdi:bookmark" width="16" height="16"></iconify-icon>
             </button>
-            <div class="w-6 h-px my-1" style="background: var(--app-border, rgba(255,255,255,0.1));"></div>
+            <div class="w-6 h-[1px] my-1" style="background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.15), transparent);"></div>
             <button
               class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${!this.multiCardMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
               style="color: var(--app-foreground);"
