@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { eventLog } from '../../../../services/event-log.js';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
-import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
+import { history, historyKeymap, defaultKeymap, indentMore } from '@codemirror/commands';
 import { sql, PostgreSQL, MySQL } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -106,6 +106,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   private _boundHandleFormatSql!: () => void;
   private _boundHandleClear!: () => void;
   private _boundHandleClickOutside!: (e: MouseEvent) => void;
+  private _boundHandleClearResults!: () => void;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -117,7 +118,9 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     this._boundHandleFormatSql = this.handleFormatSql.bind(this);
     this._boundHandleClear = this.handleClear.bind(this);
     this._boundHandleClickOutside = this.handleClickOutside.bind(this);
+    this._boundHandleClearResults = this.handleClearResults.bind(this);
     document.addEventListener('click', this._boundHandleClickOutside);
+    document.addEventListener('clear-query-results', this._boundHandleClearResults);
     // Load saved queries
     this.loadSavedQueries();
   }
@@ -128,6 +131,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       this.editorView = null;
     }
     document.removeEventListener('click', this._boundHandleClickOutside);
+    document.removeEventListener('clear-query-results', this._boundHandleClearResults);
     super.disconnectedCallback();
   }
 
@@ -240,7 +244,26 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       extensions: [
         EditorState.tabSize.of(4),
         history(),
-        keymap.of([...historyKeymap, ...defaultKeymap]),
+        // Custom keymap MUST come before defaultKeymap to take precedence
+        keymap.of([{
+          key: 'Mod-Enter',
+          run: () => {
+            this._boundHandleRun();
+            return true;
+          },
+        }, {
+          key: 'Mod-Shift-Backspace',
+          run: () => {
+            if (this.frames.length > 0) {
+              this.frames = [];
+              this.activeFrameId = null;
+              this.expandedFrameIds.clear();
+              this.requestUpdate();
+              return true;
+            }
+            return false;
+          },
+        }, ...historyKeymap, ...defaultKeymap]),
         sqlDialect,
         lightTheme,
         syntaxHighlighting(lightHighlightStyle),
@@ -248,16 +271,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
           if (update.docChanged) {
             this.sql = update.state.doc.toString();
           }
-        }),
-        EditorView.domEventHandlers({
-          keydown: (event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-              event.preventDefault();
-              this.handleRun();
-              return true;
-            }
-            return false;
-          },
         }),
       ],
       parent: container,
@@ -356,6 +369,13 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     }
   }
 
+  private handleClearResults() {
+    this.frames = [];
+    this.activeFrameId = null;
+    this.expandedFrameIds.clear();
+    this.requestUpdate();
+  }
+
   private addEventLog(text: string, type: 'success' | 'error' | 'info', details?: string) {
     eventLog.log(text, type, details, 'Database');
   }
@@ -420,6 +440,16 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       if (activeFrame?.results) {
         e.preventDefault();
         this.copyToClipboard(JSON.stringify(activeFrame.results.rows));
+      }
+    }
+    // Cmd+Shift+Backspace to clear all results
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Backspace') {
+      if (this.frames.length > 0) {
+        e.preventDefault();
+        this.frames = [];
+        this.activeFrameId = null;
+        this.expandedFrameIds.clear();
+        this.requestUpdate();
       }
     }
     if (e.key === 'Escape') {
@@ -1303,7 +1333,13 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
                       <div
                         class="text-xs p-2 rounded cursor-pointer hover:bg-indigo-500/10 transition-colors group"
                         style="color: var(--app-foreground);"
-                        @click=${() => { this.sql = query; this.editorView?.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: query } }); this.showHistoryPanel = false; }}
+                        @click=${() => {
+                          this.sql = query;
+                          this.editorView?.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: query } });
+                          this.showHistoryPanel = false;
+                          // Run the query after a short delay to allow editor to update
+                          setTimeout(() => this._boundHandleRun(), 50);
+                        }}
                       >
                         <div class="flex items-start justify-between gap-2">
                           <code class="truncate flex-1" style="font-family: 'JetBrains Mono', monospace;">${query.substring(0, 70)}${query.length > 70 ? '...' : ''}</code>

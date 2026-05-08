@@ -254,6 +254,14 @@ fn main() {
                     &MenuItem::with_id(app, "step-out", "Step Out", true, Some("Shift+F11")).unwrap(),
                     &MenuItem::with_id(app, "continue", "Continue", true, Some("F5")).unwrap(),
                 ]).unwrap(),
+                &Submenu::with_items(app, "Database", true, &[
+                    &MenuItem::with_id(app, "new-query-editor", "New Query Editor", true, Some("Cmd+Shift+Q")).unwrap(),
+                    &MenuItem::with_id(app, "connect-to-database", "Connect to Database...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "refresh-connections", "Refresh Connections", true, Some("Cmd+Shift+D")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "clear-query-results", "Clear Query Results", true, Some("Cmd+Shift+Backspace")).unwrap(),
+                ]).unwrap(),
                 &Submenu::with_items(app, "Help", true, &[
                     &MenuItem::with_id(app, "documentation", "Documentation", true, None::<&str>).unwrap(),
                     &MenuItem::with_id(app, "report-issue", "Report Issue", true, None::<&str>).unwrap(),
@@ -306,6 +314,14 @@ fn main() {
                     &MenuItem::with_id(app, "step-into", "Step Into", true, Some("F11")).unwrap(),
                     &MenuItem::with_id(app, "step-out", "Step Out", true, Some("Shift+F11")).unwrap(),
                     &MenuItem::with_id(app, "continue", "Continue", true, Some("F5")).unwrap(),
+                ]).unwrap(),
+                &Submenu::with_items(app, "Database", true, &[
+                    &MenuItem::with_id(app, "new-query-editor", "New Query Editor", true, Some("Ctrl+Shift+Q")).unwrap(),
+                    &MenuItem::with_id(app, "connect-to-database", "Connect to Database...", true, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "refresh-connections", "Refresh Connections", true, Some("Ctrl+Shift+D")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "clear-query-results", "Clear Query Results", true, Some("Ctrl+Shift+Backspace")).unwrap(),
                 ]).unwrap(),
                 &Submenu::with_items(app, "Help", true, &[
                     &MenuItem::with_id(app, "documentation", "Documentation", true, None::<&str>).unwrap(),

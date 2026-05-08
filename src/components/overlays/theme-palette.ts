@@ -1,7 +1,7 @@
 /**
- * Theme Palette - Command palette style theme picker
+ * Theme Palette - Zed-style command palette theme picker
  *
- * Provides a quick theme switching overlay similar to VS Code's command palette
+ * Provides a quick theme switching overlay similar to Zed editor's command palette
  */
 
 import { html } from 'lit';
@@ -138,79 +138,136 @@ export class ThemePalette extends TailwindElement() {
     if (!this.isOpen) return html``;
 
     return html`
-      <div class="fixed inset-0 z-[9999]" @click=${() => this.close()}>
-        <div class="fixed top-24 left-1/2 -translate-x-1/2 w-[500px] max-w-[90vw] rounded-lg shadow-2xl overflow-hidden"
-             style="background-color: var(--app-bg); border: 1px solid var(--app-border);"
-             @click=${(e: Event) => e.stopPropagation()}>
+      <div class="fixed inset-0 z-[9999]" @click=${() => this.close()} style="background: rgba(0, 0, 0, 0.4);">
+        <div
+          class="fixed top-24 left-1/2 -translate-x-1/2 w-[520px] max-w-[90vw] rounded-xl shadow-2xl overflow-hidden border"
+          style="
+            background: var(--app-bg);
+            border-color: var(--app-border);
+            box-shadow:
+              0 0 0 1px rgba(0, 0, 0, 0.05),
+              0 20px 60px rgba(0, 0, 0, 0.4);
+          "
+          @click=${(e: Event) => e.stopPropagation()}>
           <!-- Header -->
-          <div class="flex items-center gap-3 p-4 border-b" style="border-color: var(--app-border);">
+          <div class="flex items-center gap-2 px-4 py-3 border-b" style="border-color: var(--app-border);">
             <os-icon name="palette" size="18" style="color: var(--app-disabled-foreground);"></os-icon>
             <input
               id="theme-input"
               type="text"
-              placeholder="Select theme... (type to filter)"
-              class="flex-1 bg-transparent text-[14px] outline-none focus:ring-1 focus:ring-[var(--brand-primary)] rounded px-2 py-1"
+              placeholder="Select theme..."
+              class="flex-1 bg-transparent border-none outline-none text-sm"
               style="color: var(--app-foreground);"
               .value=${this.query}
               @input=${this._handleInput}/>
-            <div class="flex items-center gap-1 flex-shrink-0">
-              <span class="px-1.5 py-0.5 rounded text-[10px] font-medium" style="background-color: var(--app-toolbar-hover); color: var(--app-disabled-foreground);">⇧⌘T</span>
-            </div>
+            <kbd
+              class="px-1.5 py-0.5 text-[10px] rounded border"
+              style="
+                background: var(--app-tab-inactive);
+                border-color: var(--app-border);
+                color: var(--app-disabled-foreground);
+              "
+            >
+              ESC
+            </kbd>
           </div>
 
           <!-- Theme List -->
-          <div class="max-h-[300px] overflow-y-auto py-2">
+          <div class="max-h-[340px] overflow-y-auto">
             ${this.filteredThemes.length === 0
               ? html`
-                  <div class="flex items-center justify-center py-8">
-                    <span class="text-[13px]" style="color: var(--app-disabled-foreground);">No themes found</span>
+                  <div class="text-center py-10">
+                    <p class="text-sm" style="color: var(--app-disabled-foreground);">
+                      ${this.query ? `No themes matching "${this.query}"` : 'No themes found'}
+                    </p>
                   </div>
                 `
-              : this.filteredThemes.map((theme, index) => {
-                  const isSelected = index === this.selectedIndex;
-                  return html`
-                    <div
-                      data-index="${index}"
-                      class="flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors"
-                      style="background-color: ${isSelected ? 'var(--app-hover-background)' : 'transparent'};"
-                      @click=${() => this.selectTheme(theme)}
-                      @mouseenter=${() => { this.selectedIndex = index; }}>
-                      <!-- Theme preview swatch -->
-                      <div class="flex items-center gap-1 flex-shrink-0">
-                        <div class="w-4 h-4 rounded-sm border"
-                             style="background-color: ${theme.workbench['app-bg']}; border-color: var(--app-border);">
+              : html`
+                  <div class="p-1.5">
+                    ${this.filteredThemes.map((theme, index) => {
+                      const isSelected = index === this.selectedIndex;
+                      return html`
+                        <div
+                          data-index="${index}"
+                          class="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors group"
+                          style="background-color: ${isSelected ? 'var(--app-tab-inactive)' : 'transparent'};"
+                          @click=${() => this.selectTheme(theme)}
+                          @mouseenter=${() => { this.selectedIndex = index; }}>
+                          <!-- Theme preview swatches -->
+                          <div class="flex items-center gap-1 flex-shrink-0">
+                            <div class="w-5 h-5 rounded-md border flex-shrink-0"
+                                 style="
+                                   background: ${theme.workbench['app-bg']};
+                                   border-color: var(--app-border);
+                                   box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+                                 ">
+                            </div>
+                            <div class="w-5 h-5 rounded-md border flex-shrink-0"
+                                 style="
+                                   background: ${theme.editor['editor-background']};
+                                   border-color: var(--app-border);
+                                   box-shadow: 0 0 0 1px rgba(0,0,0,0.1);
+                                 ">
+                            </div>
+                          </div>
+
+                          <!-- Theme name -->
+                          <span class="flex-1 text-sm font-medium truncate" style="color: var(--app-foreground);">
+                            ${theme.name}
+                          </span>
+
+                          <!-- Theme type badge -->
+                          <span class="px-2 py-0.5 rounded-md text-[10px] font-medium flex-shrink-0"
+                                style="
+                                  background: ${theme.type === 'dark' ? 'var(--app-button-background)' : 'var(--app-tab-inactive)'};
+                                  color: ${theme.type === 'dark' ? '#fff' : 'var(--app-disabled-foreground)'};
+                                ">
+                            ${theme.type === 'dark' ? 'Dark' : 'Light'}
+                          </span>
+
+                          <!-- Selected indicator -->
+                          ${isSelected ? html`
+                            <os-icon name="check" size="14" style="color: var(--app-button-background);"></os-icon>
+                          ` : html`
+                            <os-icon name="chevron-right" size="14" class="opacity-0 group-hover:opacity-100 transition-opacity" style="color: var(--app-disabled-foreground);"></os-icon>
+                          `}
                         </div>
-                        <div class="w-4 h-4 rounded-sm border"
-                             style="background-color: ${theme.editor['editor-background']}; border-color: var(--app-border);">
-                        </div>
-                      </div>
-
-                      <!-- Theme name -->
-                      <span class="flex-1 text-[13px]" style="color: var(--app-foreground);">
-                        ${theme.name}
-                      </span>
-
-                      <!-- Theme type badge -->
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                            style="background-color: ${theme.type === 'dark' ? 'var(--app-button-background)' : 'var(--app-toolbar-hover)'};
-                                   color: ${theme.type === 'dark' ? '#fff' : 'var(--app-disabled-foreground)'};">
-                        ${theme.type === 'dark' ? 'Dark' : 'Light'}
-                      </span>
-
-                      <!-- Selected indicator -->
-                      ${isSelected ? html`
-                        <os-icon name="check" size="14" style="color: var(--app-button-background);"></os-icon>
-                      ` : ''}
-                    </div>
-                  `;
-                })}
+                      `;
+                    })}
+                  </div>
+                `}
           </div>
 
           <!-- Footer -->
-          <div class="flex items-center justify-between px-4 py-2 border-t text-[11px]" style="border-color: var(--app-border); color: var(--app-disabled-foreground);">
-            <span>Use ↑↓ to navigate, Enter to select</span>
-            <span>Esc to close</span>
-          </div>
+          ${this.filteredThemes.length > 0
+            ? html`
+                <div
+                  class="px-4 py-2 border-t text-[11px]"
+                  style="
+                    border-color: var(--app-border);
+                    background: var(--app-toolbar-background);
+                    color: var(--app-disabled-foreground);
+                  "
+                >
+                  <span class="flex items-center gap-2">
+                    <kbd
+                      class="px-1 py-0.5 rounded border"
+                      style="background: var(--app-bg); border-color: var(--app-border);"
+                    >
+                      ↑↓
+                    </kbd>
+                    <span>to navigate</span>
+                    <kbd
+                      class="px-1 py-0.5 rounded border"
+                      style="background: var(--app-bg); border-color: var(--app-border);"
+                    >
+                      ↵
+                    </kbd>
+                    <span>to select</span>
+                  </span>
+                </div>
+              `
+            : nothing}
         </div>
       </div>
     `;

@@ -18,6 +18,7 @@ import {
   loadDebugToolbar,
   loadRunToolbar,
 } from "./lib/utils/lazy-loader.js";
+import "./components/dialogs/database-connection-picker.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/services/theme-service.js";
@@ -127,6 +128,7 @@ export class OpenStormApp extends TailwindElement() {
     this.setupAutoSaveHandler();
     this.setupMenuHandler();
     this.setupQuickSearchHandler();
+    this.setupDatabaseMenuHandlers();
     // Listen for open-query-editor events
     document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
   }
@@ -134,6 +136,35 @@ export class OpenStormApp extends TailwindElement() {
   private setupQuickSearchHandler(): void {
     document.addEventListener("quick-search", () => {
       loadSearchOverlay();
+    });
+  }
+
+  private setupDatabaseMenuHandlers(): void {
+    // New Query Editor - shows connection picker
+    document.addEventListener("new-query-editor", () => {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        const picker = this.renderRoot.querySelector('database-connection-picker') as HTMLElement & { show: (path: string | null) => void };
+        if (picker) {
+          picker.show(this.projectPath);
+        } else {
+          console.warn('[MainMenu] Database connection picker not found');
+        }
+      });
+    });
+
+    // Refresh Database Connections
+    document.addEventListener("refresh-database-connections", () => {
+      dispatch("refresh-database-connections");
+    });
+
+    // Open Database Connections Panel
+    document.addEventListener("open-database-connections", () => {
+      // Switch to database activity/panel on the right
+      this.activeRightActivity = 'database';
+      this.requestUpdate();
+      // Open the add data source dialog
+      dispatch("open-add-datasource");
     });
   }
 
@@ -210,6 +241,18 @@ export class OpenStormApp extends TailwindElement() {
           break;
         case "find":
           dispatch("quick-search");
+          break;
+        case "clear-query-results":
+          dispatch("clear-query-results");
+          break;
+        case "new-query-editor":
+          dispatch("new-query-editor");
+          break;
+        case "connect-to-database":
+          dispatch("open-database-connections");
+          break;
+        case "refresh-connections":
+          dispatch("refresh-database-connections");
           break;
         // Add more menu handlers as needed
       }
@@ -1229,6 +1272,9 @@ export class OpenStormApp extends TailwindElement() {
 
         <!-- Theme Palette -->
         <theme-palette></theme-palette>
+
+        <!-- Database Connection Picker -->
+        <database-connection-picker .projectPath=${this.projectPath}></database-connection-picker>
 
         <!-- Hover Tooltip -->
         <hover-tooltip></hover-tooltip>

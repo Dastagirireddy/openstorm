@@ -24,6 +24,11 @@ export class DataSourcesPanel extends TailwindElement() {
   connectedCallback(): void {
     super.connectedCallback();
     this.loadDataSources();
+    // Listen for event to open add data source dialog
+    document.addEventListener('open-add-datasource', () => {
+      this.showAddDialog = true;
+      this.requestUpdate();
+    });
   }
 
   private async loadDataSources() {
