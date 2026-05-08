@@ -195,29 +195,6 @@ html, body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar for webkit */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f0f0f0;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c7c7c7;
-  border-radius: 0;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #a0a0a0;
-}
-
-::-webkit-scrollbar-corner {
-  background: #f0f0f0;
-}
-
 /* xterm.js fixes - hide the textarea but keep it functional */
 .xterm .xterm-helper-textarea {
   opacity: 0 !important;
