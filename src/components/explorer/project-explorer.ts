@@ -843,7 +843,7 @@ export class ProjectExplorer extends TailwindElement() {
       <div>
         <div
           class="flex items-center gap-1 h-[22px] px-2 cursor-pointer text-[13px] transition-colors"
-          style="padding-left: ${indent + 8}px; ${folderColor ? `border-left: 3px solid ${folderColor}; background-color: ${folderBgColor || 'transparent'};` : 'border-left: 3px solid transparent;'} margin-left: -3px; background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'}; color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};"
+          style="padding-left: ${indent + 8}px; ${folderColor ? `border-left: 3px solid ${folderColor}; background-color: ${folderBgColor || 'transparent'};` : 'border-left: 3px solid transparent;'} margin-left: -3px; background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'}; color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'};"
           title="${folderTypeLabel}"
           @contextmenu=${(e: MouseEvent) => this.handleContextMenu(e, node)}
           @mouseenter=${(e: Event) => {
@@ -873,7 +873,7 @@ export class ProjectExplorer extends TailwindElement() {
             class="flex-shrink-0 flex items-center gap-2 flex-1 min-w-0"
             @click=${() => this.selectFile(node)}>
             ${this.renderIcon(node, isExpanded)}
-            <span class="truncate select-none" style="color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};">${node.name}</span>
+            <span class="truncate select-none" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'};">${node.name}</span>
           </span>
         </div>
 

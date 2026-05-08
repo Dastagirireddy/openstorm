@@ -188,16 +188,16 @@ export class SearchOverlay extends TailwindElement() {
     return html`
       <div
         class="flex items-center gap-3 px-4 py-2 cursor-pointer transition-colors"
-        style="background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'};"
+        style="background-color: ${isSelected ? 'var(--app-selection-background)' : 'transparent'}; color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'};"
         @click=${() => this.selectResult(result)}
         @mouseenter=${() => this.selectedIndex = index}>
-        <svg class="w-4 h-4 flex-shrink-0" style="color: var(--app-disabled-foreground);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <svg class="w-4 h-4 flex-shrink-0" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-disabled-foreground)'};" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
           <polyline points="14 2 14 8 20 8"/>
         </svg>
         <div class="flex-1 min-w-0">
-          <div class="text-[13px] truncate" style="color: var(--app-foreground);">${result.name}</div>
-          <div class="text-[11px] truncate" style="color: var(--app-disabled-foreground);">${result.path}</div>
+          <div class="text-[13px] truncate" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'};">${result.name}</div>
+          <div class="text-[11px] truncate" style="color: ${isSelected ? 'var(--app-selection-foreground)' : 'var(--app-disabled-foreground)'};">${result.path}</div>
         </div>
         ${result.score > 0.9
           ? html`<span class="text-[10px] text-[#3592c4] font-medium flex-shrink-0">Best match</span>`

@@ -10,6 +10,7 @@
     "app-focus-border": "#7c7cff",
     "app-hover-background": "#3c3f41",
     "app-selection-background": "#3d4a5c",
+    "app-selection-foreground": "#ffffff",
     "app-input-background": "#3c3f41",
     "app-input-foreground": "#a9b7c6",
     "app-input-border": "#5c5c5c",
