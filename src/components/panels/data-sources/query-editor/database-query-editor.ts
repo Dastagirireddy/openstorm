@@ -77,6 +77,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
   @state() private sql: string = '';
   @state() private frames: QueryFrame[] = [];
+  @state() private maxFrames: number = 20;
   @state() private isRunning: boolean = false;
   @state() private activeFrameId: string | null = null;
   @state() private tablePage: number = 1;
@@ -92,7 +93,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   @state() private showSaveQueryDialog = false;
   @state() private showSavedQueriesPanel = false;
   @state() private expandedFrameIds: Set<string> = new Set();
-  @state() private focusMode: boolean = false;
+  @state() private multiCardMode: boolean = true; // true = show all cards, false = single card (latest only)
   @state() private showDownloadMenu: boolean = false;
   @state() private downloadFrameId: string | null = null;
 
@@ -315,11 +316,23 @@ export class DatabaseQueryEditor extends TailwindElement(css`
         viewMode: 'table',
         timestamp: Date.now(),
       };
-      this.frames = [frame, ...this.frames];
+
+      if (this.multiCardMode) {
+        // Multi-card mode: add new frame to the top
+        this.frames = [frame, ...this.frames].slice(0, this.maxFrames);
+      } else {
+        // Single-card mode: replace the latest frame (or create first one)
+        this.frames = this.frames.length > 0
+          ? [frame, ...this.frames.slice(1)]
+          : [frame];
+      }
+
       this.activeFrameId = frame.id;
+      // Collapse all other frames, expand only the new one
+      this.expandedFrameIds.clear();
       this.expandedFrameIds.add(frame.id);
       this.tablePage = 1;
-      console.log('[QueryEditor] Frames updated, count:', this.frames.length);
+      console.log('[QueryEditor] Frames updated, count:', this.frames.length, 'mode:', this.multiCardMode ? 'multi' : 'single');
     } catch (err) {
       console.error('[QueryEditor] Query failed:', err);
       const errorMessage = typeof err === 'string' ? err : (err as Error)?.message || 'Query execution failed';
@@ -1220,23 +1233,11 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
           <div class="flex-1 flex flex-col min-w-0 relative">
             <!-- Editor Container -->
             <div id="editor-container" class="w-full h-full"></div>
-            <!-- Exit Focus Mode Button (overlay, shown only in focus mode) -->
-            ${this.focusMode ? html`
-              <button
-                class="absolute top-2 right-2 z-10 px-3 py-1.5 text-xs rounded-lg border shadow-lg transition-all hover:scale-105"
-                style="background: var(--app-toolbar-background); border-color: var(--app-border); color: var(--app-foreground);"
-                title="Exit Focus Mode"
-                @click=${() => { this.focusMode = false; this.requestUpdate(); }}
-              >
-                <iconify-icon icon="mdi:focus-auto" width="14" style="vertical-align: -2px; margin-right: 4px;"></iconify-icon>
-                Exit Focus
-              </button>
-            ` : nothing}
           </div>
 
-          <!-- Far Right: Secondary Actions (hidden in focus mode) -->
+          <!-- Far Right: Secondary Actions -->
           <div
-            class="${this.focusMode ? 'hidden' : 'w-12'} border-l flex flex-col items-center justify-start gap-1 py-2 shrink-0"
+            class="w-12 border-l flex flex-col items-center justify-start gap-1 py-2 shrink-0"
             style="background: var(--app-toolbar-background); border-color: var(--app-border);"
           >
             <button
@@ -1265,12 +1266,12 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
             </button>
             <div class="w-6 h-px my-1" style="background: var(--app-border);"></div>
             <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${this.focusMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
+              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${!this.multiCardMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
               style="color: var(--app-foreground);"
-              title="Focus Mode"
-              @click=${() => { this.focusMode = !this.focusMode; this.requestUpdate(); }}
+              title="${this.multiCardMode ? 'Switch to single result view' : 'Switch to multi result view'}"
+              @click=${() => { this.multiCardMode = !this.multiCardMode; this.requestUpdate(); }}
             >
-              <iconify-icon icon="${this.focusMode ? 'mdi:focus-auto' : 'mdi:focus-field'}" width="16" height="16"></iconify-icon>
+              <iconify-icon icon="${this.multiCardMode ? 'mdi:layers' : 'mdi:card-outline'}" width="16" height="16"></iconify-icon>
             </button>
           </div>
         </div>
@@ -1439,10 +1440,12 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
               `
             : html`
                 <div class="space-y-2">
-                  <!-- Results Tabs -->
+                  <!-- Results Header -->
                   <div class="flex items-center gap-2 mb-2">
                     <span class="text-xs font-medium" style="color: var(--app-foreground);">
-                      ${this.frames.filter(f => f.results).length} result${this.frames.filter(f => f.results).length !== 1 ? 's' : ''}
+                      ${this.multiCardMode
+                        ? html`${this.frames.filter(f => f.results).length} result${this.frames.filter(f => f.results).length !== 1 ? 's' : ''}`
+                        : html`Latest result`}
                     </span>
                     <div class="flex-1"></div>
                     <button
@@ -1454,7 +1457,11 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
                       Clear All
                     </button>
                   </div>
-                  ${this.frames.filter(frame => frame.results).map(frame => this.renderResultCard(frame, frame.id === this.activeFrameId))}
+                  ${this.multiCardMode
+                    ? this.frames.filter(frame => frame.results).map(frame => this.renderResultCard(frame, frame.id === this.activeFrameId))
+                    : this.frames[0] && this.frames[0].results
+                      ? this.renderResultCard(this.frames[0], true)
+                      : nothing}
                 </div>
               `}
         </div>
