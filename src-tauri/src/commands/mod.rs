@@ -19,7 +19,7 @@ pub mod watch;
 pub mod git;
 pub mod database;
 pub mod introspection;
+pub mod project;
 
 // Re-export commonly used types
 pub use watch::WatchExpressionResult;
-pub use debug::*;

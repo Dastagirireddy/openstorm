@@ -19,6 +19,7 @@ export interface WorkbenchColors {
   'app-disabled-foreground': string;
   'app-border': string;
   'app-focus-border': string;
+  'brand-primary': string;
   'app-hover-background': string;
   'app-selection-background': string;
   'app-selection-foreground': string;
@@ -407,7 +408,7 @@ export class ThemeService {
     // Determine which theme to use based on the color key
     const workbenchKeys = new Set<keyof WorkbenchColors>([
       'app-bg', 'app-foreground', 'app-disabled-foreground', 'app-border',
-      'app-focus-border', 'app-hover-background', 'app-selection-background',
+      'app-focus-border', 'brand-primary', 'app-hover-background', 'app-selection-background',
       'app-input-background', 'app-input-foreground', 'app-input-border',
       'app-input-placeholder', 'app-button-background', 'app-button-foreground',
       'app-button-hover', 'app-toolbar-hover', 'app-toolbar-active',

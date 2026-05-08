@@ -476,12 +476,18 @@ export class OpenStormApp extends TailwindElement() {
 
   private handleOpenRecentProject = async (e: CustomEvent<{ path: string }>): Promise<void> => {
     const { path } = e.detail;
+    const projectName = path.split("/").pop() || "";
     console.log('Opening recent project:', path);
 
-    const newProjectPath = path;
+    // Save to recent projects (updates timestamp)
+    try {
+      await invoke("save_recent_project", { path, name: projectName, projectType: null });
+    } catch (err) {
+      console.error("Failed to save recent project:", err);
+    }
 
     // Reset state for new project
-    this.projectPath = newProjectPath;
+    this.projectPath = path;
     this.activeActivity = "explorer";
     this.tabs = [];
     this.activeTabId = "";
@@ -489,7 +495,7 @@ export class OpenStormApp extends TailwindElement() {
 
     // Call handleFolderOpened to start file watcher and create terminal
     await this.handleFolderOpened({
-      detail: { path: newProjectPath },
+      detail: { path },
     } as CustomEvent<{ path: string }>);
 
     dispatch("project-opened", { path: this.projectPath });
@@ -504,6 +510,14 @@ export class OpenStormApp extends TailwindElement() {
       });
       if (selected) {
         const newProjectPath = selected as string;
+        const projectName = newProjectPath.split("/").pop() || "";
+
+        // Save to recent projects
+        try {
+          await invoke("save_recent_project", { path: newProjectPath, name: projectName, projectType: null });
+        } catch (err) {
+          console.error("Failed to save recent project:", err);
+        }
 
         // Reset state for new project
         this.projectPath = newProjectPath;

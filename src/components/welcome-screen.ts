@@ -2,6 +2,7 @@ import { html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement } from "../tailwind-element.js";
 import { dispatch } from "../lib/types/events.js";
+import { invoke } from "@tauri-apps/api/core";
 
 export type GitStatus = 'synced' | 'modified' | 'behind' | 'ahead' | 'untracked';
 export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'database' | 'generic';
@@ -18,24 +19,54 @@ export interface RecentProject {
 @customElement("welcome-screen")
 export class WelcomeScreen extends TailwindElement() {
   @property({ type: Array })
-  recentProjects: RecentProject[] = [
-    { name: "openstorm", path: "/Users/dasta/work/rust-tuts/openstorm", lastOpened: Date.now(), gitStatus: 'modified', uncommittedChanges: 3, projectType: 'rust' },
-    { name: "my-web-app", path: "/Users/dasta/projects/my-web-app", lastOpened: Date.now() - 86400000, gitStatus: 'synced', projectType: 'node' },
-    { name: "api-service", path: "/Users/dasta/projects/api-service", lastOpened: Date.now() - 172800000, gitStatus: 'ahead', uncommittedChanges: 1, projectType: 'go' },
-    { name: "data-pipeline", path: "/Users/dasta/work/data-pipeline", lastOpened: Date.now() - 259200000, gitStatus: 'synced', projectType: 'python' },
-    { name: "microservice-auth", path: "/Users/dasta/projects/microservices/auth-service", lastOpened: Date.now() - 345600000, gitStatus: 'behind', projectType: 'java' },
-    { name: "react-dashboard", path: "/Users/dasta/projects/frontend/react-dashboard", lastOpened: Date.now() - 432000000, gitStatus: 'modified', uncommittedChanges: 7, projectType: 'react' },
-    { name: "python-ml-model", path: "/Users/dasta/work/ml/python-ml-model", lastOpened: Date.now() - 518400000, gitStatus: 'synced', projectType: 'python' },
-    { name: "docker-compose-utils", path: "/Users/dasta/projects/devops/docker-compose-utils", lastOpened: Date.now() - 604800000, gitStatus: 'untracked', projectType: 'docker' },
-  ];
+  recentProjects: RecentProject[] = [];
+
+  @state() private isLoading = true;
 
   @state() private filterText = "";
   @state() private selectedIndex = -1;
   @state() private templatePickerOpen = false;
 
-  connectedCallback(): void {
+  async connectedCallback(): void {
     super.connectedCallback();
     this.setupKeyboardNavigation();
+    await this.loadRecentProjects();
+  }
+
+  private async loadRecentProjects(): Promise<void> {
+    try {
+      console.log('[WelcomeScreen] Loading recent projects...');
+      const projects = await invoke<RecentProject[]>("load_recent_projects");
+      console.log('[WelcomeScreen] Loaded projects:', projects);
+      this.recentProjects = projects.map(p => ({
+        ...p,
+        lastOpened: p.last_opened,
+        projectType: (p.project_type as ProjectType) || this.detectProjectType({ name: p.name, path: p.path }),
+      }));
+      console.log('[WelcomeScreen] Mapped projects:', this.recentProjects);
+      this.isLoading = false;
+    } catch (error) {
+      console.error("Failed to load recent projects:", error);
+      this.recentProjects = [];
+      this.isLoading = false;
+    }
+  }
+
+  private async saveProjectToRecent(path: string, name: string, projectType?: ProjectType): Promise<void> {
+    try {
+      await invoke("save_recent_project", { path, name, projectType });
+    } catch (error) {
+      console.error("Failed to save recent project:", error);
+    }
+  }
+
+  async removeProjectFromRecent(path: string): Promise<void> {
+    try {
+      await invoke("remove_recent_project", { path });
+      this.recentProjects = this.recentProjects.filter(p => p.path !== path);
+    } catch (error) {
+      console.error("Failed to remove recent project:", error);
+    }
   }
 
   private setupKeyboardNavigation(): void {
@@ -62,8 +93,11 @@ export class WelcomeScreen extends TailwindElement() {
         }
       } else if (e.key === 'Delete' && this.selectedIndex >= 0 && !isTyping) {
         e.preventDefault();
-        // Could implement remove from recent list here
-        console.log('Remove project from recent list');
+        const filtered = this.getFilteredProjects();
+        if (filtered[this.selectedIndex]) {
+          this.removeProjectFromRecent(filtered[this.selectedIndex].path);
+          this.selectedIndex = Math.min(this.selectedIndex, filtered.length - 2);
+        }
       } else if (e.key === '/' && !isTyping) {
         e.preventDefault();
         filterInput?.focus();
@@ -106,7 +140,10 @@ export class WelcomeScreen extends TailwindElement() {
     this.templatePickerOpen = false;
   };
 
-  private handleProjectClick = (project: RecentProject): void => {
+  private handleProjectClick = async (project: RecentProject): Promise<void> => {
+    // Save to recent (updates lastOpened timestamp)
+    await this.saveProjectToRecent(project.path, project.name, project.projectType);
+
     document.dispatchEvent(
       new CustomEvent("open-recent-project", {
         detail: { path: project.path },
@@ -229,9 +266,8 @@ export class WelcomeScreen extends TailwindElement() {
     if (filtered.length === 0) {
       return html`
         <div class="flex flex-col items-center justify-center py-12 text-center">
-          <div class="relative mb-6">
-            <div class="absolute inset-0 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-2xl blur-xl opacity-60"></div>
-            <os-icon name="folder-input" size="96" color="#6366f1"></os-icon>
+          <div class="mb-8">
+            <os-icon name="folder-open" size="80" style="color: var(--brand-primary);"></os-icon>
           </div>
           ${this.filterText
             ? html`<p class="text-[15px] font-semibold" style="color: var(--app-foreground);">No projects match "${this.filterText}"</p>`
@@ -253,19 +289,19 @@ export class WelcomeScreen extends TailwindElement() {
 
           return html`
             <div
-              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2 ${isSelected ? 'bg-indigo-50 border-indigo-500' : 'border-transparent hover:bg-[#f9fafb]'}"
+              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2 ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-500' : 'border-transparent hover:bg-[#f9fafb] dark:hover:bg-[#1f2937]'}"
               @click=${() => this.handleProjectClick(project)}
               @mouseenter=${() => { if (!this.filterText) this.selectedIndex = index; }}
             >
               <!-- Project type icon -->
               <div
-                class="w-9 h-9 rounded-md bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white' : 'group-hover:bg-white'} transition-colors border ${isSelected ? 'border-indigo-200' : 'border-[#e5e7eb] group-hover:border-[#d1d5db]'}"
+                class="w-9 h-9 rounded-md bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white dark:bg-gray-700' : 'group-hover:bg-white dark:group-hover:bg-gray-700'} transition-colors border ${isSelected ? 'border-indigo-200 dark:border-indigo-800' : 'border-[#e5e7eb] dark:border-gray-700 group-hover:border-[#d1d5db] dark:group-hover:border-gray-600'}"
               >
                 <os-icon name="${iconConfig.name}" size="18" color="${iconConfig.color}"></os-icon>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <div class="text-[14px] font-medium truncate ${isSelected ? 'text-indigo-700' : 'group-hover:text-indigo-600'} transition-colors" style="color: ${isSelected ? '#4f46e5' : 'var(--app-foreground)'};" title="${project.path}">
+                  <div class="text-[14px] font-medium truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400'} transition-colors" style="color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};" title="${project.path}">
                     ${project.name}
                   </div>
                   ${this.renderGitStatus(project)}
@@ -370,9 +406,9 @@ export class WelcomeScreen extends TailwindElement() {
 
                 <!-- Keyboard hints -->
                 <div class="mt-4 pt-3 border-t flex items-center gap-3 text-[10px]" style="border-color: var(--app-border); color: var(--app-disabled-foreground);">
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">↑↓</kbd> Navigate</span>
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">Enter</kbd> Open</span>
-                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border);">/</kbd> Filter</span>
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border); color: var(--app-foreground);">↑↓</kbd> Navigate</span>
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border); color: var(--app-foreground);">Enter</kbd> Open</span>
+                  <span class="flex items-center gap-1"><kbd class="px-1 py-0.5 rounded border" style="background-color: var(--app-input-background); border-color: var(--app-border); color: var(--app-foreground);">/</kbd> Filter</span>
                 </div>
               </div>
 
@@ -384,7 +420,7 @@ export class WelcomeScreen extends TailwindElement() {
                 <div class="flex flex-col gap-2.5">
                   <!-- New Project -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-600 dark:to-purple-600 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 hover:-translate-y-0.5"
                     @click=${this.handleNewProject}
                   >
                     <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -402,17 +438,17 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open Folder -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border hover:border-indigo-300 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 border hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-0.5"
                     style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFolder}
                   >
                     <div
-                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 dark:from-indigo-600 dark:to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
                     >
                       <os-icon name="folder-open" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 transition-colors" style="color: var(--app-foreground);">
+                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style="color: var(--app-foreground);">
                         Open Folder
                       </div>
                       <div class="text-[12px]" style="color: var(--app-disabled-foreground);">
@@ -423,17 +459,17 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open File -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 border hover:border-indigo-300 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 border hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-0.5"
                     style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFile}
                   >
                     <div
-                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 dark:from-violet-600 dark:to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
                     >
                       <os-icon name="file" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 transition-colors" style="color: var(--app-foreground);">
+                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style="color: var(--app-foreground);">
                         Open File
                       </div>
                       <div class="text-[12px]" style="color: var(--app-disabled-foreground);">

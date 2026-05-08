@@ -495,6 +495,11 @@ fn main() {
             commands::git::git_search_commits,
             commands::git::git_get_file_history,
             commands::git::git_get_pull_requests,
+
+            // === Project Management ===
+            commands::project::load_recent_projects,
+            commands::project::save_recent_project,
+            commands::project::remove_recent_project,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

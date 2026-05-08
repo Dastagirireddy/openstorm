@@ -8,6 +8,7 @@
     "app-disabled-foreground": "#6a6a6a",
     "app-border": "#3c3f41",
     "app-focus-border": "#7c7cff",
+    "brand-primary": "#7c7cff",
     "app-hover-background": "#3c3f41",
     "app-selection-background": "#3d4a5c",
     "app-selection-foreground": "#ffffff",
