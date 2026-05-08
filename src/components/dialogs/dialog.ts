@@ -131,7 +131,7 @@ export class OSDialog extends TailwindElement() {
           <div class="px-4 py-3">
             <input
               type="text"
-              class="w-full px-2 py-1.5 border rounded text-[13px] focus:outline-none focus:ring-1 focus:border-transparent"
+              class="w-full px-2 py-1.5 border rounded text-[13px] focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)] focus:border-transparent"
               style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
               placeholder="${this.placeholder}"
               value="${this.value}"

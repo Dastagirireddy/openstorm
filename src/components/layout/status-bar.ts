@@ -197,7 +197,7 @@ export class StatusBar extends TailwindElement() {
           ${this._renderTab('terminal', 'Terminal', this.activePanel === 'terminal', 'terminal', this.showTerminalNotification)}
         </div>
 
-        <!-- Right: Status Messages, LSP, Branch, Cursor, Encoding -->
+        <!-- Right: Status Messages, LSP, Branch, Cursor, Encoding, Event Log -->
         <div class="flex items-center gap-4">
           ${this.statusMessage
             ? html`
@@ -240,6 +240,7 @@ export class StatusBar extends TailwindElement() {
             <span>${encoding.toUpperCase()}</span>
             <span>${lineEnding}</span>
           </div>
+          <global-event-log></global-event-log>
         </div>
       </footer>
     `;

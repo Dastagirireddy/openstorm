@@ -8,6 +8,7 @@
 //! - adapter: Debug adapter installation
 //! - watch: Watch expressions and exception breakpoints
 //! - git: Git operations (status, branch, commit, remote, log)
+//! - database: Database connection management
 
 pub mod file;
 pub mod directory;
@@ -16,6 +17,8 @@ pub mod debug;
 pub mod adapter;
 pub mod watch;
 pub mod git;
+pub mod database;
+pub mod introspection;
 
 // Re-export commonly used types
 pub use watch::WatchExpressionResult;

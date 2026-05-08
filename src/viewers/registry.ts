@@ -89,6 +89,7 @@ import './builtin/text-viewer.js';
 import './builtin/image-viewer.js';
 import './builtin/svg-viewer.js';
 import './builtin/markdown-viewer.js';
+import '../components/panels/data-sources/query-editor/database-query-editor.js';
 
 // Register built-in image viewer for raster images
 registry.register({
@@ -120,4 +121,12 @@ registry.register({
   displayName: 'Text Editor',
   supportedExtensions: ['*'],
   tagName: 'text-viewer',
+});
+
+// Register query editor for SQLite database files
+registry.register({
+  id: 'sqlite-db',
+  displayName: 'SQLite Database',
+  supportedExtensions: ['db', 'sqlite', 'sqlite3', 'db3'],
+  tagName: 'database-query-editor',
 });

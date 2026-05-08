@@ -146,7 +146,7 @@ export class TabBar extends TailwindElement() {
     return html`
       <div
         class="flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-colors"
-        style="background-color: ${isActive ? 'var(--app-selection-background)' : 'transparent'}; color: var(--app-foreground);"
+        style="background-color: ${isActive ? 'var(--app-selection-background)' : 'transparent'}; color: ${isActive ? 'var(--app-selection-foreground)' : 'var(--app-foreground)'};"
         @mouseenter=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
         @mouseleave=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
         @click=${() => {

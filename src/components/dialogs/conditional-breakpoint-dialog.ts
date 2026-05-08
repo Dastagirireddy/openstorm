@@ -142,8 +142,8 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
 
     .input-field:focus {
       outline: none;
-      border-color: #0078d4;
-      box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.15);
+      border-color: var(--brand-primary);
+      box-shadow: 0 0 0 3px rgba(91, 71, 201, 0.15);
     }
 
     .input-field::placeholder {
@@ -168,7 +168,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
 
     .hit-condition-select:focus {
       outline: none;
-      border-color: #0078d4;
+      border-color: var(--brand-primary);
     }
 
     .help-text {
@@ -215,12 +215,12 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     }
 
     .button.primary {
-      background: #0078d4;
+      background: var(--brand-primary);
       color: #ffffff;
     }
 
     .button.primary:hover {
-      background: #006abc;
+      background: var(--brand-primary-hover);
     }
 
     .button.remove {

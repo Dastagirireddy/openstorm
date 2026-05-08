@@ -417,7 +417,7 @@ export class CommitPanel extends TailwindElement() {
         </div>
 
         <textarea
-          class="w-full h-12 px-2 py-1 text-[12px] border rounded resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          class="w-full h-12 px-2 py-1 text-[12px] border rounded resize-none focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)]"
           style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
           placeholder="Enter commit message..."
           .value=${this.commitMessage}

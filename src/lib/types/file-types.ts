@@ -26,6 +26,7 @@ export interface EditorTab {
   lastUsed?: number;
   cursorLine?: number;
   cursorCol?: number;
+  metadata?: Record<string, any>;
 }
 
 /**
@@ -42,6 +43,11 @@ export type ActivityItem =
   | 'commits'
   | 'pull-requests'
   | 'settings';
+
+/**
+ * Right activity bar items
+ */
+export type RightActivityItem = 'database' | '';
 
 /**
  * Save status states

@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -18,10 +18,14 @@ import {
   loadDebugToolbar,
   loadRunToolbar,
 } from "./lib/utils/lazy-loader.js";
+import "./components/dialogs/database-connection-picker.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/services/theme-service.js";
 ThemeService.getInstance().initialize();
+
+// Initialize global event log service
+import { eventLog } from "./services/event-log.js";
 
 // Import iconify-icon web component and register icon collections
 import "iconify-icon";
@@ -48,7 +52,9 @@ addCollection(lucide);
 // Core components (always loaded)
 import "./components/header/app-header.js";
 import "./components/header/breadcrumb.js";
+import "./services/global-event-log.js";
 import "./components/navigation/activity-bar.js";
+import "./components/navigation/right-activity-bar.js";
 import "./components/explorer/project-explorer.js";
 import "./components/viewers/file-viewer-container.js";
 import "./components/editor/editor-tab-bar.js";
@@ -65,11 +71,18 @@ import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
+import "./components/panels/data-sources/data-sources-panel.js";
+import "./components/panels/data-sources/database-multi-tree.js";
+import "./components/panels/data-sources/data-source-type-picker.js";
+import "./components/panels/data-sources/database-vendor-picker.js";
+import "./components/panels/data-sources/data-source-empty-state.js";
+import "./components/panels/data-sources/data-source-forms/database-connection-form.js";
+import "./components/panels/data-sources/data-source-forms/sqlite-connection-form.js";
 
 // Lazy-loaded components (loaded on demand via lazy-loader.ts)
 // Terminal, Search, Settings, Git, Commit, Pull Requests, App Console, Debug panels
 
-import type { EditorTab, SaveStatus, ActivityItem } from "./lib/types/file-types.js";
+import type { EditorTab, SaveStatus, ActivityItem, RightActivityItem } from "./lib/types/file-types.js";
 
 @customElement("openstorm-app")
 export class OpenStormApp extends TailwindElement() {
@@ -79,6 +92,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private saveStatus: SaveStatus = "saved";
   @state() private tabLimit = 10;
   @state() private activeActivity: ActivityItem = "explorer";
+  @state() private activeRightActivity: RightActivityItem = "";
   @state() private terminalCreated = false;
   @state() private sidebarWidth = 250;
   @state() private terminalHeight = 200;
@@ -92,7 +106,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private appConsoleVisible = false;
   @state() private appConsoleHeight = 200;
   @state() private gitPanelVisible = false;
-  @state() private activeStatusBarPanel: 'terminal' | 'app-console' | null = 'terminal';
+  @state() private activeStatusBarPanel: 'terminal' | 'app-console' | null = null;
   @state() private gitBranch = 'main';
   @state() private gitPanelHeight = 300;
   @state() private isGitPanelResizing = false;
@@ -103,19 +117,54 @@ export class OpenStormApp extends TailwindElement() {
   @state() private showTerminalNotification = false;
   @state() private showConsoleNotification = false;
 
+  private _boundHandleOpenQueryEditor!: (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => void;
+
   connectedCallback(): void {
     super.connectedCallback();
+    this._boundHandleOpenQueryEditor = (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => this.handleOpenQueryEditor(e);
     this.setupKeyboardShortcuts();
     this.setupOpenFolderHandler();
     this.setupFileChangeHandler();
     this.setupAutoSaveHandler();
     this.setupMenuHandler();
     this.setupQuickSearchHandler();
+    this.setupDatabaseMenuHandlers();
+    // Listen for open-query-editor events
+    document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
   }
 
   private setupQuickSearchHandler(): void {
     document.addEventListener("quick-search", () => {
       loadSearchOverlay();
+    });
+  }
+
+  private setupDatabaseMenuHandlers(): void {
+    // New Query Editor - shows connection picker
+    document.addEventListener("new-query-editor", () => {
+      // Use requestAnimationFrame to ensure DOM is ready
+      requestAnimationFrame(() => {
+        const picker = this.renderRoot.querySelector('database-connection-picker') as HTMLElement & { show: (path: string | null) => void };
+        if (picker) {
+          picker.show(this.projectPath);
+        } else {
+          console.warn('[MainMenu] Database connection picker not found');
+        }
+      });
+    });
+
+    // Refresh Database Connections
+    document.addEventListener("refresh-database-connections", () => {
+      dispatch("refresh-database-connections");
+    });
+
+    // Open Database Connections Panel
+    document.addEventListener("open-database-connections", () => {
+      // Switch to database activity/panel on the right
+      this.activeRightActivity = 'database';
+      this.requestUpdate();
+      // Open the add data source dialog
+      dispatch("open-add-datasource");
     });
   }
 
@@ -193,6 +242,18 @@ export class OpenStormApp extends TailwindElement() {
         case "find":
           dispatch("quick-search");
           break;
+        case "clear-query-results":
+          dispatch("clear-query-results");
+          break;
+        case "new-query-editor":
+          dispatch("new-query-editor");
+          break;
+        case "connect-to-database":
+          dispatch("open-database-connections");
+          break;
+        case "refresh-connections":
+          dispatch("refresh-database-connections");
+          break;
         // Add more menu handlers as needed
       }
     }).catch(console.error);
@@ -265,7 +326,13 @@ export class OpenStormApp extends TailwindElement() {
         dispatch('toggle-git-log', { visible: this.gitPanelVisible });
       } else if (tab === 'terminal' || tab === 'app-console') {
         // Toggle: if already active, close it; otherwise switch to it
-        this.activeStatusBarPanel = this.activeStatusBarPanel === tab ? null : tab;
+        const wasActive = this.activeStatusBarPanel === tab;
+        this.activeStatusBarPanel = wasActive ? null : tab;
+
+        // Create terminal on first open (not auto-created anymore)
+        if (tab === 'terminal' && !wasActive && !this.terminalCreated) {
+          this.terminalCreated = true;
+        }
 
         // Close git panel when opening terminal/console
         if (this.activeStatusBarPanel !== null && this.gitPanelVisible) {
@@ -337,6 +404,11 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener("open-recent-project", this.handleOpenRecentProject);
     // Handle go-to-location events from Cmd+Click navigation
     document.addEventListener("go-to-location", this.handleGoToLocation);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    document.removeEventListener('open-query-editor', this._boundHandleOpenQueryEditor);
   }
 
   private handleLocateFile = (): void => {
@@ -463,6 +535,23 @@ export class OpenStormApp extends TailwindElement() {
         const filePath = selected as string;
         const name = filePath.split("/").pop() || "";
         const ext = filePath.split(".").pop()?.toLowerCase() || "";
+
+        // Check if it's a SQLite database file
+        const dbExtensions = ['db', 'sqlite', 'sqlite3', 'db3'];
+        const isDatabase = dbExtensions.includes(ext);
+
+        // For database files, open directly with query editor without reading content
+        if (isDatabase) {
+          this.handleOpenQueryEditor({
+            detail: {
+              connectionId: `sqlite-file:${filePath}`,
+              connectionName: name,
+              dialect: 'postgresql',
+              tableName: '',
+            },
+          } as CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>);
+          return;
+        }
 
         // Check if it's a raster image file (SVG is handled as text/code)
         const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
@@ -651,6 +740,10 @@ export class OpenStormApp extends TailwindElement() {
     }
   };
 
+  private handleRightActivityChange = (e: CustomEvent<{ item: RightActivityItem }>): void => {
+    this.activeRightActivity = e.detail.item;
+  };
+
   private handleCloseSettings = (): void => {
     this.activeActivity = "explorer";
   };
@@ -662,9 +755,22 @@ export class OpenStormApp extends TailwindElement() {
     const name = path.split("/").pop() || "";
     const ext = path.split(".").pop()?.toLowerCase() || "";
 
-    // Check if it's a raster image file (SVG is handled as text/code)
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
-    const isImage = imageExtensions.includes(ext);
+    // Check if it's a SQLite database file
+    const dbExtensions = ['db', 'sqlite', 'sqlite3', 'db3'];
+    const isDatabase = dbExtensions.includes(ext);
+
+    // For database files, open directly with query editor without reading content
+    if (isDatabase) {
+      this.handleOpenQueryEditor({
+        detail: {
+          connectionId: `sqlite-file:${path}`,
+          connectionName: name,
+          dialect: 'postgresql',
+          tableName: '',
+        },
+      } as CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>);
+      return;
+    }
 
     const existingTab = this.tabs.find((t) => t.path === path);
     if (existingTab) {
@@ -680,6 +786,10 @@ export class OpenStormApp extends TailwindElement() {
     }
 
     try {
+      // Check if it's a raster image file (SVG is handled as text/code)
+      const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
+      const isImage = imageExtensions.includes(ext);
+
       // Read image files as base64, text files as string
       const content = isImage
         ? await invoke<string>("read_file_base64", { path })
@@ -729,8 +839,20 @@ export class OpenStormApp extends TailwindElement() {
     if (tab) {
       this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
-      // Use open-file-external to avoid triggering the global open-file handler
-      dispatch("open-file-external", { path: tab.path, content: tab.content });
+      // Check if this is a query editor tab
+      if (tab.id.startsWith('query:')) {
+        // Dispatch open-query-editor event for query editor tabs
+        dispatch("open-query-editor", {
+          connectionId: tab.metadata?.connectionId,
+          connectionName: tab.metadata?.connectionName,
+          dialect: tab.metadata?.dialect || 'postgresql',
+          tableName: tab.metadata?.tableName || '',
+          projectPath: tab.metadata?.projectPath || this.projectPath,
+        });
+      } else {
+        // Use open-file-external to avoid triggering the global open-file handler
+        dispatch("open-file-external", { path: tab.path, content: tab.content });
+      }
     }
   };
 
@@ -772,9 +894,41 @@ export class OpenStormApp extends TailwindElement() {
       console.error("Failed to start file watcher:", error);
     }
 
-    // Auto-create terminal when project is opened
-    this.terminalCreated = true;
+    // Terminal is no longer auto-created by default
+    // User can open it manually from the status bar
   };
+
+  private handleOpenQueryEditor(e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>): void {
+    const { connectionId, connectionName, dialect, tableName } = e.detail;
+    // Create a unique ID for the query editor tab
+    const queryEditorId = `query:${connectionId}:${tableName || 'new'}`;
+
+    // Check if this query editor is already open
+    const existingTab = this.tabs.find(t => t.id === queryEditorId);
+    if (existingTab) {
+      this.activeTabId = existingTab.id;
+      this.activeFilePath = queryEditorId;
+      this.tabs = this.tabs.map(t =>
+        t.id === queryEditorId ? { ...t, lastUsed: Date.now() } : t,
+      );
+      return;
+    }
+
+    // Create a new tab for the query editor
+    const newTab: EditorTab = {
+      id: queryEditorId,
+      name: tableName || `Query: ${connectionName}`,
+      path: queryEditorId,
+      modified: false,
+      content: '',
+      lastUsed: Date.now(),
+      metadata: { dialect, connectionId, connectionName, tableName, projectPath: this.projectPath },
+    };
+    this.tabs = [...this.tabs, newTab];
+    this.activeTabId = queryEditorId;
+    this.activeFilePath = queryEditorId;
+    this.enforceTabLimit();
+  }
 
   private closeTab(tabId: string): void {
     const tabIndex = this.tabs.findIndex((t) => t.id === tabId);
@@ -849,6 +1003,7 @@ export class OpenStormApp extends TailwindElement() {
     const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
     const showDebugPanel = this.isDebugging;
     const showAppConsole = !isSingleFileMode && this.activeStatusBarPanel === 'app-console';
+    const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
@@ -887,62 +1042,73 @@ export class OpenStormApp extends TailwindElement() {
                 ? html`
                     <settings-panel class="flex-1"></settings-panel>
                   `
-                : showExplorer
+                : showExplorer || showDatabase
                 ? html`
-                    <resizable-container
-                      direction="horizontal"
-                      class="flex-1"
-                      .initialSize=${this.sidebarWidth}
-                      .minSize=${150}
-                      .maxSize=${600}
-                      @size-change=${(e: CustomEvent<{ size: number }>) => {
-                        this.sidebarWidth = e.detail.size;
-                      }}
-                    >
-                      <div slot="first" class="h-full w-full">
-                        <project-explorer
-                          class="flex flex-col overflow-hidden border-r h-full"
-                          style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
-                          .projectPath=${this.projectPath}
-                          .selectedPath=${this.activeFilePath}
-                          @file-selected=${this.handleFileSelect}
-                          @open-folder=${() => dispatch("open-folder")}
-                        >
-                        </project-explorer>
-                      </div>
-                      <div
-                        slot="second"
-                        class="flex flex-col overflow-hidden min-w-0 w-full h-full"
-                        style="background-color: var(--app-bg);"
+                    <div class="flex flex-1 overflow-hidden">
+                      <resizable-container
+                        direction="horizontal"
+                        class="flex-1"
+                        .initialSize=${this.sidebarWidth}
+                        .minSize=${150}
+                        .maxSize=${600}
+                        @size-change=${(e: CustomEvent<{ size: number }>) => {
+                          this.sidebarWidth = e.detail.size;
+                        }}
                       >
-                        <!-- Tab Bar -->
-                        ${this.tabs.length > 0
-                          ? html`
-                              <tab-bar
-                                class="h-[35px] shrink-0"
-                                .tabs=${this.tabs}
-                                .activeTab=${this.activeTabId}
-                                @tab-select=${this.handleTabSelect}
-                                @tab-close=${this.handleTabClose}
-                                @tab-pin-toggle=${this.handleTabPinToggle}
-                              >
-                              </tab-bar>
-                            `
-                          : ""}
-                        <!-- File Viewer Container -->
-                        <file-viewer-container
-                          id="editor"
-                          class="flex-1 flex flex-col overflow-hidden"
-                          .tabs=${this.tabs}
-                          .activeTabId=${this.activeTabId}
-                          @folder-opened=${this.handleFolderOpened}
-                          @content-changed=${this.handleContentChanged}
-                          @open-folder=${() => dispatch("open-folder")}
-                          @quick-search=${() => dispatch("quick-search")}
+                        <div slot="first" class="h-full w-full">
+                          <project-explorer
+                            class="flex flex-col overflow-hidden border-r h-full"
+                            style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
+                            .projectPath=${this.projectPath}
+                            .selectedPath=${this.activeFilePath}
+                            @file-selected=${this.handleFileSelect}
+                            @open-folder=${() => dispatch("open-folder")}
+                          >
+                          </project-explorer>
+                        </div>
+                        <div
+                          slot="second"
+                          class="flex flex-col overflow-hidden min-w-0 w-full h-full"
+                          style="background-color: var(--app-bg);"
                         >
-                        </file-viewer-container>
-                      </div>
-                    </resizable-container>
+                          <!-- Tab Bar -->
+                          ${this.tabs.length > 0
+                            ? html`
+                                <tab-bar
+                                  class="h-[35px] shrink-0"
+                                  .tabs=${this.tabs}
+                                  .activeTab=${this.activeTabId}
+                                  @tab-select=${this.handleTabSelect}
+                                  @tab-close=${this.handleTabClose}
+                                  @tab-pin-toggle=${this.handleTabPinToggle}
+                                >
+                                </tab-bar>
+                              `
+                            : ""}
+                          <!-- File Viewer Container -->
+                          <file-viewer-container
+                            id="editor"
+                            class="flex-1 flex flex-col overflow-hidden min-h-0"
+                            .projectPath=${this.projectPath}
+                            .tabs=${this.tabs}
+                            .activeTabId=${this.activeTabId}
+                            @folder-opened=${this.handleFolderOpened}
+                            @content-changed=${this.handleContentChanged}
+                            @open-folder=${() => dispatch("open-folder")}
+                            @quick-search=${() => dispatch("quick-search")}
+                          >
+                          </file-viewer-container>
+                        </div>
+                      </resizable-container>
+                      <!-- Data Sources Panel on the right (shown when database activity is active) -->
+                      ${showDatabase
+                        ? html`
+                            <div class="shrink-0 border-l" style="width: 250px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                              <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
+                            </div>
+                          `
+                        : nothing}
+                    </div>
                   `
                 : showCommitPanel
                 ? html`
@@ -996,7 +1162,8 @@ export class OpenStormApp extends TailwindElement() {
                         <!-- File Viewer Container -->
                         <file-viewer-container
                           id="editor"
-                          class="flex-1 flex flex-col overflow-hidden"
+                          class="flex-1 flex flex-col overflow-hidden min-h-0"
+                          .projectPath=${this.projectPath}
                           .tabs=${this.tabs}
                           .activeTabId=${this.activeTabId}
                           @folder-opened=${this.handleFolderOpened}
@@ -1030,6 +1197,7 @@ export class OpenStormApp extends TailwindElement() {
                       <file-viewer-container
                         id="editor"
                         class="flex-1 flex flex-col overflow-hidden"
+                        .projectPath=${this.projectPath}
                         .tabs=${this.tabs}
                         .activeTabId=${this.activeTabId}
                         @folder-opened=${this.handleFolderOpened}
@@ -1126,6 +1294,17 @@ export class OpenStormApp extends TailwindElement() {
               .showConsoleNotification=${this.showConsoleNotification}>
             </status-bar>
           </div>
+          <!-- Right Activity Bar (hidden in single-file mode) -->
+          ${!isSingleFileMode
+            ? html`
+                <right-activity-bar
+                  class="shrink-0"
+                  .activeItem=${this.activeRightActivity}
+                  @item-change=${this.handleRightActivityChange}
+                >
+                </right-activity-bar>
+              `
+            : ""}
         </div>
 
         <!-- Search Overlay -->
@@ -1138,6 +1317,9 @@ export class OpenStormApp extends TailwindElement() {
 
         <!-- Theme Palette -->
         <theme-palette></theme-palette>
+
+        <!-- Database Connection Picker -->
+        <database-connection-picker .projectPath=${this.projectPath}></database-connection-picker>
 
         <!-- Hover Tooltip -->
         <hover-tooltip></hover-tooltip>

@@ -137,12 +137,12 @@ export class DebugWatchPanel extends TailwindElement() {
       </div>
       <div class="flex items-center gap-1.5 px-3 py-1.5 border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
         <input type="text"
-               class="flex-1 px-2 py-0.5 text-xs font-mono border rounded outline-none focus:border-indigo-500"
+               class="flex-1 px-2 py-0.5 text-xs font-mono border rounded outline-none focus:border-[var(--brand-primary)] focus:ring-1 focus:ring-[var(--brand-primary)]"
                style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-border);"
                placeholder="Add expression..."
                @keydown=${this.handleWatchInputKeydown}
                id="watch-input"/>
-        <button class="px-2.5 py-1 text-xs font-medium border-none rounded bg-indigo-500 text-white cursor-pointer transition-all hover:bg-indigo-600 hover:scale-105 active:scale-95" @click=${() => this.addWatchExpression()}>
+        <button class="px-2.5 py-1 text-xs font-medium border-none rounded bg-[var(--brand-primary)] text-white cursor-pointer transition-all hover:bg-[var(--brand-primary-hover)] hover:scale-105 active:scale-95" @click=${() => this.addWatchExpression()}>
           <iconify-icon icon="mdi:plus" width="14"></iconify-icon>
         </button>
       </div>

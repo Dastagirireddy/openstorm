@@ -161,7 +161,7 @@ export class PullRequestsPanel extends TailwindElement() {
         <div class="flex items-center gap-2">
           <input
             type="text"
-            class="px-2 py-1 text-[11px] border rounded"
+            class="px-2 py-1 text-[11px] border rounded focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)]"
             style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
             placeholder="Search PRs..."
             .value=${this.searchQuery}

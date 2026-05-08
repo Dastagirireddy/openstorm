@@ -353,7 +353,7 @@ export class TemplatePicker extends TailwindElement() {
             <input
               id="project-name-input"
               type="text"
-              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5]"
+              class="w-full px-3 py-2 border rounded-md text-[13px] focus:outline-none focus:border-[var(--brand-primary)] focus:ring-1 focus:ring-[var(--brand-primary)]"
               style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-input-border);"
               placeholder="my-project"
               .value=${this.projectName}
@@ -370,7 +370,7 @@ export class TemplatePicker extends TailwindElement() {
               <span class="font-normal" style="color: var(--app-disabled-foreground);">(optional)</span>
             </label>
             <!-- Single unified field with integrated browse button -->
-            <div class="flex items-center border rounded-md overflow-hidden focus-within:border-[#4f46e5] focus-within:ring-1 focus-within:ring-[#4f46e5]" style="border-color: var(--app-input-border);">
+            <div class="flex items-center border rounded-md overflow-hidden focus-within:border-[var(--brand-primary)] focus-within:ring-1 focus-within:ring-[var(--brand-primary)]" style="border-color: var(--app-input-border);">
               <input
                 type="text"
                 class="flex-1 px-3 py-2 text-[13px] focus:outline-none min-w-0"
@@ -408,7 +408,8 @@ export class TemplatePicker extends TailwindElement() {
                 </label>
                 <input
                   type="${variable.type === 'number' ? 'number' : 'text'}"
-                  class="w-full px-3 py-2 bg-white border border-[#d1d5db] rounded-md text-[13px] text-[#111827] focus:outline-none focus:border-[#4f46e5] focus:ring-1 focus:ring-[#4f46e5] placeholder-[#9ca3af]"
+                  class="w-full px-3 py-2 bg-white border rounded-md text-[13px] focus:outline-none focus:border-[var(--brand-primary)] focus:ring-1 focus:ring-[var(--brand-primary)]"
+                  style="border-color: var(--app-input-border); color: var(--app-input-foreground);"
                   placeholder=${variable.placeholder || ''}
                   .value=${variable.default ?? ''}
                 />

@@ -21,6 +21,7 @@ export interface WorkbenchColors {
   'app-focus-border': string;
   'app-hover-background': string;
   'app-selection-background': string;
+  'app-selection-foreground': string;
   'app-input-background': string;
   'app-input-foreground': string;
   'app-input-border': string;
@@ -30,6 +31,7 @@ export interface WorkbenchColors {
   'app-button-hover': string;
   'app-toolbar-hover': string;
   'app-toolbar-active': string;
+  'app-toolbar-background': string;
   'app-badge-bg': string;
   'app-badge-border': string;
   'app-badge-shadow': string;
