@@ -110,7 +110,6 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.sql = this.initialSql || this.getDefaultQuery();
     document.addEventListener('keydown', this.handleKeyDown.bind(this));
     // Bind handlers
     this._boundHandleRun = this.handleRun.bind(this);
@@ -123,6 +122,14 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     document.addEventListener('clear-query-results', this._boundHandleClearResults);
     // Load saved queries
     this.loadSavedQueries();
+  }
+
+  override firstUpdated(): void {
+    requestAnimationFrame(() => {
+      // Set initial SQL after properties are set
+      this.sql = this.initialSql || this.getDefaultQuery();
+      this.initEditor();
+    });
   }
 
   override disconnectedCallback(): void {
@@ -144,20 +151,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
     }
   }
 
-  override firstUpdated(): void {
-    requestAnimationFrame(() => {
-      this.initEditor();
-    });
-  }
-
   override updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
-    console.log('[QueryEditor] updated()', {
-      connectionId: this.connectionId,
-      projectPath: this.projectPath,
-      connectionName: this.connectionName,
-      hasChanges: changedProperties.size
-    });
     // Initialize editor when component is ready and we have required props
     if (!this.editorInitialized && this.connectionId) {
       requestAnimationFrame(() => {
@@ -206,11 +201,13 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       '.cm-content': {
         padding: '8px 12px',
         outline: 'none !important',
+        backgroundColor: 'var(--app-bg)',
       },
       '.cm-scroller': {
         fontFamily: 'monospace',
         fontSize: '13px',
         outline: 'none !important',
+        backgroundColor: 'var(--app-bg)',
       },
       '.cm-cursor': {
         borderLeft: '2px solid var(--app-foreground) !important',
@@ -1204,11 +1201,11 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
       <!-- Main Layout -->
       <div class="flex flex-col h-full w-full overflow-hidden" style="background: var(--app-bg);">
         <!-- Editor Section: Left = Actions, Right = Editor -->
-        <div class="flex shrink-0 items-stretch border-b" style="background: var(--app-background); border-color: var(--app-border);">
+        <div class="flex shrink-0 items-stretch border-b" style="background: var(--app-background); border-color: var(--app-border, rgba(255,255,255,0.1));">
           <!-- Left Column: Primary Action Buttons (hidden in focus mode) -->
           <div
             class="${this.focusMode ? 'hidden' : 'w-12'} border-r flex flex-col items-center justify-start gap-1 py-2 shrink-0"
-            style="background: var(--app-toolbar-background); border-color: var(--app-border);"
+            style="background: var(--app-toolbar-background); border-color: var(--app-border, rgba(255,255,255,0.1));"
           >
             <button
               class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
@@ -1235,7 +1232,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
             >
               <iconify-icon icon="mdi:stop" width="16" height="16"></iconify-icon>
             </button>
-            <div class="w-6 h-px my-1" style="background: var(--app-border);"></div>
+            <div class="w-6 h-px my-1" style="background: var(--app-border, rgba(255,255,255,0.1));"></div>
             <button
               class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
               style="color: var(--app-keyword);"
@@ -1262,7 +1259,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
           <!-- Right Column: SQL Editor (takes maximum space) -->
           <div class="flex-1 flex flex-col min-w-0 relative">
             <!-- Editor Container -->
-            <div id="editor-container" class="w-full h-full"></div>
+            <div id="editor-container" class="w-full h-full" style="background-color: var(--app-bg);"></div>
           </div>
 
           <!-- Far Right: Secondary Actions -->
@@ -1294,7 +1291,7 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
             >
               <iconify-icon icon="mdi:bookmark" width="16" height="16"></iconify-icon>
             </button>
-            <div class="w-6 h-px my-1" style="background: var(--app-border);"></div>
+            <div class="w-6 h-px my-1" style="background: var(--app-border, rgba(255,255,255,0.1));"></div>
             <button
               class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${!this.multiCardMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
               style="color: var(--app-foreground);"

@@ -136,6 +136,9 @@ export class DataSourcesPanel extends TailwindElement() {
 
     const dialect = connection.config.dbType === 'mysql' ? 'mysql' : 'postgresql';
 
+    // Extract table name from nodeId (remove any prefix like "table:")
+    const tableName = nodeId.includes(':') ? nodeId.split(':').pop() || nodeId : nodeId;
+
     // Dispatch event to open query editor in main editor area
     this.dispatchEvent(
       new CustomEvent('open-query-editor', {
@@ -143,7 +146,7 @@ export class DataSourcesPanel extends TailwindElement() {
           connectionId,
           connectionName: connection.name,
           dialect,
-          tableName: nodeId,
+          tableName,
           projectPath: this.projectPath,
         },
         bubbles: true,

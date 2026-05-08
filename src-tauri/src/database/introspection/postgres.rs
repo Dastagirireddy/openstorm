@@ -14,8 +14,21 @@ fn leaf_node(
     name: String,
     kind: ObjectKind,
     icon: String,
-    metadata: serde_json::Value,
+    mut metadata: serde_json::Value,
 ) -> DatabaseObject {
+    // Mark system catalog items (access methods, casts, languages, etc.) as system files
+    if let Some(obj) = metadata.as_object_mut() {
+        // Check if this is a system catalog item based on metadata keys
+        let is_system = obj.contains_key("access_method")
+            || obj.contains_key("castsource")
+            || obj.contains_key("lanname")
+            || obj.contains_key("extname")
+            || obj.contains_key("viewname");
+        if is_system {
+            obj.insert("isSystemFile".to_string(), serde_json::json!(true));
+        }
+    }
+
     DatabaseObject {
         id,
         name,
@@ -34,8 +47,18 @@ fn folder_node(
     name: String,
     kind: ObjectKind,
     icon: String,
-    metadata: serde_json::Value,
+    mut metadata: serde_json::Value,
 ) -> DatabaseObject {
+    // Mark system folders (Database Objects, Server Objects children) as system files
+    if let Some(obj) = metadata.as_object_mut() {
+        let folder = obj.get("folder").and_then(|v| v.as_str());
+        if let Some(folder_name) = folder {
+            if ["db_objects", "server_objects", "access_methods", "casts", "extensions", "languages", "virtual_views"].contains(&folder_name) {
+                obj.insert("isSystemFile".to_string(), serde_json::json!(true));
+            }
+        }
+    }
+
     DatabaseObject {
         id,
         name,
@@ -261,7 +284,8 @@ impl PostgresIntrospector {
                 metadata: Some(json!({
                     "database": db_name,
                     "folder": "db_objects",
-                    "iconColor": "#9CA3AF"
+                    "iconColor": "#9CA3AF",
+                    "isSystemFile": true
                 })),
             });
         }
@@ -1149,7 +1173,8 @@ impl DatabaseIntrospector for PostgresIntrospector {
                         has_children: true,
                         metadata: Some(json!({
                             "folder": "server_objects",
-                            "iconColor": "#9CA3AF"
+                            "iconColor": "#9CA3AF",
+                            "isSystemFile": true
                         })),
                     });
                 }

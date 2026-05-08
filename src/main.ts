@@ -536,6 +536,23 @@ export class OpenStormApp extends TailwindElement() {
         const name = filePath.split("/").pop() || "";
         const ext = filePath.split(".").pop()?.toLowerCase() || "";
 
+        // Check if it's a SQLite database file
+        const dbExtensions = ['db', 'sqlite', 'sqlite3', 'db3'];
+        const isDatabase = dbExtensions.includes(ext);
+
+        // For database files, open directly with query editor without reading content
+        if (isDatabase) {
+          this.handleOpenQueryEditor({
+            detail: {
+              connectionId: `sqlite-file:${filePath}`,
+              connectionName: name,
+              dialect: 'postgresql',
+              tableName: '',
+            },
+          } as CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>);
+          return;
+        }
+
         // Check if it's a raster image file (SVG is handled as text/code)
         const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
         const isImage = imageExtensions.includes(ext);
@@ -738,9 +755,22 @@ export class OpenStormApp extends TailwindElement() {
     const name = path.split("/").pop() || "";
     const ext = path.split(".").pop()?.toLowerCase() || "";
 
-    // Check if it's a raster image file (SVG is handled as text/code)
-    const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
-    const isImage = imageExtensions.includes(ext);
+    // Check if it's a SQLite database file
+    const dbExtensions = ['db', 'sqlite', 'sqlite3', 'db3'];
+    const isDatabase = dbExtensions.includes(ext);
+
+    // For database files, open directly with query editor without reading content
+    if (isDatabase) {
+      this.handleOpenQueryEditor({
+        detail: {
+          connectionId: `sqlite-file:${path}`,
+          connectionName: name,
+          dialect: 'postgresql',
+          tableName: '',
+        },
+      } as CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>);
+      return;
+    }
 
     const existingTab = this.tabs.find((t) => t.path === path);
     if (existingTab) {
@@ -756,6 +786,10 @@ export class OpenStormApp extends TailwindElement() {
     }
 
     try {
+      // Check if it's a raster image file (SVG is handled as text/code)
+      const imageExtensions = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico'];
+      const isImage = imageExtensions.includes(ext);
+
       // Read image files as base64, text files as string
       const content = isImage
         ? await invoke<string>("read_file_base64", { path })
@@ -805,8 +839,20 @@ export class OpenStormApp extends TailwindElement() {
     if (tab) {
       this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
-      // Use open-file-external to avoid triggering the global open-file handler
-      dispatch("open-file-external", { path: tab.path, content: tab.content });
+      // Check if this is a query editor tab
+      if (tab.id.startsWith('query:')) {
+        // Dispatch open-query-editor event for query editor tabs
+        dispatch("open-query-editor", {
+          connectionId: tab.metadata?.connectionId,
+          connectionName: tab.metadata?.connectionName,
+          dialect: tab.metadata?.dialect || 'postgresql',
+          tableName: tab.metadata?.tableName || '',
+          projectPath: tab.metadata?.projectPath || this.projectPath,
+        });
+      } else {
+        // Use open-file-external to avoid triggering the global open-file handler
+        dispatch("open-file-external", { path: tab.path, content: tab.content });
+      }
     }
   };
 
@@ -1058,7 +1104,7 @@ export class OpenStormApp extends TailwindElement() {
                       <!-- Data Sources Panel on the right (shown when database activity is active) -->
                       ${showDatabase
                         ? html`
-                            <div class="shrink-0 border-l" style="width: 300px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                            <div class="shrink-0 border-l" style="width: 250px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
                               <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
                             </div>
                           `

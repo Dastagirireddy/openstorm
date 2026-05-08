@@ -156,15 +156,20 @@ export class FileViewerContainer extends TailwindElement() {
             if (parts.length >= 3) {
               const connectionId = parts[1];
               const tableName = parts.slice(2).join(':');
-              this.queryEditorInfo = {
-                connectionId,
-                connectionName: tab.name,
-                dialect: tab.metadata?.dialect || 'postgresql',
-                tableName,
-                projectPath: tab.metadata?.projectPath || this.projectPath,
-              };
-              this.viewerTag = 'database-query-editor';
-              this.filePath = tab.id;
+              // Force re-render by clearing first
+              this.viewerTag = null;
+              this.queryEditorInfo = null;
+              requestAnimationFrame(() => {
+                this.queryEditorInfo = {
+                  connectionId,
+                  connectionName: tab.name,
+                  dialect: tab.metadata?.dialect || 'postgresql',
+                  tableName,
+                  projectPath: tab.metadata?.projectPath || this.projectPath,
+                };
+                this.viewerTag = 'database-query-editor';
+                this.filePath = tab.id;
+              });
             }
           } else {
             this.openFile(tab.path, tab.content);
@@ -318,6 +323,26 @@ export class FileViewerContainer extends TailwindElement() {
     // Store file info
     this.filePath = path;
     this.content = content;
+
+    // Special handling for SQLite database files - open with query editor
+    if (['db', 'sqlite', 'sqlite3', 'db3'].includes(ext.toLowerCase())) {
+      this.viewerTag = null;
+      this.requestUpdate();
+      await this.updateComplete;
+
+      // Create a virtual connection for this SQLite file
+      this.queryEditorInfo = {
+        connectionId: `sqlite-file:${path}`,
+        connectionName: path.split('/').pop() || 'SQLite',
+        dialect: 'postgresql', // Use postgresql dialect as default for SQLite
+        tableName: '',
+        projectPath: this.projectPath,
+        filePath: path, // Pass the file path for SQLite connection
+      };
+      this.viewerTag = 'database-query-editor';
+      this.requestUpdate();
+      return;
+    }
 
     // Force re-render by clearing viewerTag first, then setting it
     // This ensures Lit re-renders even when opening same file type

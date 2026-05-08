@@ -244,27 +244,48 @@ pub async fn db_execute_query(
     project_path: String,
     manager: State<'_, DatabaseManager>,
 ) -> Result<QueryResult, String> {
-    // Get the connection config to retrieve pool
-    let project = Path::new(&project_path);
-    let connections = manager.list_connections(Some(project));
+    let mut config: ConnectionConfig;
 
-    let connection = connections.iter()
-        .find(|c| c.id == connection_id)
-        .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+    // Check if this is a direct SQLite file path (format: "sqlite-file:/path/to/file.db")
+    if connection_id.starts_with("sqlite-file:") {
+        let file_path = connection_id.strip_prefix("sqlite-file:").unwrap();
+        // Create a temporary SQLite connection config for the file
+        config = ConnectionConfig {
+            id: None,
+            name: "SQLite File".to_string(),
+            db_type: crate::database::DatabaseType::SQLite,
+            host: "localhost".to_string(),
+            port: 0,
+            username: String::new(),
+            password: None,
+            database: None,
+            scope: ConnectionScope::Global,
+            options: std::collections::HashMap::new(),
+            file_path: Some(file_path.to_string()),
+        };
+    } else {
+        // Get the connection config to retrieve pool
+        let project = Path::new(&project_path);
+        let connections = manager.list_connections(Some(project));
 
-    let mut config = ConnectionConfig {
-        id: Some(connection.id.clone()),
-        name: connection.name.clone(),
-        db_type: connection.db_type.clone(),
-        host: connection.host.clone(),
-        port: connection.port,
-        username: connection.username.clone(),
-        password: manager.get_password(&connection_id).ok().flatten(),
-        database: connection.database.clone(),
-        scope: connection.scope.clone(),
-        options: std::collections::HashMap::new(),
-        file_path: connection.file_path.clone(),
-    };
+        let connection = connections.iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+
+        config = ConnectionConfig {
+            id: Some(connection.id.clone()),
+            name: connection.name.clone(),
+            db_type: connection.db_type.clone(),
+            host: connection.host.clone(),
+            port: connection.port,
+            username: connection.username.clone(),
+            password: manager.get_password(&connection_id).ok().flatten(),
+            database: connection.database.clone(),
+            scope: connection.scope.clone(),
+            options: std::collections::HashMap::new(),
+            file_path: connection.file_path.clone(),
+        };
+    }
 
     // Get or create pool
     let pool = manager.get_or_create_pool(&config).await
@@ -326,27 +347,47 @@ pub async fn db_export_query(
     max_rows: Option<u64>,
     manager: State<'_, DatabaseManager>,
 ) -> Result<ExportResult, String> {
-    // Get the connection config
-    let project = Path::new(&project_path);
-    let connections = manager.list_connections(Some(project));
+    let mut config: ConnectionConfig;
 
-    let connection = connections.iter()
-        .find(|c| c.id == connection_id)
-        .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+    // Check if this is a direct SQLite file path (format: "sqlite-file:/path/to/file.db")
+    if connection_id.starts_with("sqlite-file:") {
+        let file_path = connection_id.strip_prefix("sqlite-file:").unwrap();
+        config = ConnectionConfig {
+            id: None,
+            name: "SQLite File".to_string(),
+            db_type: crate::database::DatabaseType::SQLite,
+            host: "localhost".to_string(),
+            port: 0,
+            username: String::new(),
+            password: None,
+            database: None,
+            scope: ConnectionScope::Global,
+            options: std::collections::HashMap::new(),
+            file_path: Some(file_path.to_string()),
+        };
+    } else {
+        // Get the connection config
+        let project = Path::new(&project_path);
+        let connections = manager.list_connections(Some(project));
 
-    let mut config = ConnectionConfig {
-        id: Some(connection.id.clone()),
-        name: connection.name.clone(),
-        db_type: connection.db_type.clone(),
-        host: connection.host.clone(),
-        port: connection.port,
-        username: connection.username.clone(),
-        password: manager.get_password(&connection_id).ok().flatten(),
-        database: connection.database.clone(),
-        scope: connection.scope.clone(),
-        options: std::collections::HashMap::new(),
-        file_path: connection.file_path.clone(),
-    };
+        let connection = connections.iter()
+            .find(|c| c.id == connection_id)
+            .ok_or_else(|| format!("Connection not found: {}", connection_id))?;
+
+        config = ConnectionConfig {
+            id: Some(connection.id.clone()),
+            name: connection.name.clone(),
+            db_type: connection.db_type.clone(),
+            host: connection.host.clone(),
+            port: connection.port,
+            username: connection.username.clone(),
+            password: manager.get_password(&connection_id).ok().flatten(),
+            database: connection.database.clone(),
+            scope: connection.scope.clone(),
+            options: std::collections::HashMap::new(),
+            file_path: connection.file_path.clone(),
+        };
+    }
 
     // Get or create pool
     let pool = manager.get_or_create_pool(&config).await

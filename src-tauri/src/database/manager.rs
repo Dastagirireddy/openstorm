@@ -50,7 +50,11 @@ impl DatabaseManager {
 
     /// Get or create a pool for a connection (async version)
     pub async fn get_or_create_pool(&self, config: &ConnectionConfig) -> Result<AnyPool> {
-        let connection_id = config.id.as_ref().unwrap().to_string();
+        // Use config id if available, otherwise use file path as key (for SQLite file-based connections)
+        let connection_id = config.id.as_ref()
+            .map(|id| id.clone())
+            .or_else(|| config.file_path.clone())
+            .unwrap_or_else(|| "memory-db".to_string());
 
         // Check if pool already exists
         if let Some(pool) = self.active_pools.get(&connection_id) {
