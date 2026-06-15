@@ -1,6 +1,6 @@
 {
   "name": "openstorm",
-  "version": "79393version",
+  "version": "1.1.0",
   "description": "A high-performance, lightweight IDE built to compete with JetBrains products",
   "scripts": {
     "dev": "vite",
