@@ -336,7 +336,7 @@ fn main() {
                 log_error!("Failed to create configuration directories: {}", e);
             }
 
-            // Create native menu bar
+            // Create native menu bar (macOS only - Linux uses custom title bar)
             #[cfg(target_os = "macos")]
             let menu = Menu::with_items(app, &[
                 &Submenu::with_items(app, "OpenStorm", true, &[
@@ -413,68 +413,8 @@ fn main() {
                 ]).unwrap(),
             ]).ok();
 
-            #[cfg(not(target_os = "macos"))]
-            let menu = Menu::with_items(app, &[
-                &Submenu::with_items(app, "File", true, &[
-                    &MenuItem::with_id(app, "new-file", "New File", true, Some("Ctrl+N")).unwrap(),
-                    &MenuItem::with_id(app, "new-project", "New Project...", true, Some("Ctrl+Shift+N")).unwrap(),
-                    &MenuItem::with_id(app, "open-file", "Open File...", true, Some("Ctrl+O")).unwrap(),
-                    &MenuItem::with_id(app, "open-folder", "Open Folder...", true, Some("Ctrl+Shift+O")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "save", "Save", true, Some("Ctrl+S")).unwrap(),
-                    &MenuItem::with_id(app, "save-as", "Save As...", true, Some("Ctrl+Shift+S")).unwrap(),
-                    &MenuItem::with_id(app, "save-all", "Save All", true, Some("Ctrl+Alt+S")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("Ctrl+W")).unwrap(),
-                    &MenuItem::with_id(app, "quit", "Quit OpenStorm", true, Some("Alt+F4")).unwrap(),
-                ]).unwrap(),
-                &Submenu::with_items(app, "Edit", true, &[
-                    &MenuItem::with_id(app, "undo", "Undo", true, Some("Ctrl+Z")).unwrap(),
-                    &MenuItem::with_id(app, "redo", "Redo", true, Some("Ctrl+Y")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "cut", "Cut", true, Some("Ctrl+X")).unwrap(),
-                    &MenuItem::with_id(app, "copy", "Copy", true, Some("Ctrl+C")).unwrap(),
-                    &MenuItem::with_id(app, "paste", "Paste", true, Some("Ctrl+V")).unwrap(),
-                    &MenuItem::with_id(app, "select-all", "Select All", true, Some("Ctrl+A")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "find", "Find", true, Some("Ctrl+F")).unwrap(),
-                    &MenuItem::with_id(app, "replace", "Find and Replace", true, Some("Ctrl+H")).unwrap(),
-                ]).unwrap(),
-                &Submenu::with_items(app, "View", true, &[
-                    &MenuItem::with_id(app, "command-palette", "Command Palette", true, Some("Ctrl+Shift+P")).unwrap(),
-                    &MenuItem::with_id(app, "theme-picker", "Theme Picker", true, Some("Ctrl+Shift+T")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "toggle-sidebar", "Toggle Sidebar", true, Some("Ctrl+B")).unwrap(),
-                    &MenuItem::with_id(app, "toggle-terminal", "Toggle Terminal", true, Some("Ctrl+`")).unwrap(),
-                    &MenuItem::with_id(app, "toggle-debug", "Toggle Debug Panel", true, Some("Ctrl+Shift+D")).unwrap(),
-                ]).unwrap(),
-                &Submenu::with_items(app, "Run", true, &[
-                    &MenuItem::with_id(app, "run", "Run", true, Some("Ctrl+R")).unwrap(),
-                    &MenuItem::with_id(app, "debug", "Debug", true, Some("Ctrl+Shift+R")).unwrap(),
-                    &MenuItem::with_id(app, "stop", "Stop", true, Some("Ctrl+Shift+K")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "step-over", "Step Over", true, Some("F10")).unwrap(),
-                    &MenuItem::with_id(app, "step-into", "Step Into", true, Some("F11")).unwrap(),
-                    &MenuItem::with_id(app, "step-out", "Step Out", true, Some("Shift+F11")).unwrap(),
-                    &MenuItem::with_id(app, "continue", "Continue", true, Some("F5")).unwrap(),
-                ]).unwrap(),
-                &Submenu::with_items(app, "Database", true, &[
-                    &MenuItem::with_id(app, "new-query-editor", "New Query Editor", true, Some("Ctrl+Shift+Q")).unwrap(),
-                    &MenuItem::with_id(app, "connect-to-database", "Connect to Database...", true, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "refresh-connections", "Refresh Connections", true, Some("Ctrl+Shift+D")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "clear-query-results", "Clear Query Results", true, Some("Ctrl+Shift+Backspace")).unwrap(),
-                ]).unwrap(),
-                &Submenu::with_items(app, "Help", true, &[
-                    &MenuItem::with_id(app, "documentation", "Documentation", true, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "report-issue", "Report Issue", true, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "about", "About OpenStorm", true, None::<&str>).unwrap(),
-                ]).unwrap(),
-            ]).ok();
-
-            // Set the menu
+            // Set the menu (macOS only)
+            #[cfg(target_os = "macos")]
             if let Some(menu) = menu {
                 app.set_menu(menu).ok();
             }
