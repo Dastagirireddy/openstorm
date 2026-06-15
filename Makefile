@@ -1,4 +1,4 @@
-.PHONY: dev build preview tauri dev-full build-full clean install
+.PHONY: dev build preview tauri dev-full build-full clean install release
 
 # Development
 dev-web: ## Run Vite dev server
@@ -30,6 +30,23 @@ install: ## Install dependencies
 clean: ## Remove build artifacts
 	rm -rf dist
 	rm -rf target
+
+# Release
+release: ## Release a new version (interactive prompt for version)
+	@read -p "Enter version (major.minor.patch): " version; \
+	if ! echo "$$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+		echo "Error: Version must be in format major.minor.patch (e.g., 1.2.3)"; \
+		exit 1; \
+	fi; \
+	echo "Releasing version $$version..."; \
+	sed -i '' "s/^version = \".*\"/version = \"$$version\"/" src-tauri/Cargo.toml; \
+	sed -i '' "s/\"version\": \".*\"/\"version\": \"$$version\"/" package.json; \
+	sed -i '' "s/\"version\": \".*\"/\"version\": \"$$version\"/" src-tauri/tauri.conf.json; \
+	git add src-tauri/Cargo.toml package.json src-tauri/tauri.conf.json; \
+	git commit -m "release: v$$version"; \
+	git tag "v$$version"; \
+	git push origin main --tags; \
+	echo "Released v$$version successfully!"
 
 # Help
 help: ## Display this help message
