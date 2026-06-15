@@ -1,0 +1,109 @@
+name: Release Linux
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release-linux:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: amd64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            libdbus-1-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Generate update signing keypair
+        id: signer
+        run: |
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "Using existing signing key from secrets"
+            echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > /tmp/tauri.key
+            echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" > /tmp/tauri.key.password
+            echo "has_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "Generating temporary signing key"
+            cargo install tauri-cli
+            npx tauri signer generate -w /tmp/tauri.key
+            echo "" > /tmp/tauri.key.password
+            echo "has_key=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Update version in Cargo.toml
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' src-tauri/Cargo.toml
+          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' package.json
+          sed -i 's/"version": ".*"/"version": "${{ steps.version.outputs.version }}"/' src-tauri/tauri.conf.json
+
+      - name: Build with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ steps.signer.outputs.has_key == 'true' && '/tmp/tauri.key' || '' }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ steps.signer.outputs.has_key == 'true' && '' || '' }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'OpenStorm ${{ steps.version.outputs.version }}'
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: true
+          prerelease: false
+          args: '--target ${{ matrix.target }}'
+
+      - name: Upload update signature
+        if: steps.signer.outputs.has_key == 'true'
+        run: |
+          if [ -f src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.sig ]; then
+            echo "Update signature generated successfully"
+          fi

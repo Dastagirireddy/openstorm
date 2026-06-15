@@ -18,6 +18,45 @@ mod theme;
 
 
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
+use tauri_plugin_updater::UpdaterExt;
+
+/// Check for updates and install if available
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateResult, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let _version = update.version.clone();
+            let _notes = update.body.clone().unwrap_or_default();
+            
+            // Download and install the update
+            match update.download_and_install(|_, _| {}, || {}).await {
+                Ok(_) => {
+                    // Restart the app to apply the update
+                    app.restart();
+                    // Unreachable - app.restart() terminates the process
+                }
+                Err(e) => return Err(format!("Failed to install update: {}", e)),
+            }
+        }
+        Ok(None) => return Ok(UpdateResult {
+            updated: false,
+            version: String::new(),
+            notes: String::new(),
+        }),
+        Err(e) => return Err(format!("Failed to check for updates: {}", e)),
+    }
+    // Unreachable after restart
+    std::process::exit(0);
+}
+
+#[derive(serde::Serialize)]
+struct UpdateResult {
+    updated: bool,
+    version: String,
+    notes: String,
+}
 use tokio::sync::Mutex;
 
 /// Poll DAP events and emit them to the frontend
@@ -167,6 +206,8 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(terminal::PtyManager::new())
         .manage(file_watcher::FileWatcher::new())
         .manage(process::ProcessManager::new())
@@ -462,6 +503,9 @@ fn main() {
 
             // === Theme ===
             theme::get_system_theme,
+
+            // === Updates ===
+            check_for_updates,
 
             // === Git ===
             commands::git::git_check_installed,
