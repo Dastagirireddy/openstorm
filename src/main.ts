@@ -26,7 +26,7 @@ import { ThemeService } from "./lib/services/theme-service.js";
 ThemeService.getInstance().initialize();
 
 // Auto-update check
-import { checkForUpdates } from "./services/updater.js";
+import { updater } from "./services/updater.js";
 
 // Initialize global event log service
 import { eventLog } from "./services/event-log.js";
@@ -146,10 +146,15 @@ export class OpenStormApp extends TailwindElement() {
 
   private async checkUpdatesOnStartup(): Promise<void> {
     try {
-      const result = await checkForUpdates(true);
-      if (result) {
-        dispatch("app-update-available", { version: result.version, notes: result.notes });
-      }
+      // Initialize updater and subscribe to state changes
+      await updater.initialize();
+      updater.subscribe((state) => {
+        if (state.status === "update-available") {
+          dispatch("app-update-available", { version: state.version, notes: state.notes });
+        }
+      });
+      // Check for updates
+      await updater.checkForUpdate();
     } catch (e) {
       console.warn("[updater] Startup check failed:", e);
     }
@@ -157,15 +162,9 @@ export class OpenStormApp extends TailwindElement() {
 
   private async checkForUpdatesManual(): Promise<void> {
     try {
-      dispatch("notification", { message: "Checking for updates...", type: "info" });
-      const result = await checkForUpdates(true);
-      if (result) {
-        dispatch("notification", { message: `Update available: v${result.version}. Downloading...`, type: "info" });
-      } else {
-        dispatch("notification", { message: "You're running the latest version.", type: "info" });
-      }
+      await updater.checkForUpdate();
     } catch (e) {
-      dispatch("notification", { message: "Failed to check for updates.", type: "error" });
+      console.warn("[updater] Manual check failed:", e);
     }
   }
 

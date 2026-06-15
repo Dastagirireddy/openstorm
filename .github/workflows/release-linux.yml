@@ -11,7 +11,18 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.platform }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'ubuntu-22.04'
+            arch: 'x64'
+            args: ''
+          - platform: 'ubuntu-22.04-arm'
+            arch: 'arm64'
+            args: ''
 
     steps:
       - uses: actions/checkout@v4
@@ -51,14 +62,14 @@ jobs:
         run: pnpm install
 
       - name: Build Tauri app
-        run: pnpm tauri build
+        run: pnpm tauri build -- ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-x64
+          name: linux-${{ matrix.arch }}
           path: |
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.deb
@@ -89,6 +100,8 @@ jobs:
           name: OpenStorm ${{ github.ref_name }}
           body: |
             Download the installer for your platform below.
+            - **x64**: For Intel/AMD processors
+            - **arm64**: For ARM processors (Apple Silicon, Raspberry Pi, etc.)
             Auto-updates enabled — the app checks for new versions on startup.
           draft: true
           files: |

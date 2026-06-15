@@ -20,7 +20,110 @@ mod theme;
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tauri_plugin_updater::UpdaterExt;
 
-/// Check for updates and install if available
+/// Check for updates (non-blocking, returns version info only)
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateCheckResult, String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            let notes = update.body.clone().unwrap_or_default();
+            Ok(UpdateCheckResult {
+                available: true,
+                version,
+                notes,
+            })
+        }
+        Ok(None) => Ok(UpdateCheckResult {
+            available: false,
+            version: String::new(),
+            notes: String::new(),
+        }),
+        Err(e) => Err(format!("Failed to check for updates: {}", e)),
+    }
+}
+
+#[derive(serde::Serialize, Clone)]
+struct UpdateCheckResult {
+    available: bool,
+    version: String,
+    notes: String,
+}
+
+/// Download and install update with progress events
+#[tauri::command]
+async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    let updater = app.updater().map_err(|e| e.to_string())?;
+    
+    match updater.check().await {
+        Ok(Some(update)) => {
+            let version = update.version.clone();
+            
+            // Emit downloading status
+            let _ = app.emit("update-status", serde_json::json!({
+                "status": "downloading",
+                "version": version
+            }));
+            
+            // Download and install with progress callbacks
+            match update.download_and_install(
+                |chunk_len, content_len| {
+                    // Emit download progress
+                    let _ = app.emit("update-download-progress", serde_json::json!({
+                        "chunk": chunk_len,
+                        "total": content_len
+                    }));
+                },
+                || {
+                    // Download complete, now installing
+                    let _ = app.emit("update-status", serde_json::json!({
+                        "status": "installing",
+                        "version": version
+                    }));
+                },
+            ).await {
+                Ok(_) => {
+                    // Emit completed status - don't restart, let user click button
+                    let _ = app.emit("update-status", serde_json::json!({
+                        "status": "completed",
+                        "version": version
+                    }));
+                    Ok(())
+                }
+                Err(e) => {
+                    let _ = app.emit("update-status", serde_json::json!({
+                        "status": "error",
+                        "message": e.to_string()
+                    }));
+                    Err(format!("Failed to install update: {}", e))
+                }
+            }
+        }
+        Ok(None) => {
+            let _ = app.emit("update-status", serde_json::json!({
+                "status": "error",
+                "message": "No update available"
+            }));
+            Err("No update available".to_string())
+        }
+        Err(e) => {
+            let _ = app.emit("update-status", serde_json::json!({
+                "status": "error",
+                "message": e.to_string()
+            }));
+            Err(format!("Failed to check for updates: {}", e))
+        }
+    }
+}
+
+/// Restart the application
+#[tauri::command]
+async fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
+/// Legacy command for backward compatibility
 #[tauri::command]
 async fn check_for_updates(app: tauri::AppHandle) -> Result<UpdateResult, String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
@@ -505,6 +608,9 @@ fn main() {
             theme::get_system_theme,
 
             // === Updates ===
+            check_for_update,
+            download_and_install_update,
+            restart_app,
             check_for_updates,
 
             // === Git ===

@@ -4,6 +4,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import '../layout/icon.js';
 import '../layout/file-icon.js';
 import '../debug/run-toolbar.js';
+import './update-button.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/utils/breadcrumb.js';
 import * as git from '../../lib/git/git-api.js';
 import { dispatch } from '../../lib/types/events.js';
@@ -196,12 +197,7 @@ export class AppHeader extends TailwindElement() {
                   <div class="w-[1px] h-3.5 mx-0.5" style="background-color: var(--app-scrollbar);"></div>
 
                   <!-- Update section -->
-                  ${this.renderSection({
-                    id: 'update',
-                    actions: [
-                      { id: 'update', icon: 'cloud', title: 'Update Project', color: 'var(--app-pause-color)' },
-                    ],
-                  })}
+                  <update-button></update-button>
                 </div>
               `
             : ''}

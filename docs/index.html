@@ -342,6 +342,90 @@ footer {
 .footer-links a:hover { color: var(--text-primary); }
 .footer-copy { font-size: 13px; color: var(--text-muted); }
 
+.linux-download-card {
+  max-width: 520px;
+  margin: 0 auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.linux-card-main {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 28px;
+}
+.linux-card-info { flex: 1; }
+.linux-card-info h3 { font-size: 20px; font-weight: 800; margin-bottom: 4px; }
+.linux-card-info p { font-size: 14px; color: var(--text-muted); }
+.btn-arch-select {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--tag-bg); border: 1px solid var(--border-strong);
+  border-radius: 10px; padding: 10px 16px;
+  color: var(--text-primary); font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, border-color 0.15s;
+}
+.btn-arch-select:hover { background: var(--bg-card2); border-color: var(--accent); }
+.btn-arch-select svg { opacity: 0.5; transition: transform 0.2s; }
+.btn-arch-select.open svg { transform: rotate(180deg); }
+
+.arch-dropdown {
+  display: none;
+  border-top: 1px solid var(--border);
+}
+.arch-dropdown.open { display: block; }
+.arch-option {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; padding: 14px 28px;
+  background: transparent; border: none;
+  color: var(--text-secondary); font-size: 14px;
+  cursor: pointer; transition: background 0.12s, color 0.12s;
+  text-align: left;
+}
+.arch-option:hover { background: var(--tag-bg); color: var(--text-primary); }
+.arch-option.active { color: var(--accent-text); }
+.arch-label { font-weight: 700; min-width: 52px; }
+.arch-desc { flex: 1; font-size: 13px; color: var(--text-muted); }
+.arch-option.active .arch-desc { color: var(--accent-text); opacity: 0.7; }
+.arch-check { opacity: 0; transition: opacity 0.15s; }
+.arch-option.active .arch-check { opacity: 1; }
+
+.download-options {
+  border-top: 1px solid var(--border);
+  padding: 8px 0;
+}
+.dl-option {
+  display: flex; align-items: center; gap: 14px;
+  padding: 16px 28px;
+  text-decoration: none;
+  transition: background 0.12s;
+}
+.dl-option:hover { background: var(--tag-bg); }
+.dl-option-icon { font-size: 24px; }
+.dl-option-info { flex: 1; }
+.dl-option-name { display: block; font-weight: 700; font-size: 15px; color: var(--text-primary); }
+.dl-option-desc { display: block; font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.dl-option-arch {
+  font-size: 12px; font-weight: 600;
+  background: var(--accent-light); color: var(--accent-text);
+  padding: 4px 10px; border-radius: 6px;
+}
+
+.install-hint {
+  border-top: 1px solid var(--border);
+  padding: 14px 28px;
+  text-align: center;
+}
+.install-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  background: var(--bg-card2);
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+
 @media (max-width: 860px) {
   nav { padding: 0 20px; }
   .nav-links { display: none; }
@@ -351,6 +435,8 @@ footer {
   .features-section, .tech-section { padding: 60px 20px; }
   .features-grid, .tech-grid { grid-template-columns: 1fr; }
   .platform-grid { grid-template-columns: 1fr; padding: 0 20px; }
+  .linux-download-card { margin: 0 20px; }
+  .linux-card-main { flex-wrap: wrap; }
   .download-section { padding: 60px 0; }
   footer { padding: 40px 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
 }
@@ -402,7 +488,7 @@ footer {
       </div>
       <div class="hero-stat-item">
         <span class="hero-stat-num">Linux</span>
-        <span class="hero-stat-label">.deb & AppImage</span>
+        <span class="hero-stat-label">x64 & ARM64</span>
       </div>
     </div>
   </div>
@@ -553,55 +639,53 @@ footer {
       <p class="section-sub">Download once, use forever. Auto-updates keep you on the latest version.</p>
     </div>
 
-    <div class="platform-grid">
-      <div class="platform-card">
-        <div class="platform-header">
-          <div class="platform-icon pi-linux">🐧</div>
-          <div class="platform-info">
-            <div class="platform-name">Ubuntu / Debian</div>
-            <div class="platform-desc">Install via .deb package on Debian-based distributions.</div>
-          </div>
+    <div class="linux-download-card">
+      <div class="linux-card-main">
+        <div class="platform-icon pi-linux" style="width:64px;height:64px;font-size:32px;">🐧</div>
+        <div class="linux-card-info">
+          <h3>Download for Linux</h3>
+          <p>Choose your architecture and package format</p>
         </div>
-        <div class="platform-meta">
-          <span class="meta-tag new">.deb</span>
-          <span class="meta-tag">amd64</span>
-        </div>
-        <a id="dl-linux-deb" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.deb" class="btn-dl">
-          <div class="btn-dl-left">
-            <span class="btn-dl-icon">💾</span>
-            <div class="btn-dl-text">
-              <span class="btn-dl-label">Download</span>
-              <span class="btn-dl-main">.deb Package</span>
-            </div>
-          </div>
-          <span class="btn-dl-arrow">↓</span>
-        </a>
-        <div class="platform-size">sudo dpkg -i openstorm_*.deb</div>
+        <button class="btn-arch-select" id="arch-select-btn" onclick="toggleDropdown()">
+          <span id="selected-arch">x64</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
       </div>
 
-      <div class="platform-card">
-        <div class="platform-header">
-          <div class="platform-icon" style="background:#2B2D42;">📦</div>
-          <div class="platform-info">
-            <div class="platform-name">Universal Linux</div>
-            <div class="platform-desc">AppImage runs on any Linux distribution without installation.</div>
+      <div class="arch-dropdown" id="arch-dropdown">
+        <button class="arch-option active" data-arch="x64" onclick="selectArch('x64')">
+          <span class="arch-label">x64</span>
+          <span class="arch-desc">Intel / AMD</span>
+          <svg class="arch-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+        <button class="arch-option" data-arch="arm64" onclick="selectArch('arm64')">
+          <span class="arch-label">ARM64</span>
+          <span class="arch-desc">Raspberry Pi · Apple Silicon (UTM)</span>
+          <svg class="arch-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </button>
+      </div>
+
+      <div class="download-options">
+        <a id="dl-linux-deb" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.deb" class="dl-option">
+          <div class="dl-option-icon">📦</div>
+          <div class="dl-option-info">
+            <span class="dl-option-name">.deb Package</span>
+            <span class="dl-option-desc">Debian, Ubuntu, Linux Mint</span>
           </div>
-        </div>
-        <div class="platform-meta">
-          <span class="meta-tag new">AppImage</span>
-          <span class="meta-tag">amd64</span>
-        </div>
-        <a id="dl-linux-appimage" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.AppImage" class="btn-dl" style="background:var(--green);">
-          <div class="btn-dl-left">
-            <span class="btn-dl-icon">💾</span>
-            <div class="btn-dl-text">
-              <span class="btn-dl-label">Download</span>
-              <span class="btn-dl-main">AppImage (Universal)</span>
-            </div>
-          </div>
-          <span class="btn-dl-arrow">↓</span>
+          <span class="dl-option-arch" id="dl-deb-arch">amd64</span>
         </a>
-        <div class="platform-size">chmod +x OpenStorm_*.AppImage && ./OpenStorm_*.AppImage</div>
+        <a id="dl-linux-appimage" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.AppImage" class="dl-option">
+          <div class="dl-option-icon">⚡</div>
+          <div class="dl-option-info">
+            <span class="dl-option-name">AppImage</span>
+            <span class="dl-option-desc">Universal — run on any distro</span>
+          </div>
+          <span class="dl-option-arch" id="dl-appimage-arch">amd64</span>
+        </a>
+      </div>
+
+      <div class="install-hint" id="install-hint">
+        <code id="install-cmd">sudo dpkg -i openstorm_*.deb</code>
       </div>
     </div>
 
@@ -631,6 +715,76 @@ footer {
 </footer>
 
 <script>
+let currentArch = 'x64';
+const releaseAssets = {};
+
+function toggleDropdown() {
+  const dropdown = document.getElementById('arch-dropdown');
+  const btn = document.getElementById('arch-select-btn');
+  dropdown.classList.toggle('open');
+  btn.classList.toggle('open');
+}
+
+function selectArch(arch) {
+  currentArch = arch;
+  document.getElementById('selected-arch').textContent = arch;
+  
+  // Update active state
+  document.querySelectorAll('.arch-option').forEach(el => {
+    el.classList.toggle('active', el.dataset.arch === arch);
+  });
+  
+  // Update download links
+  updateDownloadLinks();
+  
+  // Close dropdown
+  document.getElementById('arch-dropdown').classList.remove('open');
+  document.getElementById('arch-select-btn').classList.remove('open');
+}
+
+function updateDownloadLinks() {
+  const archName = currentArch === 'x64' ? 'amd64' : 'arm64';
+  
+  const deb = releaseAssets[`${archName}_deb`];
+  const appimage = releaseAssets[`${archName}_appimage`];
+  
+  if (deb) {
+    document.getElementById('dl-linux-deb').href = deb.browser_download_url;
+  }
+  if (appimage) {
+    document.getElementById('dl-linux-appimage').href = appimage.browser_download_url;
+  }
+  
+  document.getElementById('dl-deb-arch').textContent = archName;
+  document.getElementById('dl-appimage-arch').textContent = archName;
+  
+  // Update install hint
+  const hint = document.getElementById('install-cmd');
+  if (document.activeElement === document.getElementById('dl-linux-appimage')) {
+    hint.textContent = 'chmod +x OpenStorm_*.AppImage && ./OpenStorm_*.AppImage';
+  } else {
+    hint.textContent = 'sudo dpkg -i openstorm_*.deb';
+  }
+}
+
+// Update hint based on which link is hovered
+document.getElementById('dl-linux-deb')?.addEventListener('mouseenter', () => {
+  document.getElementById('install-cmd').textContent = 'sudo dpkg -i openstorm_*.deb';
+});
+document.getElementById('dl-linux-appimage')?.addEventListener('mouseenter', () => {
+  document.getElementById('install-cmd').textContent = 'chmod +x OpenStorm_*.AppImage && ./OpenStorm_*.AppImage';
+});
+
+// Close dropdown when clicking outside
+document.addEventListener('click', (e) => {
+  const dropdown = document.getElementById('arch-dropdown');
+  const btn = document.getElementById('arch-select-btn');
+  if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+    dropdown.classList.remove('open');
+    btn.classList.remove('open');
+  }
+});
+
 async function loadLatestRelease() {
   try {
     const res = await fetch('https://api.github.com/repos/Dastagirireddy/openstorm/releases/latest');
@@ -638,17 +792,15 @@ async function loadLatestRelease() {
     const data = await res.json();
     const assets = data.assets || [];
 
-    const findAsset = (pattern) => assets.find(a => a.name.includes(pattern));
+    const findAsset = (arch, ext) => assets.find(a => a.name.includes(arch) && a.name.endsWith(ext));
 
-    const deb = findAsset('.deb');
-    const appimage = findAsset('.AppImage');
+    // Store all assets
+    releaseAssets.amd64_deb = findAsset('amd64', '.deb');
+    releaseAssets.amd64_appimage = findAsset('amd64', '.AppImage');
+    releaseAssets.arm64_deb = findAsset('arm64', '.deb');
+    releaseAssets.arm64_appimage = findAsset('arm64', '.AppImage');
 
-    if (deb) {
-      document.getElementById('dl-linux-deb').href = deb.browser_download_url;
-    }
-    if (appimage) {
-      document.getElementById('dl-linux-appimage').href = appimage.browser_download_url;
-    }
+    updateDownloadLinks();
 
     if (data.tag_name) {
       document.getElementById('latest-version').textContent = data.tag_name;
