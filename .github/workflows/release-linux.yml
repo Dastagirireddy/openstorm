@@ -12,9 +12,15 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Get tag name
+        id: meta
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Install Linux system dependencies
         run: |
@@ -84,8 +90,8 @@ jobs:
 
       - name: Create GitHub Release
         run: |
-          set -e
-          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${{ needs.build.outputs.tag }}"
+          echo "Creating release for tag: ${VERSION}"
 
           ASSETS=()
           while IFS= read -r -d '' f; do
@@ -104,11 +110,10 @@ jobs:
             exit 1
           fi
 
-          echo "Creating release ${VERSION}..."
           gh auth status
           gh release create "${VERSION}" \
             --title "OpenStorm ${VERSION}" \
-            --notes "Download the installer for your platform below. Auto-updates: This app checks for updates on startup." \
+            --notes "Download the installer for your platform below. Auto-updates enabled." \
             --draft \
             "${ASSETS[@]}"
         env:
