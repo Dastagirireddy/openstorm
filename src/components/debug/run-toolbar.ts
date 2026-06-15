@@ -342,6 +342,11 @@ export class RunToolbar extends TailwindElement() {
       this.requestUpdate();
     });
 
+    // Listen for restart-debug event from console panel
+    document.addEventListener("restart-debug", () => {
+      this.handleRestartDebug();
+    });
+
     // Listen for project-opened event
     document.addEventListener("project-opened", ((e: CustomEvent) => {
       const path = e.detail?.path;
@@ -508,6 +513,22 @@ export class RunToolbar extends TailwindElement() {
       await invoke("debug_action", { action: "terminate" });
     } catch (error) {
       console.error("Failed to stop debugging:", error);
+    }
+  };
+
+  private handleRestartDebug = async () => {
+    const config = this.configurations.find((c) => c.id === this.selectedConfigId);
+    if (!config || !this.projectPath) {
+      console.error("[DEBUG] Cannot restart: no config or project path");
+      return;
+    }
+    try {
+      console.log("[DEBUG] Restarting debug session...");
+      await invoke("debug_action", { action: "terminate" });
+      await invoke<number>("start_debug_session", { workspaceRoot: this.projectPath, config });
+      console.log("[DEBUG] Debug session restarted");
+    } catch (error) {
+      console.error("[DEBUG] Failed to restart debug session:", error);
     }
   };
 

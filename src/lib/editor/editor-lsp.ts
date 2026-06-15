@@ -128,17 +128,11 @@ export function showLspHoverTooltip(
         column
       );
 
-      // Log original LSP hover response to console
-      console.log('[LSP Hover] Raw hover response:', hover);
-      console.log('[LSP Hover] HTML from backend:', hover?.html);
-      console.log('[LSP Hover] Contents from backend:', hover?.contents);
-
       if (!hover) return;
 
       // Check if we have any content at all
       const hasContent = hover.html || hover.contents;
       if (!hasContent) {
-        console.log('[LSP Hover] No content returned from LSP server');
         return;
       }
 

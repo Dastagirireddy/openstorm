@@ -16,6 +16,7 @@ let debugPanelLoaded = false;
 let debugToolbarLoaded = false;
 let runToolbarLoaded = false;
 let templatePickerLoaded = false;
+let searchPanelLoaded = false;
 
 export async function loadTerminalPane(): Promise<void> {
   if (!terminalPaneLoaded) {
@@ -91,5 +92,12 @@ export async function loadTemplatePicker(): Promise<void> {
   if (!templatePickerLoaded) {
     await import("../../components/overlays/template-picker.js");
     templatePickerLoaded = true;
+  }
+}
+
+export async function loadSearchPanel(): Promise<void> {
+  if (!searchPanelLoaded) {
+    await import("../../components/panels/search-panel.js");
+    searchPanelLoaded = true;
   }
 }

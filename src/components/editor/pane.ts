@@ -1,5 +1,5 @@
 import { html } from 'lit';
-import { customElement, state, query } from 'lit/decorators.js';
+import { customElement, state, property, query } from 'lit/decorators.js';
 import { EditorView, drawSelection, dropCursor, highlightActiveLine, lineNumbers, highlightActiveLineGutter, keymap, ViewUpdate, Decoration } from '@codemirror/view';
 import { EditorState, EditorSelection, StateEffect } from '@codemirror/state';
 import { indentUnit } from '@codemirror/language';
@@ -63,6 +63,7 @@ import { notifyDocumentOpened as notifyDocOpened } from '../../lib/lsp/lsp-clien
 
 @customElement('editor-pane')
 export class EditorPane extends TailwindElement() {
+  @property({ type: String }) projectPath = '';
   @state() tabs: EditorTab[] = [];
   @state() activeTabId: string = '';
   @state() private isDebugging = false;
@@ -72,6 +73,9 @@ export class EditorPane extends TailwindElement() {
   // Track breakpoints per file path
   private breakpoints: Map<string, Breakpoint[]> = new Map();
   private nextBreakpointId = 1;
+
+  // Project path for breakpoint persistence
+  private _projectPath: string = '';
 
   // Hover tooltip debounce
   private _hoverTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -258,6 +262,19 @@ export class EditorPane extends TailwindElement() {
       console.error("[Editor] Failed to sync breakpoint:", error);
     }
 
+    // Save breakpoint to persistent storage
+    if (this._projectPath) {
+      try {
+        await invoke("save_breakpoint_to_storage", {
+          projectRoot: this._projectPath,
+          sourcePath: filePath,
+          breakpoint,
+        });
+      } catch (error) {
+        console.error("[Editor] Failed to persist breakpoint:", error);
+      }
+    }
+
     // Also dispatch event for debug panel (if visible)
     dispatch('breakpoint-added', breakpoint);
   }
@@ -287,6 +304,15 @@ export class EditorPane extends TailwindElement() {
         lines: [],
       }).catch(err => console.error("[Editor] Failed to remove breakpoint from backend:", err));
     });
+
+    // Remove from persistent storage
+    if (this._projectPath) {
+      invoke("remove_breakpoint_from_storage", {
+        projectRoot: this._projectPath,
+        sourcePath: filePath,
+        line: breakpoint.line,
+      }).catch(err => console.error("[Editor] Failed to remove breakpoint from storage:", err));
+    }
 
     // Dispatch event for debug panel
     dispatch('breakpoint-removed', { id: breakpoint.id });
@@ -713,6 +739,10 @@ export class EditorPane extends TailwindElement() {
     // Check if editorView's DOM element is still in the document
     const editorViewInDom = this.editorView && document.contains(this.editorView.dom);
 
+    // Get breakpoints for the current file
+    const fileBreakpoints = this.breakpoints.get(activeTab.path) || [];
+    const breakpointLines = fileBreakpoints.filter(bp => bp.enabled).map(bp => bp.line);
+
     if (!this.editorView || !editorViewInDom) {
       // Editor doesn't exist or its DOM was removed - create new editor
       if (this.editorView && !editorViewInDom) {
@@ -743,6 +773,13 @@ export class EditorPane extends TailwindElement() {
       this._currentTabId = activeTab.id;
       // Store initial content as "saved" state
       this._savedContent.set(activeTab.path, activeTab.content);
+
+      // Apply breakpoints for this file
+      if (breakpointLines.length > 0) {
+        this.editorView.dispatch({
+          effects: setBreakpointsEffect.of(breakpointLines),
+        });
+      }
     } else {
       // Editor exists - check if language or tab changed
       const languageChanged = newLanguageKey !== this._currentLanguage;
@@ -779,6 +816,13 @@ export class EditorPane extends TailwindElement() {
 
         // Dispatch cursor position immediately after tab switch
         dispatch('cursor-position', { line: storedLine, column: storedCol });
+
+        // Apply breakpoints for this file
+        if (breakpointLines.length > 0) {
+          this.editorView.dispatch({
+            effects: setBreakpointsEffect.of(breakpointLines),
+          });
+        }
       }
     }
   }
@@ -881,6 +925,13 @@ export class EditorPane extends TailwindElement() {
     );
   }
 
+  updated(changedProperties: Map<string, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('projectPath') && this.projectPath) {
+      this._projectPath = this.projectPath;
+    }
+  }
+
   connectedCallback(): void {
     super.connectedCallback();
     // Listen for save events to update saved content
@@ -902,6 +953,9 @@ export class EditorPane extends TailwindElement() {
 
     // Listen for theme changes
     document.addEventListener('theme-changed', this._themeChangeHandler);
+
+    // Listen for project opened to load persisted breakpoints
+    document.addEventListener('project-opened', this._handleProjectOpened.bind(this));
   }
 
   private _handleThemeChanged(): void {
@@ -1001,6 +1055,66 @@ export class EditorPane extends TailwindElement() {
       });
     }
     console.log('[Editor] Debug session ended');
+  }
+
+  private async _handleProjectOpened(event: Event): Promise<void> {
+    const customEvent = event as CustomEvent<{ path: string }>;
+    const projectPath = customEvent.detail?.path;
+    if (!projectPath) return;
+
+    this._projectPath = projectPath;
+    console.log('[Editor] Project opened, loading persisted breakpoints for:', projectPath);
+
+    try {
+      const persistedBreakpoints = await invoke<Breakpoint[]>("load_project_breakpoints", {
+        projectRoot: projectPath,
+      });
+
+      if (persistedBreakpoints.length > 0) {
+        console.log('[Editor] Loaded', persistedBreakpoints.length, 'persisted breakpoints');
+
+        // Group breakpoints by source path
+        const byPath = new Map<string, Breakpoint[]>();
+        for (const bp of persistedBreakpoints) {
+          const path = bp.sourcePath;
+          if (!byPath.has(path)) {
+            byPath.set(path, []);
+          }
+          byPath.get(path)!.push(bp);
+        }
+
+        // Add each breakpoint to local state and editor
+        for (const [path, fileBreakpoints] of byPath) {
+          // Update nextBreakpointId to avoid conflicts
+          for (const bp of fileBreakpoints) {
+            if (bp.id >= this.nextBreakpointId) {
+              this.nextBreakpointId = bp.id + 1;
+            }
+          }
+
+          // Store in local state
+          this.breakpoints.set(path, fileBreakpoints);
+
+          // If this file is currently open, update the editor state
+          if (this.editorView) {
+            const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+            if (activeTab && activeTab.path === path) {
+              const lines = fileBreakpoints.filter(bp => bp.enabled).map(bp => bp.line);
+              this.editorView.dispatch({
+                effects: setBreakpointsEffect.of(lines),
+              });
+            }
+          }
+
+          // Dispatch events for debug panel
+          for (const bp of fileBreakpoints) {
+            dispatch('breakpoint-added', bp);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[Editor] Failed to load persisted breakpoints:', error);
+    }
   }
 
   private _handleDebugPanelRequestBreakpoints(): void {

@@ -55,6 +55,9 @@ export class TextViewer extends TailwindElement() {
   @property({ type: String })
   content = '';
 
+  @property({ type: String })
+  projectPath = '';
+
   @state()
   private isDirty = false;
 
@@ -79,10 +82,22 @@ export class TextViewer extends TailwindElement() {
 
   // Event listeners
   private _boundHandleThemeChange = this.handleThemeChange.bind(this);
+  private _boundHandleExternalBreakpointRemoved = this._handleExternalBreakpointRemoved.bind(this);
+  private _boundHandleDebugSessionStarted = this._loadPersistedBreakpoints.bind(this);
+  private _isHandlingExternalRemoval = false;
 
   connectedCallback(): void {
     super.connectedCallback();
     document.addEventListener('theme-changed', this._boundHandleThemeChange);
+    document.addEventListener('breakpoint-removed', this._boundHandleExternalBreakpointRemoved);
+    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+  }
+
+  updated(changedProperties: Map<string, unknown>): void {
+    super.updated(changedProperties);
+    if (changedProperties.has('projectPath') && this.projectPath && this.filePath) {
+      this._loadPersistedBreakpoints();
+    }
   }
 
   disconnectedCallback(): void {
@@ -92,6 +107,20 @@ export class TextViewer extends TailwindElement() {
       this.editorView = null;
     }
     document.removeEventListener('theme-changed', this._boundHandleThemeChange);
+    document.removeEventListener('breakpoint-removed', this._boundHandleExternalBreakpointRemoved);
+    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+  }
+
+  private _handleExternalBreakpointRemoved(e: Event): void {
+    const detail = (e as CustomEvent).detail;
+    if (!detail?.id) return;
+    const fileBreakpoints = this.breakpoints.get(this.filePath) || [];
+    const bp = fileBreakpoints.find(b => b.id === detail.id);
+    if (bp) {
+      this._isHandlingExternalRemoval = true;
+      this.removeBreakpoint(bp);
+      this._isHandlingExternalRemoval = false;
+    }
   }
 
   async loadFile(path: string, content: string): Promise<void> {
@@ -158,6 +187,35 @@ export class TextViewer extends TailwindElement() {
 
     // Notify LSP of document open
     await this.notifyDocumentOpen(content);
+
+    // Load persisted breakpoints for this file
+    this._loadPersistedBreakpoints();
+  }
+
+  private async _loadPersistedBreakpoints(): Promise<void> {
+    if (!this.projectPath) return;
+    try {
+      const allBreakpoints = await invoke<any[]>('load_project_breakpoints', {
+        projectRoot: this.projectPath,
+      });
+      const fileBreakpoints: Breakpoint[] = allBreakpoints
+        .filter((bp: any) => bp.source_path === this.filePath || bp.sourcePath === this.filePath)
+        .map((bp: any) => ({
+          id: bp.id,
+          sourcePath: bp.source_path || bp.sourcePath,
+          line: bp.line,
+          enabled: bp.enabled,
+          verified: bp.verified,
+          condition: bp.condition ?? undefined,
+          hitCondition: bp.hit_condition ?? bp.hitCondition ?? undefined,
+          logMessage: bp.log_message ?? bp.logMessage ?? undefined,
+        }));
+      if (fileBreakpoints.length > 0) {
+        this.setBreakpointsForFile(fileBreakpoints);
+      }
+    } catch (error) {
+      console.error('[TextViewer] Failed to load persisted breakpoints:', error);
+    }
   }
 
   async saveFile(): Promise<string> {
@@ -393,15 +451,26 @@ export class TextViewer extends TailwindElement() {
       console.error('[TextViewer] Failed to sync breakpoint:', error);
     }
 
+    // Save breakpoint to persistent storage
+    if (this.projectPath) {
+      try {
+        await invoke('save_breakpoint_to_storage', {
+          projectRoot: this.projectPath,
+          sourcePath: this.filePath,
+          breakpoint,
+        });
+      } catch (error) {
+        console.error('[TextViewer] Failed to persist breakpoint:', error);
+      }
+    }
+
     dispatch('breakpoint-added', breakpoint);
   }
 
   private removeBreakpoint(breakpoint: Breakpoint): void {
     const fileBreakpoints = this.breakpoints.get(this.filePath) || [];
-    this.breakpoints.set(
-      this.filePath,
-      fileBreakpoints.filter(bp => bp.id !== breakpoint.id),
-    );
+    const remaining = fileBreakpoints.filter(bp => bp.id !== breakpoint.id);
+    this.breakpoints.set(this.filePath, remaining);
 
     if (this.editorView) {
       this.editorView.dispatch({
@@ -409,13 +478,36 @@ export class TextViewer extends TailwindElement() {
       });
     }
 
-    // Sync to backend
-    invoke('remove_breakpoint', {
+    // Sync remaining breakpoints to backend
+    const remainingBps = remaining.map(bp => ({
+      id: bp.id,
       sourcePath: this.filePath,
-      lines: [],
-    }).catch(err => console.error('[TextViewer] Failed to remove breakpoint:', err));
+      line: bp.line,
+      enabled: bp.enabled,
+      verified: bp.verified,
+      condition: bp.condition ?? null,
+      hitCondition: bp.hitCondition ?? null,
+      logMessage: bp.logMessage ?? null,
+    }));
+    invoke('set_breakpoints_for_file', {
+      request: {
+        source_path: this.filePath,
+        breakpoints: remainingBps,
+      },
+    }).catch(err => console.error('[TextViewer] Failed to sync breakpoints:', err));
 
-    dispatch('breakpoint-removed', { id: breakpoint.id });
+    // Remove from persistent storage
+    if (this.projectPath) {
+      invoke('remove_breakpoint_from_storage', {
+        projectRoot: this.projectPath,
+        sourcePath: this.filePath,
+        line: breakpoint.line,
+      }).catch(err => console.error('[TextViewer] Failed to remove persisted breakpoint:', err));
+    }
+
+    if (!this._isHandlingExternalRemoval) {
+      dispatch('breakpoint-removed', { id: breakpoint.id });
+    }
   }
 
   private async fetchInlineValues(): Promise<void> {

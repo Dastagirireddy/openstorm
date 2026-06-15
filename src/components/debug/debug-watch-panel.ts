@@ -7,6 +7,7 @@ import { html } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { TailwindElement } from "../../tailwind-element.js";
+import { getValueClass, copyToClipboard } from "../../lib/debug/debug-utils.js";
 
 export interface WatchExpression {
   id: number;
@@ -56,7 +57,7 @@ export class DebugWatchPanel extends TailwindElement() {
 
     const expression = input.value.trim();
     try {
-      const id = await invoke<number>("add_watch_expression", { expression });
+      await invoke<number>("add_watch_expression", { expression });
       input.value = '';
       await this.refresh();
     } catch (error) {
@@ -88,86 +89,61 @@ export class DebugWatchPanel extends TailwindElement() {
     }
   };
 
-  private async copyToClipboard(text: string, message: string = "Copied!") {
-    try {
-      await navigator.clipboard.writeText(text);
-      this.showToast(message);
-    } catch (error) {
-      console.error("Failed to copy:", error);
-    }
-  }
-
-  private showToast(message: string) {
-    const toast = document.createElement('div');
-    toast.className = 'fixed bottom-5 right-5 px-3 py-2 bg-gray-800 text-white text-xs rounded shadow-lg z-50';
-    toast.textContent = message;
-    document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2000);
-  }
-
-  private getValueClass(value: string, type?: string): string {
-    if (value === 'null' || value === 'undefined') return 'text-gray-500 italic';
-    if (type === 'string' || (value.startsWith('"') && value.endsWith('"'))) return 'text-green-700';
-    if (type === 'number' || (!isNaN(Number(value)) && value.trim() !== '')) return 'text-blue-600';
-    if (type === 'boolean' || value === 'true' || value === 'false') return 'text-indigo-700';
-    return 'text-amber-800';
-  }
-
   render() {
     if (!this.isDebugging) {
       return html`
-        <div class="flex flex-col items-center justify-center h-28 text-gray-500 gap-3">
-          <iconify-icon class="text-4xl opacity-50" icon="mdi:eye-outline"></iconify-icon>
-          <span class="text-xs font-sans">Start debugging to watch expressions</span>
+        <div class="flex flex-col items-center justify-center py-6 gap-2" style="color: var(--app-disabled-foreground);">
+          <iconify-icon class="text-2xl opacity-30" icon="mdi:eye-outline"></iconify-icon>
+          <span class="text-[11px]">Start debugging to watch expressions</span>
         </div>
       `;
     }
 
     return html`
-      <div class="flex items-center justify-between px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider bg-gray-50 border-b border-gray-200">
-        <span>Watch</span>
-        <div class="flex gap-0.5">
-          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-110" @click=${() => this.refresh()} title="Refresh">
-            <iconify-icon icon="mdi:refresh" width="14"></iconify-icon>
-          </button>
-          <button class="w-5 h-5 flex items-center justify-center border-none rounded bg-transparent text-gray-500 cursor-pointer transition-all hover:bg-gray-200 hover:text-gray-900 hover:scale-110" @click=${() => this.clearWatches()} title="Remove All">
-            <iconify-icon icon="mdi:delete-sweep" width="14"></iconify-icon>
-          </button>
-        </div>
-      </div>
-      <div class="flex items-center gap-1.5 px-3 py-1.5 border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
+      <!-- Add expression input -->
+      <div class="flex items-center gap-1.5 px-3 py-1 border-b" style="background-color: var(--app-tab-inactive); border-color: var(--app-border);">
         <input type="text"
-               class="flex-1 px-2 py-0.5 text-xs font-mono border rounded outline-none focus:border-[var(--brand-primary)] focus:ring-1 focus:ring-[var(--brand-primary)]"
+               class="flex-1 px-2 py-0.5 text-xs font-mono border rounded outline-none focus:ring-1 focus:ring-[var(--brand-primary)]"
                style="background-color: var(--app-input-background); color: var(--app-input-foreground); border-color: var(--app-border);"
                placeholder="Add expression..."
                @keydown=${this.handleWatchInputKeydown}
                id="watch-input"/>
-        <button class="px-2.5 py-1 text-xs font-medium border-none rounded bg-[var(--brand-primary)] text-white cursor-pointer transition-all hover:bg-[var(--brand-primary-hover)] hover:scale-105 active:scale-95" @click=${() => this.addWatchExpression()}>
+        <button class="px-2 py-0.5 text-xs font-medium border-none rounded cursor-pointer transition-all hover:scale-105 active:scale-95"
+                style="background-color: var(--brand-primary); color: var(--app-button-foreground);"
+                @click=${() => this.addWatchExpression()}>
           <iconify-icon icon="mdi:plus" width="14"></iconify-icon>
         </button>
       </div>
+      <!-- Content -->
       <div>
         ${this.watches.length === 0
           ? html`
-              <div class="flex flex-col items-center justify-center min-h-[60px] px-3 py-2 text-xs font-sans" style="color: var(--app-disabled-foreground);">
+              <div class="flex flex-col items-center justify-center min-h-[48px] px-3 py-2 text-xs" style="color: var(--app-disabled-foreground);">
                 No watch expressions
               </div>
             `
           : this.watches.map((watch) => html`
-              <div class="flex items-start px-3 py-1 cursor-pointer font-mono text-xs border-b hover:bg-gray-100 ${watch.error ? 'text-red-600' : ''}" style="border-color: var(--app-border);">
+              <div class="flex items-start px-3 py-1 cursor-pointer font-mono text-xs border-b hover:bg-[var(--app-toolbar-hover)] ${watch.error ? 'text-red-600' : ''}"
+                   style="border-color: var(--app-border);">
                 <span class="mr-2 whitespace-nowrap" style="color: var(--app-foreground);">${watch.expression}</span>
                 <span class="mr-2" style="color: var(--app-disabled-foreground);">:</span>
-                <span class="${this.getValueClass(watch.value || '', watch.type)} flex-1 min-w-0 break-all">
+                <span class="${getValueClass(watch.value || '', watch.type)} flex-1 min-w-0 break-all">
                   ${watch.error ? '⚠ ' : ''}${watch.value || '〈not available〉'}
                 </span>
-                ${watch.type ? html`<span class="text-[10px] ml-2 whitespace-nowrap font-sans" style="color: var(--app-disabled-foreground);">${watch.type}</span>` : ''}
+                ${watch.type ? html`<span class="text-[10px] ml-2 whitespace-nowrap opacity-70" style="color: var(--app-disabled-foreground);">${watch.type}</span>` : ''}
                 <div class="hidden items-center gap-0.5 ml-2 hover:flex">
-                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
-                          @click=${() => this.copyToClipboard(watch.value || '', "Value copied")}
+                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115"
+                          style="color: var(--app-disabled-foreground);"
+                          @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                          @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
+                          @click=${() => copyToClipboard(watch.value || '')}
                           title="Copy value">
                     <iconify-icon icon="mdi:content-copy" width="12"></iconify-icon>
                   </button>
-                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115" style="color: var(--app-disabled-foreground);" @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }} @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
+                  <button class="w-4 h-4 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-all hover:scale-115"
+                          style="color: var(--app-disabled-foreground);"
+                          @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
+                          @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
                           @click=${() => this.removeWatch(watch.id)}
                           title="Remove">
                     <iconify-icon icon="mdi:close" width="12"></iconify-icon>

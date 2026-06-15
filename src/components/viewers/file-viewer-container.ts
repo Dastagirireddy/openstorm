@@ -38,6 +38,8 @@ export class FileViewerContainer extends TailwindElement() {
   @state() private toolbarActions: ViewerAction[] = [];
   @state() private queryEditorInfo: QueryEditorTabInfo | null = null;
 
+  private _isSaving = false;
+
   // Viewer-specific state for text editor compatibility
   @state() private breakpoints: Map<string, any[]> = new Map();
   @state() private debugLine: number | null = null;
@@ -119,6 +121,11 @@ export class FileViewerContainer extends TailwindElement() {
   }
 
   private handleContentChanged(e: CustomEvent<{ path: string; content: string; isModified?: boolean }>): void {
+    const { path, content } = e.detail;
+    // Keep internal content in sync so updated() doesn't unnecessarily re-open the file
+    if (path === this.filePath) {
+      this.content = content;
+    }
     // Re-dispatch the event from this element so parent components can listen to it
     this.dispatchEvent(new CustomEvent('content-changed', {
       detail: e.detail,
@@ -201,8 +208,10 @@ export class FileViewerContainer extends TailwindElement() {
           this.viewerTag = 'database-query-editor';
           this.filePath = tab.id;
         } else if (this.filePath === tab.path) {
-          // Same file is still active, but tabs changed - refresh content
-          this.openFile(tab.path, tab.content);
+          // Same file is still active, but tabs changed - only refresh if content actually changed
+          if (tab.content !== this.content) {
+            this.openFile(tab.path, tab.content);
+          }
         }
       }
     }
@@ -230,6 +239,7 @@ export class FileViewerContainer extends TailwindElement() {
   }
 
   private handleSaveFile(): void {
+    if (this._isSaving) return;
     this.saveFile();
   }
 
@@ -371,18 +381,23 @@ export class FileViewerContainer extends TailwindElement() {
    * Save the current file
    */
   async saveFile(): Promise<void> {
+    if (this._isSaving) return;
+
     const viewer = this.renderRoot.querySelector(this.viewerTag || 'div') as any;
     if (!viewer?.saveFile) {
       console.warn('[FileViewerContainer] Viewer does not support saving');
       return;
     }
 
+    this._isSaving = true;
     try {
       const newContent = await viewer.saveFile();
       this.content = newContent;
       dispatch('file-saved', { path: this.filePath, content: newContent });
     } catch (error) {
       console.error('[FileViewerContainer] Save failed:', error);
+    } finally {
+      this._isSaving = false;
     }
   }
 
@@ -475,7 +490,7 @@ export class FileViewerContainer extends TailwindElement() {
                 .tableName=${this.queryEditorInfo.tableName}
               ></database-query-editor>`
             : this.viewerTag === 'text-viewer'
-              ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} class="h-full"></text-viewer>`
+              ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} .projectPath=${this.projectPath} class="h-full"></text-viewer>`
               : this.viewerTag === 'image-viewer'
                 ? html`<image-viewer key=${this.filePath} .filePath=${this.filePath} class="h-full"></image-viewer>`
                 : this.viewerTag === 'svg-viewer'

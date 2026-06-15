@@ -16,6 +16,7 @@ pub struct DapClient {
     adapter: Option<Box<dyn DebugAdapter>>,
     session: Option<DebugSession>,
     next_session_id: u32,
+    current_thread_id: Option<i64>,
     watch_manager: WatchManager,
 }
 
@@ -25,6 +26,7 @@ impl DapClient {
             adapter: None,
             session: None,
             next_session_id: 1,
+            current_thread_id: None,
             watch_manager: WatchManager::new(),
         }
     }
@@ -112,78 +114,56 @@ impl DapClient {
     }
 
     pub fn continue_execution(&mut self) -> Result<(), String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        let threads = adapter.threads()?;
-        if let Some(thread) = threads.first() {
-            adapter.continue_execution(thread.id)?;
-            if let Some(session) = &mut self.session {
-                session.state = DebugSessionState::Running;
-            }
+        adapter.continue_execution(thread_id)?;
+        if let Some(session) = &mut self.session {
+            session.state = DebugSessionState::Running;
         }
         Ok(())
     }
 
     pub fn step_over(&mut self) -> Result<(), String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        let threads = adapter.threads()?;
-        if let Some(thread) = threads.first() {
-            adapter.step_over(thread.id)?;
-        }
+        adapter.step_over(thread_id)?;
         Ok(())
     }
 
     pub fn step_into(&mut self) -> Result<(), String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        let threads = adapter.threads()?;
-        if let Some(thread) = threads.first() {
-            adapter.step_into(thread.id)?;
-        }
+        adapter.step_into(thread_id)?;
         Ok(())
     }
 
     pub fn step_out(&mut self) -> Result<(), String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        let threads = adapter.threads()?;
-        if let Some(thread) = threads.first() {
-            adapter.step_out(thread.id)?;
-        }
+        adapter.step_out(thread_id)?;
         Ok(())
     }
 
     pub fn pause(&mut self) -> Result<(), String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        let threads = adapter.threads()?;
-        if let Some(thread) = threads.first() {
-            adapter.pause(thread.id)?;
-        }
+        adapter.pause(thread_id)?;
         Ok(())
     }
 
     pub fn stack_trace(&mut self) -> Result<Vec<StackFrame>, String> {
+        let thread_id = self.get_thread_id()?;
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
-
-        println!("[DAP] Getting threads for stack trace...");
-        let threads = adapter.threads()?;
-        println!("[DAP] Got {} threads", threads.len());
-        if let Some(thread) = threads.first() {
-            println!("[DAP] Getting stack trace for thread {}", thread.id);
-            let result = adapter.stack_trace(thread.id);
-            println!("[DAP] Stack trace result: {} frames", result.as_ref().map(|v| v.len()).unwrap_or(0));
-            return result;
-        }
-        println!("[DAP] No threads available");
-        Ok(Vec::new())
+        println!("[DAP] Getting stack trace for thread {}", thread_id);
+        let result = adapter.stack_trace(thread_id);
+        println!("[DAP] Stack trace result: {} frames", result.as_ref().map(|v| v.len()).unwrap_or(0));
+        result
     }
 
     pub fn scopes(&mut self, frame_id: i64) -> Result<Vec<Scope>, String> {
@@ -229,6 +209,19 @@ impl DapClient {
         }
     }
 
+    /// Get thread_id, using cached value or falling back to adapter.threads()
+    fn get_thread_id(&mut self) -> Result<i64, String> {
+        if let Some(thread_id) = self.current_thread_id {
+            return Ok(thread_id);
+        }
+        let adapter = self.adapter.as_mut()
+            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let threads = adapter.threads()?;
+        threads.first()
+            .map(|t| t.id)
+            .ok_or_else(|| "No threads available".to_string())
+    }
+
     fn update_state_from_event(&mut self, event: &DapEvent) {
         if let Some(session) = &mut self.session {
             match event.event.as_str() {
@@ -245,6 +238,12 @@ impl DapClient {
                         "entry" => StoppedReason::Entry,
                         _ => StoppedReason::Breakpoint,
                     });
+                    // Cache thread_id from stopped event (DAP spec: threadId is required)
+                    if let Some(body) = &event.body {
+                        if let Some(thread_id) = body.get("threadId").and_then(|t| t.as_i64()) {
+                            self.current_thread_id = Some(thread_id);
+                        }
+                    }
                 }
                 "continued" => {
                     session.state = DebugSessionState::Running;
@@ -286,6 +285,7 @@ impl DapClient {
     pub fn clear_session(&mut self) {
         self.session = None;
         self.adapter = None;
+        self.current_thread_id = None;
     }
 
     // Watch expression methods

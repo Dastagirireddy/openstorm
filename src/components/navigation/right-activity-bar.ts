@@ -36,14 +36,8 @@ export class RightActivityBar extends TailwindElement() {
 
     return html`
       <div
-        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-r-2 transition-colors relative group"
+        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-r-2 transition-colors duration-150 group hover:bg-[var(--activitybar-active-background)]"
         style="border-right-color: transparent; background-color: ${isActive ? 'var(--activitybar-active-background)' : 'transparent'};"
-        @mouseenter=${(e: Event) => {
-          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--activitybar-active-background)';
-        }}
-        @mouseleave=${(e: Event) => {
-          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'transparent';
-        }}
         @click=${() => this.setActive(item.id)}
         title="${item.label}">
         <div class="rotate-90" style="color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'}; display: flex; align-items: center; justify-content: center;">

@@ -57,14 +57,8 @@ export class ActivityBar extends TailwindElement() {
 
     return html`
       <div
-        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-l-2 transition-colors relative group"
+        class="gap-1 py-2 flex flex-col items-center justify-center cursor-pointer border-l-2 transition-colors duration-150 group hover:bg-[var(--activitybar-active-background)]"
         style="border-left-color: transparent; background-color: ${isActive ? 'var(--activitybar-active-background)' : 'transparent'};"
-        @mouseenter=${(e: Event) => {
-          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--activitybar-active-background)';
-        }}
-        @mouseleave=${(e: Event) => {
-          if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'transparent';
-        }}
         @click=${() => this.setActive(item.id)}
         title="${item.label}">
         <span
@@ -84,10 +78,8 @@ export class ActivityBar extends TailwindElement() {
 
     return html`
       <div
-        class="gap-1 flex flex-col items-center justify-center py-2 cursor-pointer border-l-2 transition-colors"
+        class="gap-1 flex flex-col items-center justify-center py-2 cursor-pointer border-l-2 transition-colors duration-150 hover:bg-[var(--activitybar-active-background)]"
         style="border-left-color: transparent;"
-        @mouseenter=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--activitybar-active-background)'}
-        @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'transparent'}
         @click=${() => this.setActive('settings')}
         title="Settings">
         <span

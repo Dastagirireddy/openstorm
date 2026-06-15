@@ -399,7 +399,7 @@ export class DebugToolbar extends TailwindElement() {
 
       <button
         class="debug-action step"
-        @click=${() => this.sendAction("step_over")}
+        @click=${() => this.sendAction("stepover")}
         ?disabled=${!this.isDebugging}
         title="Step Over (F10)">
         <iconify-icon icon="mdi:debug-step-over" width="16"></iconify-icon>
@@ -407,7 +407,7 @@ export class DebugToolbar extends TailwindElement() {
 
       <button
         class="debug-action step"
-        @click=${() => this.sendAction("step_into")}
+        @click=${() => this.sendAction("stepinto")}
         ?disabled=${!this.isDebugging}
         title="Step Into (F11)">
         <iconify-icon icon="mdi:debug-step-into" width="16"></iconify-icon>
@@ -415,7 +415,7 @@ export class DebugToolbar extends TailwindElement() {
 
       <button
         class="debug-action step"
-        @click=${() => this.sendAction("step_out")}
+        @click=${() => this.sendAction("stepout")}
         ?disabled=${!this.isDebugging}
         title="Step Out (Shift+F11)">
         <iconify-icon icon="mdi:debug-step-out" width="16"></iconify-icon>

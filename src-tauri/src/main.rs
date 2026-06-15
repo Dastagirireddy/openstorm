@@ -7,6 +7,7 @@ pub mod dap_installer;
 mod database;
 mod file_watcher;
 mod git;
+pub mod log;
 mod lsp;
 mod lsp_installer;
 mod process;
@@ -27,6 +28,7 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
         let rt = tokio::runtime::Runtime::new().unwrap();
         println!("[DAP event_poller] Runtime created, starting loop...");
         rt.block_on(async move {
+            let mut last_state: Option<String> = None;
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
@@ -35,21 +37,12 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
 
                 let mut client = match dap_client.try_lock() {
                     Ok(c) => c,
-                    Err(e) => {
-                        println!("[DAP event_poller] Failed to lock client: {}", e);
-                        continue;
-                    }
+                    Err(_) => continue,
                 };
 
                 let events = client.poll_events();
 
-                // Check if session exists and log its state
-                if let Some(session) = client.get_session() {
-                    println!("[DAP event_poller] Session {} state: {:?}", session.id, session.state);
-                }
-
                 // Check if session is in Terminated state (set by terminate_session)
-                // This handles cases where the adapter doesn't send a 'terminated' event
                 let session_terminated = client.get_session()
                     .map(|s| matches!(s.state, dap::DebugSessionState::Terminated))
                     .unwrap_or(false);
@@ -57,15 +50,27 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                 if session_terminated {
                     println!("[DAP event_poller] Session is terminated, clearing and emitting event");
                     client.clear_session();
-                    match app_handle.emit("debug-session-ended", ()) {
-                        Ok(_) => println!("[DAP event_poller] Successfully emitted debug-session-ended"),
-                        Err(e) => println!("[DAP event_poller] Failed to emit debug-session-ended: {}", e),
-                    }
-                    continue; // Skip event processing for this iteration
+                    let _ = app_handle.emit("debug-session-ended", ());
+                    last_state = None;
+                    continue;
                 }
 
-                for event in events {
-                    // Log all events for debugging
+                // Only log state on change
+                if let Some(session) = client.get_session() {
+                    let state_str = format!("{:?}", session.state);
+                    if last_state.as_ref() != Some(&state_str) {
+                        println!("[DAP event_poller] Session {} state: {:?}", session.id, session.state);
+                        last_state = Some(state_str);
+                    }
+                } else {
+                    last_state = None;
+                }
+
+                if events.is_empty() {
+                    continue;
+                }
+
+                for event in &events {
                     if event.event == "output" {
                         let category = event.body.as_ref().and_then(|b| b.get("category")).and_then(|c| c.as_str()).unwrap_or("unknown");
                         if category != "telemetry" {
@@ -94,17 +99,17 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                         },
                         "continued" => "debug-continued",
                         "terminated" => {
-                            // Clear session state before emitting event to frontend
                             client.clear_session();
                             let _ = app_handle.emit("debug-session-ended", ());
                             println!("[DAP] Emitted debug-session-ended for terminated, session cleared");
+                            last_state = None;
                             "debug-terminated"
                         },
                         "exited" => {
-                            // Clear session state before emitting event to frontend
                             client.clear_session();
                             let _ = app_handle.emit("debug-session-ended", ());
                             println!("[DAP] Emitted debug-session-ended for exited, session cleared");
+                            last_state = None;
                             "debug-exited"
                         },
                         "output" => "debug-output",
@@ -113,19 +118,12 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
 
                     let emit_body = event.body.clone().unwrap_or(serde_json::json!({}));
 
-                    let emit_result = app_handle.emit(
-                        event_name,
-                        emit_body,
-                    );
-                    if let Err(e) = emit_result {
+                    if let Err(e) = app_handle.emit(event_name, emit_body) {
                         println!("[DAP] Failed to emit event {}: {}", event.event, e);
                     } else {
                         println!("[DAP] Emitted event to frontend: {}", event_name);
                     }
                 }
-
-                // Note: Session state changes are already emitted via DAP events from poll_events()
-                // No need to check session.state here as it would cause duplicate event emissions
             }
         });
     });
@@ -177,12 +175,13 @@ fn main() {
         .manage(database::DatabaseManager::new())
         .setup(|app| {
             let handle = app.handle().clone();
-            println!("OpenStorm IDE starting up...");
+            log::init(handle.clone());
+            log_info!("OpenStorm IDE starting up...");
 
             // Check if git is installed
             let git_available = git::check_git_installed();
             if !git_available {
-                println!("[Git] Git binary not found in PATH");
+                log_warn!("Git binary not found in PATH");
                 // Emit event to notify frontend
                 handle.emit("git-not-found", ()).ok();
             }
@@ -190,7 +189,7 @@ fn main() {
             // Initialize configuration and create directories
             let config = config::AppConfig::new();
             if let Err(e) = config.create_directories() {
-                eprintln!("Failed to create configuration directories: {}", e);
+                log_error!("Failed to create configuration directories: {}", e);
             }
 
             // Create native menu bar
@@ -358,7 +357,7 @@ fn main() {
         })
         .on_menu_event(|app, event| {
             // Handle menu item clicks
-            println!("[Menu] Event: {}", event.id.0);
+            log_debug!("[Menu] Event: {}", event.id.0);
             // Forward menu events to frontend via custom events
             app.emit("menu-item-clicked", event.id.0.to_string()).ok();
         })
@@ -397,6 +396,10 @@ fn main() {
             commands::debug::add_breakpoint,
             commands::debug::remove_breakpoint,
             commands::debug::set_breakpoints_for_file,
+            commands::debug::load_project_breakpoints,
+            commands::debug::save_breakpoint_to_storage,
+            commands::debug::remove_breakpoint_from_storage,
+            commands::debug::remove_all_breakpoints_from_storage,
             commands::adapter::get_debug_adapter_info,
             commands::adapter::install_debug_adapter,
             commands::watch::add_watch_expression,
@@ -509,7 +512,7 @@ fn main() {
                     match event {
                         tauri::WindowEvent::CloseRequested { api, .. } => {
                             // Save state before closing
-                            println!("Window closing, saving state...");
+                            log_info!("Window closing, saving state...");
                             api.prevent_close();
                         }
                         _ => {}

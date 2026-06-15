@@ -102,13 +102,7 @@ export class AppHeader extends TailwindElement() {
 
     return html`
       <button
-        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        @mouseenter=${(e: Event) => {
-          if (!disabled) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)';
-        }}
-        @mouseleave=${(e: Event) => {
-          (e.target as HTMLElement).style.backgroundColor = 'transparent';
-        }}
+        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--app-toolbar-hover)]"
         title="${action.title}"
         data-action="${action.id}"
         ?disabled=${disabled}

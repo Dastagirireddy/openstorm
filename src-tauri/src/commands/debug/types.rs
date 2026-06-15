@@ -37,6 +37,7 @@ pub struct AddBreakpointRequest {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct BreakpointInfo {
     pub id: u32,
     pub source_path: String,

@@ -17,6 +17,7 @@ import {
   loadDebugPanel,
   loadDebugToolbar,
   loadRunToolbar,
+  loadSearchPanel,
 } from "./lib/utils/lazy-loader.js";
 import "./components/dialogs/database-connection-picker.js";
 
@@ -102,6 +103,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private activeFilePath = '';
   @state() private debugSidebarVisible = false;
   @state() private isDebugging = false;
+  @state() private debugSessionState: "stopped" | "running" | "terminated" = "terminated";
   @state() private debugPanelHeight = 250;
   @state() private appConsoleVisible = false;
   @state() private appConsoleHeight = 200;
@@ -118,6 +120,8 @@ export class OpenStormApp extends TailwindElement() {
   @state() private showConsoleNotification = false;
 
   private _boundHandleOpenQueryEditor!: (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => void;
+  private debugOutputBuffer: Array<{ category: string; output: string }> = [];
+  private consoleOutputSubscribed = false;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -131,6 +135,8 @@ export class OpenStormApp extends TailwindElement() {
     this.setupDatabaseMenuHandlers();
     // Listen for open-query-editor events
     document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
+    // Pre-load app console panel on startup
+    loadAppConsolePanel();
   }
 
   private setupQuickSearchHandler(): void {
@@ -180,6 +186,11 @@ export class OpenStormApp extends TailwindElement() {
     // Pre-load settings panel
     if (changedProperties.has("activeActivity") && this.activeActivity === "settings") {
       loadSettingsPanel();
+    }
+
+    // Pre-load search panel
+    if (changedProperties.has("activeActivity") && this.activeActivity === "search") {
+      loadSearchPanel();
     }
 
     // Pre-load git panel
@@ -237,7 +248,9 @@ export class OpenStormApp extends TailwindElement() {
           dispatch("open-file-dialog");
           break;
         case "save":
-          dispatch("save-file");
+          if (this.tabs.length > 0) {
+            dispatch("save-file");
+          }
           break;
         case "find":
           dispatch("quick-search");
@@ -253,6 +266,21 @@ export class OpenStormApp extends TailwindElement() {
           break;
         case "refresh-connections":
           dispatch("refresh-database-connections");
+          break;
+        case "step-over":
+          invoke("debug_action", { action: "stepover" });
+          break;
+        case "step-into":
+          invoke("debug_action", { action: "stepinto" });
+          break;
+        case "step-out":
+          invoke("debug_action", { action: "stepout" });
+          break;
+        case "continue":
+          invoke("debug_action", { action: "continue" });
+          break;
+        case "stop":
+          invoke("debug_action", { action: "terminate" });
           break;
         // Add more menu handlers as needed
       }
@@ -283,19 +311,27 @@ export class OpenStormApp extends TailwindElement() {
     listen("debug-initialized", () => {
       console.log("[DAP] debug-initialized event received");
       this.isDebugging = true;
+      this.debugSessionState = "running";
       console.log("[DAP] isDebugging set to:", this.isDebugging);
+      // Auto-show console when debugging starts to catch process output
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.activeStatusBarPanel = 'app-console';
+        this.showConsoleNotification = false;
+      }
       this.requestUpdate();
       dispatch("debug-session-started");
     }).catch(console.error);
 
     listen("debug-stopped", (event: any) => {
       console.log("[DAP] debug-stopped event received:", event.payload);
+      this.debugSessionState = "stopped";
       this.requestUpdate();
       dispatch("debug-stopped", event.payload);
     }).catch(console.error);
 
     listen("debug-continued", () => {
       console.log("[DAP] debug-continued event received");
+      this.debugSessionState = "running";
       this.requestUpdate();
       dispatch("debug-continued");
     }).catch(console.error);
@@ -303,9 +339,27 @@ export class OpenStormApp extends TailwindElement() {
     listen("debug-terminated", () => {
       console.log("[DAP] debug-terminated event received");
       this.isDebugging = false;
+      this.debugSessionState = "terminated";
       this.requestUpdate();
       dispatch("debug-session-ended");
+      // Auto-show console on debug session end to display final output
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.activeStatusBarPanel = 'app-console';
+        this.showConsoleNotification = false;
+      }
     }).catch(console.error);
+
+    // When debug-panel mounts, re-send current debug state so it doesn't miss events
+    document.addEventListener("debug-panel-ready", () => {
+      if (this.isDebugging) {
+        // Re-send session started + current state
+        dispatch("debug-session-started");
+        if (this.debugSessionState === "stopped") {
+          // Need to re-send the last stopped event payload — use a generic one
+          dispatch("debug-stopped", { reason: "breakpoint" });
+        }
+      }
+    });
 
     // Listen for close-settings event
     document.addEventListener("close-settings", () => {
@@ -348,12 +402,12 @@ export class OpenStormApp extends TailwindElement() {
       this.requestUpdate();
     });
 
-    // Listen for output notifications
+    // Listen for output notifications - show notification dot only
     document.addEventListener("app-console-output", () => {
-      this.showConsoleNotification = true;
-      // Auto-switch to app-console panel
-      this.activeStatusBarPanel = 'app-console';
-      this.requestUpdate();
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.showConsoleNotification = true;
+        this.requestUpdate();
+      }
     });
 
     // Listen for terminal output (for notification dot)
@@ -370,6 +424,11 @@ export class OpenStormApp extends TailwindElement() {
       this.isDebugging = false;
       this.requestUpdate();
       dispatch("debug-session-ended");
+      // Auto-show console on debug session end
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.activeStatusBarPanel = 'app-console';
+        this.showConsoleNotification = false;
+      }
     }).catch(console.error);
 
     // Handle debug-exited event (when process exits)
@@ -378,12 +437,47 @@ export class OpenStormApp extends TailwindElement() {
       this.isDebugging = false;
       this.requestUpdate();
       dispatch("debug-session-ended");
+      // Auto-show console on debug session end
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.activeStatusBarPanel = 'app-console';
+        this.showConsoleNotification = false;
+      }
+    }).catch(console.error);
+
+    // Auto-show console when app is run (non-debug)
+    listen("process-started", () => {
+      if (this.activeStatusBarPanel !== 'app-console') {
+        this.activeStatusBarPanel = 'app-console';
+        this.showConsoleNotification = false;
+      }
     }).catch(console.error);
 
     listen("debug-output", (event: any) => {
       console.log("[DAP] debug-output event received:", event.payload);
+      // Buffer events for the console if it hasn't mounted yet
+      if (!this.consoleOutputSubscribed) {
+        this.debugOutputBuffer.push(event.payload);
+        if (this.debugOutputBuffer.length > 500) {
+          this.debugOutputBuffer = this.debugOutputBuffer.slice(-500);
+        }
+      }
       dispatch("debug-output", event.payload);
     }).catch(console.error);
+
+    // Flush buffered debug output when console mounts
+    document.addEventListener("console-flush", () => {
+      const buffer = [...this.debugOutputBuffer];
+      this.debugOutputBuffer = [];
+      this.consoleOutputSubscribed = true;
+      for (const payload of buffer) {
+        dispatch("debug-output", payload);
+      }
+    });
+
+    // Resume buffering when console unmounts
+    document.addEventListener("console-unsubscribed", () => {
+      this.consoleOutputSubscribed = false;
+    });
   }
 
   private async setupAutoSaveHandler(): Promise<void> {
@@ -1012,6 +1106,7 @@ export class OpenStormApp extends TailwindElement() {
     // In single-file mode, hide explorer and terminal by default
     const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
     const showSettings = !isSingleFileMode && this.activeActivity === "settings";
+    const showSearch = !isSingleFileMode && this.activeActivity === "search";
     const showCommitPanel = !isSingleFileMode && (this.activeActivity === 'commits' || this.activeActivity === 'pull-requests');
     const showGitPanel = !isSingleFileMode && this.gitPanelVisible;
     const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
@@ -1055,6 +1150,14 @@ export class OpenStormApp extends TailwindElement() {
               ${showSettings
                 ? html`
                     <settings-panel class="flex-1"></settings-panel>
+                  `
+                : showSearch
+                ? html`
+                    <search-panel
+                      class="flex-1"
+                      .projectPath=${this.projectPath}
+                      @file-selected=${this.handleFileSelect}
+                    ></search-panel>
                   `
                 : showExplorer || showDatabase
                 ? html`

@@ -5,7 +5,8 @@
 use crate::dap::{DapClient, LaunchRequestArgs};
 use crate::dap_installer;
 use crate::run_config::configuration::RunConfiguration;
-use crate::commands::debug::types::{get_pending_breakpoints, clear_pending_breakpoints};
+use crate::commands::debug::types::{get_pending_breakpoints, clear_pending_breakpoints, push_pending_breakpoint, PendingBreakpoint};
+use crate::commands::debug::breakpoint_storage;
 use std::path::Path;
 use tauri::Emitter;
 
@@ -57,6 +58,9 @@ pub async fn start_debug_session(
     println!("[DAP] Creating adapter...");
     client.create_adapter(&adapter_type)?;
 
+    // Save project root before config.cwd is moved into launch_args
+    let project_root = config.cwd.clone().map(|p| p.to_string_lossy().to_string());
+
     if config.language == crate::run_config::configuration::Language::Rust {
         println!("[DAP] Building Rust binary before debug...");
         let build_output = std::process::Command::new("cargo")
@@ -97,6 +101,35 @@ pub async fn start_debug_session(
     match &result {
         Ok(id) => {
             println!("[DAP] Session started with ID: {}", id);
+
+            // Load persisted breakpoints from disk if we have a project root
+            if let Some(ref project_root_str) = project_root {
+                println!("[DAP] Loading persisted breakpoints from: {}", project_root_str);
+                match breakpoint_storage::load_breakpoints(project_root_str) {
+                    Ok(store) => {
+                        let mut count = 0;
+                        for (source_path, file_breakpoints) in &store {
+                            for bp in file_breakpoints {
+                                push_pending_breakpoint(PendingBreakpoint {
+                                    source_path: source_path.clone(),
+                                    line: bp.line,
+                                    condition: bp.condition.clone(),
+                                    hit_condition: bp.hit_condition.clone(),
+                                    log_message: bp.log_message.clone(),
+                                });
+                                count += 1;
+                            }
+                        }
+                        if count > 0 {
+                            println!("[DAP] Loaded {} persisted breakpoints from disk", count);
+                        }
+                    }
+                    Err(e) => {
+                        println!("[DAP] Failed to load persisted breakpoints: {}", e);
+                    }
+                }
+            }
+
             flush_pending_breakpoints(&mut client);
             println!("[DAP] Finalizing launch...");
             if let Err(e) = client.finalize_launch() {

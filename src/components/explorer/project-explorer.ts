@@ -43,7 +43,29 @@ export class ProjectExplorer extends TailwindElement() {
     this.isLoading = true;
     try {
       const result = await invoke('list_directory', { path });
-      this.files = result as FileNode[];
+      const newFiles = result as FileNode[];
+
+      // Merge new nodes with existing ones to preserve loaded children on expanded folders
+      const existingByPath = new Map<string, FileNode>();
+      const collectExisting = (nodes: FileNode[]) => {
+        for (const node of nodes) {
+          existingByPath.set(node.path, node);
+          if (node.children) collectExisting(node.children);
+        }
+      };
+      collectExisting(this.files);
+
+      const mergeChildren = (nodes: FileNode[]): FileNode[] => {
+        return nodes.map(node => {
+          const existing = existingByPath.get(node.path);
+          if (existing && node.is_dir && existing.children) {
+            return { ...node, children: mergeChildren(existing.children) };
+          }
+          return node;
+        });
+      };
+
+      this.files = mergeChildren(newFiles);
       this.projectPath = path;
     } catch (error) {
       console.error('Failed to load directory:', error);
