@@ -68,6 +68,7 @@ jobs:
           path: |
             src-tauri/target/**/release/bundle/**/*.AppImage
             src-tauri/target/**/release/bundle/**/*.deb
+            src-tauri/target/**/release/bundle/**/*.rpm
             src-tauri/target/**/release/bundle/**/*.AppImage.sig
             src-tauri/target/**/release/bundle/**/latest.json
           if-no-files-found: warn
@@ -90,31 +91,45 @@ jobs:
 
       - name: Create GitHub Release
         run: |
-          VERSION="${{ needs.build.outputs.tag }}"
-          echo "Creating release for tag: ${VERSION}"
+          TAG="${{ needs.build.outputs.tag }}"
+          echo "Creating release for tag: ${TAG}"
 
-          ASSETS=()
-          while IFS= read -r -d '' f; do
-            ASSETS+=("$f")
-          done < <(find artifacts -type f \
-            -not -name "*.app" \
-            -not -name "*.app.tar.gz" \
-            -not -name "*.app.tar.gz.sig" \
-            -print0)
+          # Create release via API
+          RESPONSE=$(curl -s -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/releases" \
+            -d "{
+              \"tag_name\": \"${TAG}\",
+              \"name\": \"OpenStorm ${TAG}\",
+              \"body\": \"Download the installer for your platform below. Auto-updates enabled.\",
+              \"draft\": true
+            }")
 
-          echo "Release assets (${#ASSETS[@]}):"
-          printf '%s\n' "${ASSETS[@]}"
+          echo "Create response: $RESPONSE"
+          RELEASE_ID=$(echo "$RESPONSE" | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))")
+          echo "Release ID: $RELEASE_ID"
 
-          if [ ${#ASSETS[@]} -eq 0 ]; then
-            echo "::error::No release assets found"
+          if [ -z "$RELEASE_ID" ]; then
+            echo "::error::Failed to create release"
             exit 1
           fi
 
-          gh auth status
-          gh release create "${VERSION}" \
-            --title "OpenStorm ${VERSION}" \
-            --notes "Download the installer for your platform below. Auto-updates enabled." \
-            --draft \
-            "${ASSETS[@]}"
+          # Upload each asset
+          for FILE in $(find artifacts -type f \
+            -not -name "*.app" \
+            -not -name "*.app.tar.gz" \
+            -not -name "*.app.tar.gz.sig"); do
+            FILENAME=$(basename "$FILE")
+            echo "Uploading: $FILENAME"
+            UPLOAD=$(curl -s -X POST \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://uploads.github.com/repos/${{ github.repository }}/releases/${RELEASE_ID}/assets?name=${FILENAME}" \
+              --data-binary "@${FILE}")
+            echo "Upload response: $(echo "$UPLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'{d.get(\"name\",\"?\")} size={d.get(\"size\",\"?\")}')")"
+          done
+
+          echo "Release created: https://github.com/${{ github.repository }}/releases/tag/${TAG}"
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
