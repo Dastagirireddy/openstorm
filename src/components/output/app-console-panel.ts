@@ -400,10 +400,10 @@ export class AppConsolePanel extends TailwindElement() {
   private getStatusColor(): string {
     if (this.processStatus === 'idle') return 'var(--app-disabled-foreground)';
     if (this.processStatus === 'exited') {
-      return (this.processExitCode !== null && this.processExitCode !== 0) ? '#ef4444' : '#22c55e';
+      return (this.processExitCode !== null && this.processExitCode !== 0) ? 'var(--error, #ef4444)' : 'var(--success, #22c55e)';
     }
-    if (this.debugSessionState === 'stopped') return '#f59e0b';
-    return '#22c55e';
+    if (this.debugSessionState === 'stopped') return 'var(--warning, #f59e0b)';
+    return 'var(--success, #22c55e)';
   }
 
   private getStatusIcon(): string {
@@ -454,7 +454,7 @@ export class AppConsolePanel extends TailwindElement() {
           <!-- Restart button (visible when debugging) -->
           ${(this.isDebugging || this.processStatus === 'running') ? html`
             <button class="flex items-center justify-center px-2 py-0.5 text-[11px] border-none rounded bg-transparent cursor-pointer transition-colors hover:bg-[var(--app-toolbar-hover)]"
-              style="color: #22c55e;"
+              style="color: var(--success, #22c55e);"
               @click=${this.handleRestart}
               title="Restart (Ctrl+Shift+F5)">
               <iconify-icon icon="mdi:restart" width="14"></iconify-icon>

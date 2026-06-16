@@ -1,10 +1,8 @@
 /**
  * Editor Syntax - Syntax highlighting and language support
  *
- * Extracted from editor-pane.ts to provide:
- * - Syntax highlighting configuration
- * - Language extension loading
- * - Indentation detection
+ * Uses CSS variables from theme JSONs for IntelliJ-native colors.
+ * Colors automatically switch between light (GrayTheme) and dark (Darcula).
  */
 
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
@@ -26,27 +24,73 @@ import type { Extension } from '@codemirror/state';
 import { getFileExtension } from '../icons';
 
 /**
- * Syntax highlighting style using CSS variables for theme support
+ * IntelliJ-native syntax highlighting using CSS variables.
+ *
+ * Light (GrayTheme): keywords=#000, strings=#067d17, numbers=#1750eb, types=#7B3294
+ * Dark (Darcula):    keywords=#cc7832, strings=#6a8759, numbers=#6897bb, types=#a9b7c6
  */
-export const openStormHighlight = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier], color: 'var(--app-keyword)', fontWeight: 'bold' },
-  { tag: [t.definition(t.variableName), t.function(t.variableName)], color: 'var(--app-type)' },
+const intelliJHighlight = HighlightStyle.define([
+  // Keywords and control flow
+  { tag: [t.keyword, t.operatorKeyword], color: 'var(--app-keyword)', fontWeight: 'bold' },
+  { tag: t.modifier, color: 'var(--app-keyword)', fontWeight: 'bold' },
+
+  // Types and classes
+  { tag: [t.typeName, t.className, t.namespace], color: 'var(--app-type)' },
   { tag: t.propertyName, color: 'var(--app-type)' },
-  { tag: t.tagName, color: 'var(--app-keyword)' },
-  { tag: t.attributeName, color: 'var(--app-type)' },
-  { tag: t.string, color: 'var(--app-string)' },
-  { tag: t.number, color: 'var(--app-number)' },
-  { tag: [t.comment, t.lineComment], color: 'var(--app-disabled-foreground)', fontStyle: 'italic' },
-  { tag: t.meta, color: 'var(--app-keyword)' },
+
+  // Functions and definitions
+  { tag: [t.definition(t.variableName), t.function(t.variableName)], color: 'var(--app-type)', fontWeight: '500' },
+  { tag: t.function(t.propertyName), color: 'var(--app-type)' },
+
+  // Variables
+  { tag: t.variableName, color: 'var(--app-foreground)' },
+  { tag: t.local(t.variableName), color: 'var(--app-foreground)' },
+
+  // Strings
+  { tag: [t.string, t.special(t.string), t.character], color: 'var(--app-string)' },
+
+  // Numbers and booleans
+  { tag: [t.number, t.bool, t.null], color: 'var(--app-number)' },
+
+  // Comments
+  { tag: [t.comment, t.lineComment, t.blockComment], color: 'var(--app-disabled-foreground)', fontStyle: 'italic' },
+
+  // Operators and punctuation
   { tag: t.operator, color: 'var(--app-foreground)' },
-  { tag: t.bracket, color: 'var(--app-foreground)' }
+  { tag: [t.punctuation, t.bracket, t.squareBracket, t.paren, t.brace], color: 'var(--app-foreground)' },
+  { tag: t.derefOperator, color: 'var(--app-foreground)' },
+
+  // HTML/JSX tags
+  { tag: t.tagName, color: 'var(--app-keyword)' },
+  { tag: t.attributeName, color: 'var(--app-foreground)' },
+  { tag: t.attributeValue, color: 'var(--app-string)' },
+
+  // Regex and escape
+  { tag: t.regexp, color: 'var(--app-string)' },
+  { tag: t.escape, color: 'var(--app-string)' },
+
+  // Meta and annotations
+  { tag: t.meta, color: 'var(--app-keyword)' },
+  { tag: t.annotation, color: 'var(--app-keyword)' },
+
+  // Self and atom
+  { tag: t.self, color: 'var(--app-keyword)' },
+  { tag: t.atom, color: 'var(--app-number)' },
+
+  // Links
+  { tag: t.link, color: 'var(--app-type)', textDecoration: 'underline' },
+
+  // Markdown headings
+  { tag: t.heading, color: 'var(--app-keyword)', fontWeight: 'bold' },
+  { tag: t.strong, fontWeight: 'bold' },
+  { tag: t.emphasis, fontStyle: 'italic' },
 ]);
 
 /**
- * Get syntax highlighting extension
+ * Get syntax highlighting extension (theme-aware via CSS variables)
  */
 export function getSyntaxHighlighting(): Extension {
-  return syntaxHighlighting(openStormHighlight);
+  return syntaxHighlighting(intelliJHighlight);
 }
 
 /**

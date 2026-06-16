@@ -30,16 +30,17 @@ import {
 import {
   lspCompletionSource,
   debugHoverTooltip,
+  lspHoverTooltip,
   notifyLspDocumentOpen,
   notifyLspDocumentChange,
   handleGoToDefinition,
-  showLspHoverTooltip,
 } from '../../lib/editor/editor-lsp.js';
 import { autocompletion } from '@codemirror/autocomplete';
 import { invoke } from '@tauri-apps/api/core';
 import { dispatch } from '../../lib/types/events.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
 import { TailwindElement } from '../../tailwind-element.js';
+import { debounce } from '../../lib/utils/debounce.js';
 
 @customElement('text-viewer')
 export class TextViewer extends TailwindElement() {
@@ -85,6 +86,11 @@ export class TextViewer extends TailwindElement() {
   private _boundHandleExternalBreakpointRemoved = this._handleExternalBreakpointRemoved.bind(this);
   private _boundHandleDebugSessionStarted = this._loadPersistedBreakpoints.bind(this);
   private _isHandlingExternalRemoval = false;
+
+  // Debounced LSP document sync (300ms)
+  private _debouncedNotifyChange = debounce((content: string) => {
+    this._doNotifyDocumentChange(content);
+  }, 300);
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -161,6 +167,8 @@ export class TextViewer extends TailwindElement() {
         getEditorTheme(),
         getLanguageExtension(path),
         getSyntaxHighlighting(),
+        // LSP hover tooltip (CodeMirror native)
+        lspHoverTooltip(path),
         // LSP completion
         autocompletion({
           override: [
@@ -178,11 +186,6 @@ export class TextViewer extends TailwindElement() {
     this.editorView = new EditorView({
       state,
       parent: editorContainerAfter,
-    });
-
-    // Add hover listener for LSP tooltips
-    this.editorView.dom.addEventListener('mousemove', (e: MouseEvent) => {
-      this.handleMouseHover(e);
     });
 
     // Notify LSP of document open
@@ -228,8 +231,8 @@ export class TextViewer extends TailwindElement() {
     this.isDirty = false;
     this.content = content;
 
-    // Notify LSP
-    await this.notifyDocumentChange(content);
+    // Notify LSP immediately on save
+    await this._doNotifyDocumentChange(content);
 
     return content;
   }
@@ -287,7 +290,7 @@ export class TextViewer extends TailwindElement() {
       const newContent = update.state.doc.toString();
       this.content = newContent;
       this.isDirty = true;
-      this.notifyDocumentChange(newContent);
+      this._debouncedNotifyChange(newContent);
 
       // Dispatch content changed event
       dispatch('content-changed', {
@@ -321,7 +324,7 @@ export class TextViewer extends TailwindElement() {
     await notifyLspDocumentOpen(content, this.filePath);
   }
 
-  private async notifyDocumentChange(content: string): Promise<void> {
+  private async _doNotifyDocumentChange(content: string): Promise<void> {
     const ext = getFileExtension(this.filePath);
     const languageMap: Record<string, string> = {
       'rs': 'rust',

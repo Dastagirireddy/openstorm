@@ -17,9 +17,9 @@ export class Breadcrumb extends TailwindElement() {
   private renderSegment(segment: BreadcrumbSegment, index: number, isLast: boolean): ReturnType<typeof html> {
     return html`
       ${segment.clickable && segment.path
-        ? html`<span class="hover:text-[#1a1a1a] cursor-pointer transition-colors" data-path="${segment.path}">${segment.label}</span>`
-        : html`<span class="${isLast ? 'text-[#1a1a1a] font-medium' : ''}">${segment.label}</span>`}
-      ${!isLast ? html`<span class="text-[#a0a0a0]">/</span>` : ''}
+        ? html`<span class="hover:opacity-80 cursor-pointer transition-colors" data-path="${segment.path}" style="color: var(--app-foreground);">${segment.label}</span>`
+        : html`<span class="${isLast ? 'font-medium' : ''}" style="color: var(--app-foreground);">${segment.label}</span>`}
+      ${!isLast ? html`<span style="color: var(--app-disabled-foreground, #a0a0a0);">/</span>` : ''}
     `;
   }
 
@@ -35,10 +35,11 @@ export class Breadcrumb extends TailwindElement() {
 
     return html`
       <div
-        class="flex items-center gap-1 h-[22px] px-4 bg-[#ffffff] border-b border-[#e0e0e0] text-[11px] text-[#5a5a5a]">
+        class="flex items-center gap-1 h-[22px] px-4 text-[11px]"
+        style="background: var(--app-bg, #ffffff); border-bottom: 1px solid var(--app-border, #e0e0e0); color: var(--app-secondary-foreground, #5a5a5a);">
         ${segments.map((segment, index) => this.renderSegment(segment, index, index === segments.length - 1))}
-        ${fileName ? html`<span class="text-[#1a1a1a] font-medium">${fileName}</span>` : ''}
-        ${this.saveStatus === 'unsaved' ? html`<span class="text-[#f57c00] ml-1">●</span>` : ''}
+        ${fileName ? html`<span class="font-medium" style="color: var(--app-foreground);">${fileName}</span>` : ''}
+        ${this.saveStatus === 'unsaved' ? html`<span class="ml-1" style="color: var(--app-stopped-state, #f57c00);">●</span>` : ''}
       </div>
     `;
   }

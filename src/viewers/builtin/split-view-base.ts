@@ -13,14 +13,13 @@ import { EditorView, ViewUpdate } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { history, historyKeymap, undo, redo, defaultKeymap, indentMore } from '@codemirror/commands';
 import { lineNumbers, highlightActiveLine, drawSelection, dropCursor, keymap } from '@codemirror/view';
-import { indentUnit, bracketMatching, indentOnInput, syntaxHighlighting } from '@codemirror/language';
+import { indentUnit, bracketMatching, indentOnInput } from '@codemirror/language';
 import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 import { invoke } from '@tauri-apps/api/core';
 
 import type { ViewerMetadata, ViewerAction } from '../types.js';
-import { detectIndentUnit } from '../../lib/editor/editor-syntax.js';
+import { detectIndentUnit, getSyntaxHighlighting } from '../../lib/editor/editor-syntax.js';
 import { getEditorTheme } from '../../lib/editor/editor-theme.js';
-import { openStormHighlight } from '../../lib/editor/editor-syntax.js';
 import { dispatch } from '../../lib/types/events.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import { formatCode } from '../../lib/utils/formatter.js';
@@ -325,7 +324,7 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
 
     // Only apply generic syntax highlighting if not skipped
     if (!skipGenericHighlighting) {
-      extensions.push(syntaxHighlighting(openStormHighlight));
+      extensions.push(getSyntaxHighlighting());
     }
 
     return extensions;

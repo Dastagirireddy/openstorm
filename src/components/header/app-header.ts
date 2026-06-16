@@ -1,10 +1,10 @@
 import { html, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
+import { getVersion } from '@tauri-apps/api/app';
 import '../layout/icon.js';
 import '../layout/file-icon.js';
 import '../debug/run-toolbar.js';
-import './update-button.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/utils/breadcrumb.js';
 import * as git from '../../lib/git/git-api.js';
 import { dispatch } from '../../lib/types/events.js';
@@ -37,6 +37,12 @@ export class AppHeader extends TailwindElement() {
   @property() isSingleFileMode = false;
 
   @state() private gitOperationInProgress = false;
+  @state() private appVersion = '';
+
+  constructor() {
+    super();
+    getVersion().then(v => { this.appVersion = v; }).catch(() => {});
+  }
 
   private async handleGitAction(actionId: string): Promise<void> {
     if (!this.projectPath || this.gitOperationInProgress) return;
@@ -137,7 +143,7 @@ export class AppHeader extends TailwindElement() {
           <file-icon path="${segment.path || segment.label}" size=${14}></file-icon>
         `}
         <span
-          class="${isLast ? 'font-semibold' : 'hover:text-[#1a1a1a] cursor-pointer transition-colors'} text-[13px]"
+          class="${isLast ? 'font-semibold' : 'hover:opacity-80 cursor-pointer transition-colors'} text-[13px]"
           style="color: ${isLast ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'};"
           ${!isLast && segment.path ? 'data-path="' + segment.path + '"' : ''}>
           ${segment.label}
@@ -159,7 +165,7 @@ export class AppHeader extends TailwindElement() {
         <!-- Titlebar with integrated breadcrumb -->
         <div
           class="flex items-center justify-between h-[36px] px-2 border-b select-none"
-          style="background: linear-gradient(to bottom, var(--app-tab-inactive), var(--app-toolbar-hover)); border-bottom-color: var(--app-input-border);">
+          style="background: var(--app-toolbar-hover); border-bottom-color: var(--app-input-border);">
 
           <!-- Left: Project name + Breadcrumb -->
           <div class="flex items-center gap-2 min-w-0 flex-1">
@@ -186,18 +192,13 @@ export class AppHeader extends TailwindElement() {
                     id: 'git',
                     actions: [
                       { id: 'git-label', icon: '', title: 'Git:', label: 'Git:' },
-                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: 'var(--app-step-color)' },
+                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: 'var(--brand-primary)' },
                       { id: 'commit', icon: 'check', title: 'Commit', color: 'var(--app-continue-color)' },
-                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: 'var(--app-continue-color)' },
+                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: 'var(--app-tab-watch)' },
                       { id: 'history', icon: 'clock', title: 'History' },
-                      { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback' },
+                      { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback', color: 'var(--app-stopped-state)' },
                     ],
-                  })}
-
-                  <div class="w-[1px] h-3.5 mx-0.5" style="background-color: var(--app-scrollbar);"></div>
-
-                  <!-- Update section -->
-                  <update-button></update-button>
+                  }                  )}
                 </div>
               `
             : ''}

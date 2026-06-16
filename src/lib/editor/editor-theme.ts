@@ -28,11 +28,11 @@ export function getEditorTheme(): Extension {
     '.cm-line': {
       padding: '0 2px',
       cursor: 'text',
+      position: 'relative !important',
     },
     '.cm-gutters': {
       backgroundColor: 'var(--editor-gutter-background) !important',
       color: 'var(--editor-line-numbers) !important',
-      borderRight: '1px solid var(--editor-gutter-border)',
       border: 'none',
       direction: 'ltr !important',
     },
@@ -78,7 +78,7 @@ export function getEditorTheme(): Extension {
       background: 'var(--app-bg)',
       border: '1px solid var(--app-input-border)',
       borderRadius: '6px',
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
+      boxShadow: 'var(--app-dialog-shadow, 0 4px 16px rgba(0, 0, 0, 0.15))',
       zIndex: '1000',
     },
     '.debug-variable-name': {
@@ -95,7 +95,7 @@ export function getEditorTheme(): Extension {
       border: '1px solid var(--app-input-border)',
       background: 'var(--app-bg)',
       borderRadius: '6px',
-      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06)',
+      boxShadow: 'var(--app-dialog-shadow, 0 4px 16px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.06))',
       overflow: 'hidden',
       zIndex: '1000',
     },
@@ -189,7 +189,7 @@ export function getEditorTheme(): Extension {
       padding: '1px 6px',
       borderRadius: '8px',
       background: 'var(--app-button-background)',
-      color: '#fff',
+      color: 'var(--app-button-foreground, #fff)',
       fontWeight: '500',
     },
     '.cm-tooltip-lsp .tag-badge': {
@@ -306,6 +306,35 @@ export function getEditorTheme(): Extension {
       color: 'var(--app-disabled-foreground)',
       fontStyle: 'italic',
     },
+    // Hover tooltip code highlighting (same styles, broader selector)
+    '.hl-kw': {
+      color: 'var(--app-keyword)',
+      fontWeight: '500',
+    },
+    '.hl-type': {
+      color: 'var(--app-type)',
+    },
+    '.hl-str': {
+      color: 'var(--app-string)',
+    },
+    '.hl-num': {
+      color: 'var(--app-number)',
+    },
+    '.hl-bool': {
+      color: 'var(--app-boolean)',
+    },
+    '.hl-fn': {
+      color: 'var(--app-foreground)',
+      fontWeight: '600',
+    },
+    '.hl-prop': {
+      color: 'var(--app-foreground)',
+      fontStyle: 'italic',
+    },
+    '.hl-comment': {
+      color: 'var(--app-disabled-foreground)',
+      fontStyle: 'italic',
+    },
     '.cm-tooltip-lsp .hover-body li': {
       marginBottom: '4px',
     },
@@ -331,19 +360,36 @@ export function getEditorTheme(): Extension {
       animation: 'pulse 1s infinite',
     },
     '.cm-breakpoint-verified': {
-      backgroundColor: 'rgba(244, 67, 54, 0.1)',
+      backgroundColor: 'var(--app-breakpoint, rgba(244, 67, 54, 0.1))',
     },
     '.cm-breakpoint-unverified': {
-      backgroundColor: 'rgba(158, 158, 158, 0.1)',
+      backgroundColor: 'var(--app-breakpoint-disabled, rgba(158, 158, 158, 0.1))',
     },
     // Debug line highlighting
     '.cm-debug-line-current': {
-      backgroundColor: 'var(--app-continue-color, #22c55e)',
-      opacity: '0.3',
+      backgroundColor: 'var(--editor-debug-line-current, rgba(255, 235, 59, 0.3))',
+      width: '100%',
+      height: '100%',
+      position: 'absolute',
+      top: '0',
+      left: '0',
     },
-    // Indentation markers
-    '.cm-indent-marker': {
-      opacity: '0.15',
+    '.cm-breakpoint-gutter .cm-debug-line-current': {
+      backgroundColor: 'var(--editor-debug-line-current, rgba(255, 235, 59, 0.3))',
+    },
+    // Scope lines
+    '.cm-scope-line-widget': {
+      position: 'absolute',
+      width: '1px',
+      height: '1.1em',
+      top: '-0.05em',
+      backgroundColor: 'var(--app-fold-guide, rgba(200, 200, 200, 0.4))',
+      pointerEvents: 'none',
+      zIndex: '0',
+      marginLeft: '8px',
+    },
+    '.cm-scope-line-widget:hover': {
+      backgroundColor: 'var(--app-fold-guide-active, #528bff)',
     },
     // Fold gutter
     '.cm-foldGutter': {
@@ -352,6 +398,8 @@ export function getEditorTheme(): Extension {
     '.cm-foldGutter .cm-gutterElement': {
       cursor: 'pointer',
       color: 'var(--app-disabled-foreground)',
+      display: 'flex',
+      alignItems: 'center',
     },
     '.cm-foldGutter .cm-gutterElement:hover': {
       color: 'var(--app-foreground)',

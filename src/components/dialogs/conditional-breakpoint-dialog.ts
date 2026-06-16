@@ -35,7 +35,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.4);
+      background: var(--app-overlay-background, rgba(0, 0, 0, 0.4));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -43,9 +43,9 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     }
 
     .dialog {
-      background: #ffffff;
+      background: var(--app-bg, #ffffff);
       border-radius: 8px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+      box-shadow: var(--app-dialog-shadow, 0 8px 32px rgba(0, 0, 0, 0.16));
       min-width: 420px;
       max-width: 500px;
       overflow: hidden;
@@ -53,7 +53,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
 
     .dialog-header {
       padding: 16px 20px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid var(--app-border, #e5e7eb);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -62,7 +62,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     .dialog-title {
       font-size: 14px;
       font-weight: 600;
-      color: #1a1a1a;
+      color: var(--app-foreground, #1a1a1a);
     }
 
     .close-button {
@@ -75,11 +75,11 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       display: flex;
       align-items: center;
       justify-content: center;
-      color: #666;
+      color: var(--app-secondary-foreground, #666);
     }
 
     .close-button:hover {
-      background: #f3f4f6;
+      background: var(--app-hover-background, #f3f4f6);
     }
 
     .dialog-content {
@@ -90,7 +90,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       display: flex;
       gap: 4px;
       margin-bottom: 16px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid var(--app-border, #e5e7eb);
       padding-bottom: 0;
     }
 
@@ -101,19 +101,19 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       background: transparent;
       cursor: pointer;
       border-bottom: 2px solid transparent;
-      color: #666;
+      color: var(--app-secondary-foreground, #666);
       transition: all 0.15s;
     }
 
     .tab:hover {
-      color: #1a1a1a;
-      background: #f9fafb;
+      color: var(--app-foreground, #1a1a1a);
+      background: var(--app-hover-background, #f9fafb);
     }
 
     .tab.active {
-      color: #0078d4;
-      border-bottom-color: #0078d4;
-      background: #f0f7ff;
+      color: var(--brand-primary, #0078d4);
+      border-bottom-color: var(--brand-primary, #0078d4);
+      background: var(--app-selection-background, #f0f7ff);
     }
 
     .input-group {
@@ -124,7 +124,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       display: block;
       font-size: 12px;
       font-weight: 500;
-      color: #374151;
+      color: var(--app-foreground, #374151);
       margin-bottom: 6px;
     }
 
@@ -133,10 +133,10 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       padding: 8px 12px;
       font-size: 13px;
       font-family: 'Fira Code', 'JetBrains Mono', monospace;
-      border: 1px solid #d0d0d0;
+      border: 1px solid var(--app-input-border, #d0d0d0);
       border-radius: 4px;
-      background: #ffffff;
-      color: #1a1a1a;
+      background: var(--app-input-background, #ffffff);
+      color: var(--app-foreground, #1a1a1a);
       transition: all 0.15s;
     }
 
@@ -147,7 +147,7 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     }
 
     .input-field::placeholder {
-      color: #9ca3af;
+      color: var(--app-input-placeholder, #9ca3af);
     }
 
     .hit-condition-row {
@@ -160,9 +160,9 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
       width: 70px;
       padding: 8px 6px;
       font-size: 13px;
-      border: 1px solid #d0d0d0;
+      border: 1px solid var(--app-input-border, #d0d0d0);
       border-radius: 4px;
-      background: #ffffff;
+      background: var(--app-input-background, #ffffff);
       cursor: pointer;
     }
 
@@ -173,27 +173,27 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
 
     .help-text {
       font-size: 11px;
-      color: #6b7280;
+      color: var(--app-secondary-foreground, #6b7280);
       margin-top: 6px;
       line-height: 1.4;
     }
 
     .help-code {
-      background: #f3f4f6;
+      background: var(--app-toolbar-hover, #f3f4f6);
       padding: 2px 6px;
       border-radius: 3px;
       font-family: 'Fira Code', 'JetBrains Mono', monospace;
       font-size: 10px;
-      color: #c41e3a;
+      color: var(--app-console-error, #c41e3a);
     }
 
     .dialog-footer {
       padding: 12px 20px;
-      border-top: 1px solid #e5e7eb;
+      border-top: 1px solid var(--app-border, #e5e7eb);
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      background: #f9fafb;
+      background: var(--app-tab-inactive, #f9fafb);
     }
 
     .button {
@@ -206,17 +206,17 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     }
 
     .button.secondary {
-      background: #e5e7eb;
-      color: #374151;
+      background: var(--app-border, #e5e7eb);
+      color: var(--app-foreground, #374151);
     }
 
     .button.secondary:hover {
-      background: #d1d5db;
+      background: var(--app-toolbar-active, #d1d5db);
     }
 
     .button.primary {
       background: var(--brand-primary);
-      color: #ffffff;
+      color: var(--app-button-foreground, #ffffff);
     }
 
     .button.primary:hover {
@@ -224,12 +224,12 @@ export class ConditionalBreakpointDialog extends TailwindElement() {
     }
 
     .button.remove {
-      background: #fee2e2;
-      color: #dc2626;
+      background: var(--error, #fee2e2);
+      color: var(--error, #dc2626);
     }
 
     .button.remove:hover {
-      background: #fecaca;
+      background: var(--error, #fecaca);
     }
   `;
 

@@ -138,7 +138,7 @@ const componentStyles = css`
 
   /* Hyperlink hover effect */
   .xterm .xterm-rows a {
-    color: #4da6ff !important;
+    color: var(--app-link-color, #4da6ff) !important;
     text-decoration: none;
   }
 
@@ -658,7 +658,10 @@ export class TerminalPane extends TailwindElement(componentStyles) {
                     this.showCloseConfirm = false;
                     this.terminalToClose = null;
                   }}
-                    class="px-3 py-1.5 text-[13px] text-white bg-[#cf222e] rounded hover:bg-[#a40e22]">
+                    class="px-3 py-1.5 text-[13px] text-white rounded"
+                    style="background: var(--error, #cf222e);"
+                    @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.opacity = '0.85'; }}
+                    @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.opacity = '1'; }}>
                     Close Terminal
                   </button>
                 </div>
@@ -732,8 +735,8 @@ export class TerminalPane extends TailwindElement(componentStyles) {
             <div class="border-t my-1" style="border-color: var(--app-border);"></div>
             <button @click=${() => { if (this.contextMenuTerminalId) this.requestCloseTerminal(this.contextMenuTerminalId); }}
               class="w-full px-3 py-1.5 text-left text-[13px] flex items-center gap-2"
-              style="color: #cf222e;"
-              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'rgba(207, 34, 46, 0.1)'; }}
+              style="color: var(--error, #cf222e);"
+              @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--error, rgba(207, 34, 46, 0.1))'; }}
               @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18"></line>

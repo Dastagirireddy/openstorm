@@ -289,19 +289,21 @@ export class WelcomeScreen extends TailwindElement() {
 
           return html`
             <div
-              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2 ${isSelected ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-500' : 'border-transparent hover:bg-[#f9fafb] dark:hover:bg-[#1f2937]'}"
+              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2"
+              style="border-color: ${isSelected ? 'var(--brand-primary)' : 'transparent'}; background-color: ${isSelected ? 'var(--app-surface)' : 'transparent'};"
               @click=${() => this.handleProjectClick(project)}
               @mouseenter=${() => { if (!this.filterText) this.selectedIndex = index; }}
             >
               <!-- Project type icon -->
               <div
-                class="w-9 h-9 rounded-md bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-white dark:bg-gray-700' : 'group-hover:bg-white dark:group-hover:bg-gray-700'} transition-colors border ${isSelected ? 'border-indigo-200 dark:border-indigo-800' : 'border-[#e5e7eb] dark:border-gray-700 group-hover:border-[#d1d5db] dark:group-hover:border-gray-600'}"
+                class="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 transition-colors border"
+                style="background-color: var(--app-surface); border-color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-border)'};"
               >
                 <os-icon name="${iconConfig.name}" size="18" color="${iconConfig.color}"></os-icon>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
-                  <div class="text-[14px] font-medium truncate ${isSelected ? 'text-indigo-700 dark:text-indigo-300' : 'group-hover:text-indigo-600 dark:group-hover:text-indigo-400'} transition-colors" style="color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};" title="${project.path}">
+                  <div class="text-[14px] font-medium truncate transition-colors" style="color: ${isSelected ? 'var(--brand-primary)' : 'var(--app-foreground)'};" title="${project.path}">
                     ${project.name}
                   </div>
                   ${this.renderGitStatus(project)}
@@ -420,7 +422,8 @@ export class WelcomeScreen extends TailwindElement() {
                 <div class="flex flex-col gap-2.5">
                   <!-- New Project -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 bg-gradient-to-r from-indigo-500 to-purple-500 dark:from-indigo-600 dark:to-purple-600 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5"
+                    style="background-color: var(--brand-primary);"
                     @click=${this.handleNewProject}
                   >
                     <div class="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
@@ -438,17 +441,18 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open Folder -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 border hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md border hover:-translate-y-0.5"
                     style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFolder}
                   >
                     <div
-                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 dark:from-indigo-600 dark:to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      style="background-color: var(--brand-primary);"
                     >
                       <os-icon name="folder-open" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style="color: var(--app-foreground);">
+                      <div class="text-[14px] font-semibold transition-colors" style="color: var(--app-foreground);">
                         Open Folder
                       </div>
                       <div class="text-[12px]" style="color: var(--app-disabled-foreground);">
@@ -459,17 +463,18 @@ export class WelcomeScreen extends TailwindElement() {
 
                   <!-- Open File -->
                   <div
-                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md hover:shadow-indigo-100/50 dark:hover:shadow-indigo-900/30 border hover:border-indigo-300 dark:hover:border-indigo-700 hover:-translate-y-0.5"
+                    class="group flex items-center gap-3.5 p-3.5 rounded-xl cursor-pointer transition-all hover:shadow-md border hover:-translate-y-0.5"
                     style="background-color: var(--app-bg); border-color: var(--app-border);"
                     @click=${this.handleOpenFile}
                   >
                     <div
-                      class="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 dark:from-violet-600 dark:to-purple-600 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow"
+                      style="background-color: var(--brand-primary);"
                     >
                       <os-icon name="file" size="20" color="white"></os-icon>
                     </div>
                     <div class="flex-1 min-w-0">
-                      <div class="text-[14px] font-semibold group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors" style="color: var(--app-foreground);">
+                      <div class="text-[14px] font-semibold transition-colors" style="color: var(--app-foreground);">
                         Open File
                       </div>
                       <div class="text-[12px]" style="color: var(--app-disabled-foreground);">

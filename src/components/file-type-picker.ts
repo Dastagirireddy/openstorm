@@ -145,17 +145,17 @@ export class FileTypePicker extends TailwindElement() {
         tabindex="-1"
       >
         <div
-          class="absolute bg-white rounded-lg shadow-xl border border-[#d0d0d0] overflow-hidden z-50 w-[260px]"
-          style="left: ${this.anchorX}px; top: ${this.anchorY}px;"
+          class="absolute rounded-lg shadow-xl overflow-hidden z-50 w-[260px]"
+          style="left: ${this.anchorX}px; top: ${this.anchorY}px; background: var(--app-bg, #ffffff); border: 1px solid var(--app-input-border, #d0d0d0);"
           @click=${(e: Event) => e.stopPropagation()}
         >
           <!-- Search Input -->
-          <div class="px-2 py-1.5 border-b border-[#e0e0e0] bg-[#fafafa]">
+          <div class="px-2 py-1.5" style="border-bottom: 1px solid var(--app-border, #e0e0e0); background: var(--app-toolbar-background, #fafafa);">
             <input
               ${ref => { this.searchInput = ref as HTMLInputElement; }}
               type="text"
               class="w-full px-2 py-1 text-[12px] border rounded focus:outline-none focus:ring-2 focus:ring-[var(--brand-primary)] focus:border-transparent"
-              style="border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
+              style="border-color: var(--app-input-border, #d0d0d0);"
               placeholder="Search..."
               value="${this.searchQuery}"
               @input=${(e: Event) => { this.searchQuery = (e.target as HTMLInputElement).value; this.selectedIndex = 0; }}
@@ -171,7 +171,7 @@ export class FileTypePicker extends TailwindElement() {
 
               return html`
                 <div>
-                  <div class="px-2.5 py-1 text-[9px] font-semibold text-[#6a6a6a] uppercase tracking-wider bg-[#f5f5f5] border-b border-[#e0e0e0] first:border-t-0 sticky top-0">
+                  <div class="px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider sticky top-0" style="color: var(--app-secondary-foreground, #6a6a6a); background: var(--app-toolbar-hover, #f5f5f5); border-bottom: 1px solid var(--app-border, #e0e0e0);">
                     ${groupLabel}
                   </div>
                   ${templates.map(template => {
@@ -180,16 +180,17 @@ export class FileTypePicker extends TailwindElement() {
 
                     return html`
                       <div
-                        class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors ${isSelected ? 'bg-[#e8e0f5] text-[#5b47c9]' : 'hover:bg-[#f0f0f0]'}"
+                        class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer transition-colors"
+                        style="${isSelected ? 'background: var(--app-selection-background, #e8e0f5); color: var(--brand-primary, #5b47c9);' : ''}"
                         @click=${() => this.handleSelect(template)}
                       >
                         ${template.icon
                           ? html`<file-icon path="${template.icon}" size="14"></file-icon>`
-                          : html`<os-icon name="file" color="#5a5a5a" size="14"></os-icon>`
+                          : html`<os-icon name="file" color="var(--app-secondary-foreground, #5a5a5a)" size="14"></os-icon>`
                         }
-                        <span class="flex-1 text-[12px] truncate">${template.name}</span>
+                        <span class="flex-1 text-[12px] truncate" style="color: var(--app-foreground, inherit);">${template.name}</span>
                         ${template.shortcut ? html`
-                          <span class="text-[9px] text-[#8a8a8a] font-mono bg-[#e8e8e8] px-1 rounded">${template.shortcut}</span>
+                          <span class="text-[9px] font-mono px-1 rounded" style="color: var(--app-disabled-foreground, #8a8a8a); background: var(--app-toolbar-hover, #e8e8e8);">${template.shortcut}</span>
                         ` : ''}
                       </div>
                     `;
@@ -199,14 +200,14 @@ export class FileTypePicker extends TailwindElement() {
             })}
 
             ${flatTemplates.length === 0 ? html`
-              <div class="px-3 py-4 text-center text-[12px] text-[#6a6a6a]">
+              <div class="px-3 py-4 text-center text-[12px]" style="color: var(--app-secondary-foreground, #6a6a6a);">
                 No matches
               </div>
             ` : ''}
           </div>
 
           <!-- Footer hint -->
-          <div class="px-2.5 py-1.5 border-t border-[#e0e0e0] bg-[#fafafa] flex items-center justify-between text-[9px] text-[#8a8a8a]">
+          <div class="px-2.5 py-1.5 flex items-center justify-between text-[9px]" style="border-top: 1px solid var(--app-border, #e0e0e0); background: var(--app-toolbar-background, #fafafa); color: var(--app-disabled-foreground, #8a8a8a);">
             <span>↑↓ Navigate</span>
             <span>·</span>
             <span>Enter</span>

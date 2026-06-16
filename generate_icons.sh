@@ -1,66 +1,78 @@
 #!/bin/bash
-# Generate OpenStorm icons using ImageMagick or Python
+# Generate OpenStorm icons - Blue Rhombus on Dark with AI Texture
 
-# Check if Python with PIL is available
 if command -v python3 &> /dev/null; then
     python3 << 'PYTHON'
-from PIL import Image, ImageDraw, ImageFilter
-import math
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+import os
 
 def create_icon(size):
-    img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    render_size = size * 2
+    img = Image.new('RGBA', (render_size, render_size), (0, 0, 0, 0))
+    s = render_size / 512
+    cx, cy = render_size // 2, render_size // 2
     
-    # Background rounded square (dark blue gradient approximation)
-    radius = size // 5
-    draw.rounded_rectangle([2, 2, size-2, size-2], radius=radius, 
-                           fill=(26, 26, 46, 255))
+    # Greyish black background
+    bg = Image.new('RGBA', (render_size, render_size), (0, 0, 0, 0))
+    bg_draw = ImageDraw.Draw(bg)
+    radius = int(100 * s)
+    bg_draw.rounded_rectangle([int(20*s), int(20*s), int(492*s), int(492*s)], 
+                               radius=radius, fill=(35, 35, 45, 255))
     
-    # Add subtle border
-    draw.rounded_rectangle([2, 2, size-2, size-2], radius=radius,
-                           outline=(255, 255, 255, 25), width=2)
+    mask = Image.new('L', (render_size, render_size), 0)
+    mask_draw = ImageDraw.Draw(mask)
+    mask_draw.rounded_rectangle([int(20*s), int(20*s), int(492*s), int(492*s)], 
+                                radius=radius, fill=255)
+    bg.putalpha(mask)
+    img = Image.alpha_composite(img, bg)
     
-    # Lightning bolt coordinates (scaled to size)
-    s = size / 512
-    bolt_points = [
-        (280*s, 80*s),
-        (180*s, 280*s),
-        (260*s, 280*s),
-        (220*s, 420*s),
-        (360*s, 200*s),
-        (270*s, 200*s),
-    ]
+    # AI texture lines
+    texture = Image.new('RGBA', (render_size, render_size), (0, 0, 0, 0))
+    texture_draw = ImageDraw.Draw(texture)
+    for y in range(int(50*s), int(462*s), int(30*s)):
+        texture_draw.line([(int(50*s), y), (int(462*s), y)], fill=(53, 116, 240, 15), width=1)
+    for x in range(int(50*s), int(462*s), int(30*s)):
+        texture_draw.line([(x, int(50*s)), (x, int(462*s))], fill=(53, 116, 240, 15), width=1)
+    img = Image.alpha_composite(img, texture)
     
-    # Draw lightning glow
-    glow = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    # Blue rounded rhombus
+    rhombus_size = int(320 * s)
+    rhombus_radius = int(40 * s)
+    rhombus_base = Image.new('RGBA', (render_size, render_size), (0, 0, 0, 0))
+    rhombus_draw = ImageDraw.Draw(rhombus_base)
+    rhombus_draw.rounded_rectangle(
+        [cx - rhombus_size//2, cy - rhombus_size//2, 
+         cx + rhombus_size//2, cy + rhombus_size//2],
+        radius=rhombus_radius,
+        fill=(53, 116, 240, 255)
+    )
+    rhombus_base = rhombus_base.rotate(45, expand=False, center=(cx, cy), resample=Image.BICUBIC)
+    img = Image.alpha_composite(img, rhombus_base)
+    
+    # Glow
+    glow = Image.new('RGBA', (render_size, render_size), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow)
-    glow_draw.polygon(bolt_points, fill=(255, 215, 0, 100))
-    glow = glow.filter(ImageFilter.GaussianBlur(radius=size//20))
+    glow_r = int(180 * s)
+    glow_draw.ellipse([cx - glow_r, cy - glow_r, cx + glow_r, cy + glow_r], fill=(53, 116, 240, 30))
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=max(1, int(20 * s))))
     img = Image.alpha_composite(img, glow)
     
-    # Draw lightning bolt (yellow gradient approximation)
-    draw.polygon(bolt_points, fill=(255, 215, 0, 255))
-    draw.polygon(bolt_points, outline=(255, 140, 0, 255), width=max(2, int(3*s)))
+    # "OS" text
+    draw = ImageDraw.Draw(img)
+    font_size = int(160 * s)
+    try:
+        font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", font_size)
+    except:
+        font = ImageFont.load_default()
+    text = "OS"
+    bbox = draw.textbbox((0, 0), text, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    tx = (render_size - tw) // 2
+    ty = (render_size - th) // 2 - bbox[1]
+    draw.text((tx, ty), text, font=font, fill=(255, 255, 255, 255))
     
-    # Code brackets (cyan)
-    bracket_width = max(8, int(12*s))
-    left_bracket = [(120*s, 180*s), (100*s, 256*s), (120*s, 332*s)]
-    right_bracket = [(392*s, 180*s), (412*s, 256*s), (392*s, 332*s)]
-    
-    # Scale bracket points
-    left_bracket = [(x, y) for x, y in left_bracket]
-    right_bracket = [(x, y) for x, y in right_bracket]
-    
-    draw.line([(120*s, 180*s), (100*s, 256*s), (120*s, 332*s)], 
-              fill=(0, 217, 255, 255), width=bracket_width)
-    draw.line([(392*s, 180*s), (412*s, 256*s), (392*s, 332*s)],
-              fill=(0, 217, 255, 255), width=bracket_width)
-    
-    # Accent dots
-    draw.ellipse([(176*s, 136*s), (184*s, 144*s)], fill=(0, 217, 255, 200))
-    draw.ellipse([(336*s, 376*s), (344*s, 384*s)], fill=(0, 217, 255, 150))
-    draw.ellipse([(156*s, 356*s), (164*s, 364*s)], fill=(255, 107, 107, 180))
-    
+    img = img.resize((size, size), Image.LANCZOS)
     return img
 
 # Generate all required icon sizes
@@ -76,8 +88,7 @@ for w, h, name in sizes:
     icon.save(f'src-tauri/icons/{name}')
     print(f'Created {name}')
 
-# Create macOS icns requires iconset
-import os
+# Create macOS icns iconset
 os.makedirs('src-tauri/icons/icon.iconset', exist_ok=True)
 for w, h, name in [(16,16,'icon_16x16.png'), (32,32,'icon_16x16@2x.png'),
                     (32,32,'icon_32x32.png'), (64,64,'icon_32x32@2x.png'),
@@ -88,12 +99,25 @@ for w, h, name in [(16,16,'icon_16x16.png'), (32,32,'icon_16x16@2x.png'),
     icon.save(f'src-tauri/icons/icon.iconset/{name}')
     print(f'Created icon.iconset/{name}')
 
+# Generate ICO
+ico_images = [Image.open(f'src-tauri/icons/icon.iconset/icon_{s}x{s}.png') for s in [16, 32, 128, 256]]
+ico_images[2].save('src-tauri/icons/icon.ico', format='ICO', 
+                   sizes=[(16,16), (32,32), (48,48), (128,128), (256,256)],
+                   append_images=ico_images[:2])
+print('Created icon.ico')
+
+# Generate ICNS
+os.system('cd src-tauri/icons && iconutil -c icns icon.iconset -o icon.icns')
+print('Created icon.icns')
+
+# Save to assets
+icon_512 = create_icon(512)
+icon_512.save('assets/icon-512.png')
+print('Created assets/icon-512.png')
+
 print('Icons generated successfully!')
 PYTHON
 else
-    echo "Python3 not available, creating placeholder icons"
-    # Create simple placeholder PNGs
-    for size in 32 128 256 512; do
-        echo "Creating placeholder ${size}x${size} icon"
-    done
+    echo "Python3 not available, cannot generate icons"
+    exit 1
 fi

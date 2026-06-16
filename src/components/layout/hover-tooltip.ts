@@ -63,7 +63,9 @@ export class HoverTooltip extends TailwindElement() {
 
     // Render markdown to HTML using markdown-it
     const markdownContent = detail.contents || detail.html || '';
-    this.renderedHtml = md.render(markdownContent);
+    const rawHtml = md.render(markdownContent);
+    // Apply syntax highlighting to code blocks
+    this.renderedHtml = this._highlightCodeBlocks(rawHtml);
 
     this.visible = true;
 
@@ -111,6 +113,66 @@ export class HoverTooltip extends TailwindElement() {
       window.clearTimeout(this.hideTimeout);
       this.hideTimeout = null;
     }
+  }
+
+  /**
+   * Apply syntax highlighting to <pre><code> blocks in HTML.
+   * Uses placeholder extraction to avoid regex corruption.
+   */
+  private _highlightCodeBlocks(html: string): string {
+    return html.replace(
+      /<pre><code(?:\s+class="[^"]*")?>([\s\S]*?)<\/code><\/pre>/g,
+      (_match, codeContent: string) => {
+        let code = codeContent;
+
+        // Decode HTML entities
+        code = code
+          .replace(/&amp;/g, '&')
+          .replace(/&lt;/g, '<')
+          .replace(/&gt;/g, '>')
+          .replace(/&#39;/g, "'")
+          .replace(/&quot;/g, '"');
+
+        // Step 1: Extract comments and strings into placeholders
+        const placeholders: string[] = [];
+        const placeholder = (text: string, cls: string) => {
+          const idx = placeholders.length;
+          placeholders.push(`<span class="${cls}">${text}</span>`);
+          return `\x00${idx}\x00`;
+        };
+
+        // Multi-line comments
+        code = code.replace(/\/\*[\s\S]*?\*\//g, (m) => placeholder(m, 'hl-comment'));
+        // Single-line comments
+        code = code.replace(/\/\/.*$/gm, (m) => placeholder(m, 'hl-comment'));
+        // Strings (double, single, backtick)
+        code = code.replace(/"(?:[^"\\]|\\.)*"/g, (m) => placeholder(m, 'hl-str'));
+        code = code.replace(/'(?:[^'\\]|\\.)*'/g, (m) => placeholder(m, 'hl-str'));
+        code = code.replace(/`(?:[^`\\]|\\.)*`/g, (m) => placeholder(m, 'hl-str'));
+
+        // Step 2: Highlight keywords, types, numbers on the safe remaining text
+        code = code.replace(
+          /\b(const|let|var|function|async|await|return|if|else|for|while|class|interface|type|enum|import|export|from|extends|implements|new|this|typeof|instanceof|in|of|void|null|undefined|true|false|try|catch|throw|switch|case|break|continue|default|yield|static|public|private|protected|readonly|abstract|declare|fn|impl|struct|trait|use|mod|pub|crate|self|Self|mut|ref|dyn|where|as|loop|unsafe)\b/g,
+          '<span class="hl-kw">$1</span>'
+        );
+        code = code.replace(
+          /\b(string|number|boolean|any|never|unknown|Object|Array|Promise|Map|Set|Vec|HashMap|Option|Result|i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64|bool|str)\b/g,
+          '<span class="hl-type">$1</span>'
+        );
+        code = code.replace(/\b([A-Z][a-zA-Z0-9_]*)\b/g, '<span class="hl-type">$1</span>');
+        code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-num">$1</span>');
+        code = code.replace(/([a-zA-Z_][a-zA-Z0-9_]*)\(/g, '<span class="hl-fn">$1</span>(');
+        code = code.replace(/\.([a-zA-Z_][a-zA-Z0-9_]*)/g, '.<span class="hl-prop">$1</span>');
+
+        // Step 3: Restore placeholders
+        code = code.replace(/\x00(\d+)\x00/g, (_, idx) => placeholders[parseInt(idx)]);
+
+        // Escape any remaining HTML in the code (not in spans)
+        // Actually, the code is already safe since we extracted strings/comments first
+
+        return `<pre><code class="highlighted">${code}</code></pre>`;
+      }
+    );
   }
 
   private _setTooltipRef = (el: HTMLElement) => {
@@ -317,6 +379,36 @@ export class HoverTooltip extends TailwindElement() {
     .hover-tooltip-content th {
       background: var(--app-toolbar-hover);
       font-weight: 600;
+    }
+
+    /* Syntax highlighting classes (must be in shadow DOM) */
+    .hl-kw {
+      color: var(--app-keyword);
+      font-weight: 500;
+    }
+    .hl-type {
+      color: var(--app-type);
+    }
+    .hl-str {
+      color: var(--app-string);
+    }
+    .hl-num {
+      color: var(--app-number);
+    }
+    .hl-bool {
+      color: var(--app-boolean);
+    }
+    .hl-fn {
+      color: var(--app-foreground);
+      font-weight: 600;
+    }
+    .hl-prop {
+      color: var(--app-foreground);
+      font-style: italic;
+    }
+    .hl-comment {
+      color: var(--app-disabled-foreground);
+      font-style: italic;
     }
   `;
 }

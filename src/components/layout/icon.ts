@@ -62,24 +62,35 @@ const iconMap: Record<string, any> = {
   'sliders-horizontal': SlidersHorizontal,
 };
 
-// OpenStorm brand logo - modern minimalist monkey face
-// Monkey = clever, problem-solver, agile, playful creativity
-// Uses CSS variable for theme-aware brand color
+// OpenStorm brand logo - blue rhombus on dark background
 function OpenStormLogo(): ReturnType<typeof svg> {
   return svg`
-    <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Outer rounded square background -->
-      <rect x="2" y="2" width="44" height="44" rx="10" fill="var(--brand-primary)"/>
-      <!-- Monkey face (heart-shaped head) -->
-      <path d="M24 36c6 0 10-5 10-10V20c0-4-4-7-10-7s-10 3-10 7v6c0 5 4 10 10 10z" stroke="white" stroke-width="2.5" fill="none"/>
-      <!-- Ears (circles on sides) -->
-      <circle cx="14" cy="22" r="3" stroke="white" stroke-width="2.5" fill="none"/>
-      <circle cx="34" cy="22" r="3" stroke="white" stroke-width="2.5" fill="none"/>
-      <!-- Eyes (two dots) -->
-      <circle cx="21" cy="24" r="1.5" fill="white"/>
-      <circle cx="27" cy="24" r="1.5" fill="white"/>
-      <!-- Mouth (simple smile) -->
-      <path d="M20 29q4 3 8 0" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+    <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <!-- Background rounded rectangle -->
+      <rect x="20" y="20" width="472" height="472" rx="100" fill="#23232d"/>
+      <!-- AI texture lines -->
+      <g opacity="0.06" stroke="#3574f0" stroke-width="1" fill="none">
+        <line x1="50" y1="80" x2="462" y2="80"/>
+        <line x1="50" y1="140" x2="462" y2="140"/>
+        <line x1="50" y1="200" x2="462" y2="200"/>
+        <line x1="50" y1="260" x2="462" y2="260"/>
+        <line x1="50" y1="320" x2="462" y2="320"/>
+        <line x1="50" y1="380" x2="462" y2="380"/>
+        <line x1="50" y1="440" x2="462" y2="440"/>
+        <line x1="80" y1="50" x2="80" y2="462"/>
+        <line x1="140" y1="50" x2="140" y2="462"/>
+        <line x1="200" y1="50" x2="200" y2="462"/>
+        <line x1="260" y1="50" x2="260" y2="462"/>
+        <line x1="320" y1="50" x2="320" y2="462"/>
+        <line x1="380" y1="50" x2="380" y2="462"/>
+        <line x1="440" y1="50" x2="440" y2="462"/>
+      </g>
+      <!-- Blue rounded rhombus -->
+      <g transform="rotate(45, 256, 256)">
+          <rect x="96" y="96" width="320" height="320" rx="45" fill="#3574f0"/>
+      </g>
+      <!-- "OS" text -->
+      <text x="256" y="275" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="160" fill="white" text-anchor="middle" dominant-baseline="middle">OS</text>
     </svg>
   `;
 }
@@ -193,23 +204,36 @@ export class OpenStormLogoIcon extends LitElement {
       <svg
         width=${size}
         height=${size}
-        viewBox="0 0 48 48"
+        viewBox="0 0 512 512"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         style="display: block;"
       >
-        <!-- Outer rounded square background with theme-aware color -->
-        <rect x="2" y="2" width="44" height="44" rx="10" fill="var(--brand-primary)"/>
-        <!-- Monkey face (heart-shaped head) -->
-        <path d="M24 36c6 0 10-5 10-10V20c0-4-4-7-10-7s-10 3-10 7v6c0 5 4 10 10 10z" stroke="white" stroke-width="2.5" fill="none"/>
-        <!-- Ears (circles on sides) -->
-        <circle cx="14" cy="22" r="3" stroke="white" stroke-width="2.5" fill="none"/>
-        <circle cx="34" cy="22" r="3" stroke="white" stroke-width="2.5" fill="none"/>
-        <!-- Eyes (two dots) -->
-        <circle cx="21" cy="24" r="1.5" fill="white"/>
-        <circle cx="27" cy="24" r="1.5" fill="white"/>
-        <!-- Mouth (simple smile) -->
-        <path d="M20 29q4 3 8 0" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+        <!-- Background rounded rectangle (greyish black) -->
+        <rect x="20" y="20" width="472" height="472" rx="100" fill="#23232d"/>
+        <!-- AI texture lines -->
+        <g opacity="0.06" stroke="#3574f0" stroke-width="1" fill="none">
+          <line x1="50" y1="80" x2="462" y2="80"/>
+          <line x1="50" y1="140" x2="462" y2="140"/>
+          <line x1="50" y1="200" x2="462" y2="200"/>
+          <line x1="50" y1="260" x2="462" y2="260"/>
+          <line x1="50" y1="320" x2="462" y2="320"/>
+          <line x1="50" y1="380" x2="462" y2="380"/>
+          <line x1="50" y1="440" x2="462" y2="440"/>
+          <line x1="80" y1="50" x2="80" y2="462"/>
+          <line x1="140" y1="50" x2="140" y2="462"/>
+          <line x1="200" y1="50" x2="200" y2="462"/>
+          <line x1="260" y1="50" x2="260" y2="462"/>
+          <line x1="320" y1="50" x2="320" y2="462"/>
+          <line x1="380" y1="50" x2="380" y2="462"/>
+          <line x1="440" y1="50" x2="440" y2="462"/>
+        </g>
+        <!-- Blue rounded rhombus -->
+        <g transform="rotate(45, 256, 256)">
+        <rect x="96" y="96" width="320" height="320" rx="45" fill="#3574f0"/>
+        </g>
+        <!-- "OS" text -->
+        <text x="256" y="275" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="160" fill="white" text-anchor="middle" dominant-baseline="middle">OS</text>
       </svg>
     `;
   }

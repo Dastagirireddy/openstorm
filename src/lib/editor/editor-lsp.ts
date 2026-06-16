@@ -160,6 +160,93 @@ export function showLspHoverTooltip(
 }
 
 /**
+ * Create a CodeMirror hoverTooltip extension for LSP hovers.
+ * Uses CodeMirror's built-in hover detection (300ms delay) and positioning.
+ * Returns simple DOM — tooltip-highlight plugin handles syntax highlighting.
+ */
+export function lspHoverTooltip(filePath: string) {
+  return hoverTooltip(async (view: EditorView, pos: number) => {
+    const languageId = getLanguageIdFromPath(filePath);
+    if (!languageId) return null;
+
+    try {
+      const line = view.state.doc.lineAt(pos);
+      const column = pos - line.from;
+
+      const hover = await getHover(
+        languageId,
+        filePath,
+        view.state.doc.toString(),
+        line.number - 1,
+        column
+      );
+
+      if (!hover) return null;
+
+      const hasContent = hover.html || hover.contents;
+      if (!hasContent) return null;
+
+      return {
+        pos,
+        above: true,
+        create: () => {
+          const dom = document.createElement('div');
+          dom.className = 'cm-tooltip-lsp';
+
+          // Use pre-rendered HTML from backend if available, otherwise use contents
+          if (hover.html) {
+            dom.innerHTML = hover.html;
+          } else {
+            // Parse markdown contents into simple HTML
+            dom.innerHTML = _simpleMarkdownToHtml(hover.contents);
+          }
+
+          return { dom };
+        },
+      };
+    } catch (error) {
+      console.error('LSP hover error:', error);
+      return null;
+    }
+  });
+}
+
+/**
+ * Simple markdown-to-HTML for LSP hover contents.
+ * Handles basic markdown: code blocks, inline code, bold, italic, links.
+ */
+function _simpleMarkdownToHtml(md: string): string {
+  if (!md) return '';
+
+  let html = md
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
+  // Fenced code blocks ```lang ... ```
+  html = html.replace(/```(\w*)\n?([\s\S]*?)\n?```/g, (_m, lang: string, code: string) => {
+    return `<pre><code class="language-${lang}">${code.trim()}</code></pre>`;
+  });
+
+  // Inline code `...`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Bold **...**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  // Italic *...*
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+
+  // Links [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+
+  return html;
+}
+
+/**
  * Create debug hover tooltip extension
  */
 export function debugHoverTooltip(

@@ -83,11 +83,11 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .action-button:hover {
-      background: rgba(0, 0, 0, 0.06);
+      background: var(--app-hover-background, rgba(0, 0, 0, 0.06));
     }
 
     .action-button:active {
-      background: rgba(0, 0, 0, 0.1);
+      background: var(--app-toolbar-active, rgba(0, 0, 0, 0.1));
     }
 
     .action-button iconify-icon {
@@ -95,11 +95,11 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .run-button {
-      color: #4caf50;
+      color: var(--app-continue-color, #4caf50);
     }
 
     .run-button:disabled {
-      color: #bdbdbd;
+      color: var(--app-disabled-foreground, #bdbdbd);
       cursor: not-allowed;
     }
 
@@ -108,11 +108,11 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .debug-button {
-      color: #1976d2;
+      color: var(--app-step-color, #1976d2);
     }
 
     .debug-button:disabled {
-      color: #bdbdbd;
+      color: var(--app-disabled-foreground, #bdbdbd);
       cursor: not-allowed;
     }
 
@@ -121,11 +121,11 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .debug-button.continue {
-      color: #4caf50;
+      color: var(--app-continue-color, #4caf50);
     }
 
     .stop-button {
-      color: #f44336;
+      color: var(--app-stop-color, #f44336);
     }
 
     .config-select {
@@ -145,7 +145,7 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .config-select:hover {
-      background: rgba(0, 0, 0, 0.04);
+      background: var(--app-hover-background, rgba(0, 0, 0, 0.04));
     }
 
     .status-indicator {
@@ -153,18 +153,18 @@ export class RunToolbar extends TailwindElement() {
       align-items: center;
       gap: 3px;
       font-size: 11px;
-      color: #888;
+      color: var(--app-disabled-foreground, #888);
     }
 
     .status-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: #ccc;
+      background: var(--app-disabled-foreground, #ccc);
     }
 
     .status-dot.running {
-      background: #4caf50;
+      background: var(--app-continue-color, #4caf50);
       animation: pulse 1.5s infinite;
     }
 
@@ -179,7 +179,7 @@ export class RunToolbar extends TailwindElement() {
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.3);
+      background: var(--app-overlay-background, rgba(0, 0, 0, 0.3));
       display: flex;
       align-items: center;
       justify-content: center;
@@ -187,25 +187,25 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .install-dialog {
-      background: #ffffff;
-      border: 1px solid #e0e0e0;
+      background: var(--app-bg, #ffffff);
+      border: 1px solid var(--app-border, #e0e0e0);
       border-radius: 8px;
       padding: 20px;
       min-width: 320px;
       max-width: 450px;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+      box-shadow: var(--app-dialog-shadow, 0 4px 24px rgba(0, 0, 0, 0.15));
     }
 
     .install-dialog-title {
       font-size: 14px;
       font-weight: 600;
-      color: #1a1a1a;
+      color: var(--app-foreground, #1a1a1a);
       margin-bottom: 12px;
     }
 
     .install-dialog-content {
       font-size: 13px;
-      color: #333333;
+      color: var(--app-foreground, #333333);
       margin-bottom: 16px;
       line-height: 1.5;
     }
@@ -215,15 +215,15 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .adapter-name {
-      color: #6366f1;
+      color: var(--brand-primary, #6366f1);
       font-weight: 500;
     }
 
     .install-dialog-content code {
-      background: #f5f5f5;
+      background: var(--app-toolbar-hover, #f5f5f5);
       padding: 2px 6px;
       border-radius: 3px;
-      color: #c41e3a;
+      color: var(--app-console-error, #c41e3a);
       font-family: monospace;
       font-size: 12px;
     }
@@ -244,27 +244,27 @@ export class RunToolbar extends TailwindElement() {
     }
 
     .install-dialog-button.primary {
-      background: #6366f1;
-      color: #ffffff;
+      background: var(--app-button-background, #6366f1);
+      color: var(--app-button-foreground, #ffffff);
     }
 
     .install-dialog-button.primary:hover {
-      background: #4f46e5;
+      background: var(--app-button-hover, #4f46e5);
     }
 
     .install-dialog-button.primary:disabled {
-      background: #cccccc;
-      color: #999999;
+      background: var(--app-disabled-foreground, #cccccc);
+      color: var(--app-disabled-foreground, #999999);
       cursor: not-allowed;
     }
 
     .install-dialog-button.secondary {
-      background: #f0f0f0;
-      color: #333333;
+      background: var(--app-toolbar-hover, #f0f0f0);
+      color: var(--app-foreground, #333333);
     }
 
     .install-dialog-button.secondary:hover {
-      background: #e0e0e0;
+      background: var(--app-toolbar-active, #e0e0e0);
     }
 
     .install-progress {
@@ -273,14 +273,14 @@ export class RunToolbar extends TailwindElement() {
       gap: 8px;
       margin-top: 12px;
       font-size: 12px;
-      color: #666666;
+      color: var(--app-secondary-foreground, #666666);
     }
 
     .spinner {
       width: 14px;
       height: 14px;
-      border: 2px solid #e5e7eb;
-      border-top-color: #6366f1;
+      border: 2px solid var(--app-border, #e5e7eb);
+      border-top-color: var(--brand-primary, #6366f1);
       border-radius: 50%;
       animation: spin 1s linear infinite;
     }
@@ -562,7 +562,7 @@ export class RunToolbar extends TailwindElement() {
                 ${selectedConfig.name}
               </span>
             `
-          : html`<span style="color: #999;">No configuration</span>`}
+          : html`<span style="color: var(--app-disabled-foreground, #999);">No configuration</span>`}
       </div>
 
       ${showRunDebug ? html`
@@ -629,7 +629,7 @@ export class RunToolbar extends TailwindElement() {
       ${this.isDebugging
         ? html`
             <div class="status-indicator">
-              <span class="status-dot running" style="background: ${this.isDebugStopped ? '#ff9800' : '#1976d2'}; animation: none;"></span>
+              <span class="status-dot running" style="background: ${this.isDebugStopped ? 'var(--app-stopped-state, #ff9800)' : 'var(--app-step-color, #1976d2)'}; animation: none;"></span>
               <span>${this.isDebugStopped ? 'Paused' : 'Running'}</span>
             </div>
           `
@@ -648,7 +648,7 @@ export class RunToolbar extends TailwindElement() {
                 <p>Download size: ~${this.adapterInfo.sizeMb} MB</p>
               ` : ""}
               ${this.adapterInfo.installCommand ? html`
-                <p>Or install manually: <code style="background: #3c3c3c; padding: 2px 6px; border-radius: 3px;">${this.adapterInfo.installCommand}</code></p>
+                <p>Or install manually: <code style="background: var(--app-toast-background, #3c3c3c); padding: 2px 6px; border-radius: 3px;">${this.adapterInfo.installCommand}</code></p>
               ` : ""}
               ${this.isInstalling ? html`
                 <div class="install-progress">

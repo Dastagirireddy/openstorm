@@ -180,24 +180,25 @@ export class FileCreateDialog extends TailwindElement() {
 
     return html`
       <div
-        class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        class="fixed inset-0 flex items-center justify-center z-50"
+        style="background: var(--app-overlay-background, rgba(0, 0, 0, 0.4));"
         @click=${this.handleCancel}
       >
         <div
-          class="bg-white rounded-lg shadow-2xl w-[420px] border border-[#d0d0d0] overflow-hidden flex flex-col"
-          style="max-height: 420px;"
+          class="rounded-lg shadow-2xl w-[420px] overflow-hidden flex flex-col"
+          style="background: var(--app-bg, #ffffff); border: 1px solid var(--app-input-border, #d0d0d0); max-height: 420px;"
           @click=${(e: Event) => e.stopPropagation()}
           @mousedown=${(e: Event) => e.stopPropagation()}
           @keydown=${this.handleKeydown}
           tabindex="-1"
         >
           <!-- Compact Input at Top - Fixed position -->
-          <div class="px-3 py-2.5 bg-[#f5f5f5] border-b border-[#d0d0d0] flex-shrink-0" style="min-height: 62px;">
+          <div class="px-3 py-2.5 flex-shrink-0" style="background: var(--app-toolbar-hover, #f5f5f5); border-bottom: 1px solid var(--app-border, #d0d0d0); min-height: 62px;">
             <input
               id="filename-input"
               type="text"
-              class="w-full px-2.5 py-1.5 text-[13px] bg-white border rounded focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)] focus:border-transparent"
-              style="border-color: ${showError ? '#ef4444' : 'var(--app-input-border)'};"
+              class="w-full px-2.5 py-1.5 text-[13px] border rounded focus:outline-none focus:ring-1 focus:ring-[var(--brand-primary)] focus:border-transparent"
+              style="border-color: ${showError ? 'var(--error, #ef4444)' : 'var(--app-input-border)'}; background: var(--app-input-background, #ffffff); color: var(--app-foreground, #1a1a1a);"
               placeholder="File name..."
               value="${this.filename}"
               @input=${this.handleInput}
@@ -205,42 +206,43 @@ export class FileCreateDialog extends TailwindElement() {
               @mousedown=${(e: Event) => e.stopPropagation()}
             />
             ${fullName && !showError ? html`
-              <p class="mt-1 text-[10px] text-[#6a6a6a] truncate h-[14px]">
+              <p class="mt-1 text-[10px] truncate h-[14px]" style="color: var(--app-secondary-foreground, #6a6a6a);">
                 ${fullName}
               </p>
             ` : html`<div class="h-[14px]"></div>`}
             ${showError ? html`
-              <p class="mt-1 text-[10px] text-red-600 h-[14px]">${this.error}</p>
+              <p class="mt-1 text-[10px] h-[14px]" style="color: var(--error, #ef4444);">${this.error}</p>
             ` : html`<div class="h-[14px]"></div>`}
           </div>
 
           <!-- Template Grid with Groups - Scrollable -->
           <div
-            class="flex-1 overflow-y-auto px-3 py-2 bg-white"
+            class="flex-1 overflow-y-auto px-3 py-2"
+            style="background: var(--app-bg, #ffffff);"
             @scroll=${this.handleScroll}
           >
             ${this.groupedTemplates.map(groupData => {
               const groupLabel = this.getGroupLabel(groupData.group);
               return html`
                 <div class="mb-2">
-                  <div class="text-[9px] font-semibold text-[#8a8a8a] uppercase tracking-wider mb-1.5 px-1">${groupLabel}</div>
+                  <div class="text-[9px] font-semibold uppercase tracking-wider mb-1.5 px-1" style="color: var(--app-disabled-foreground, #8a8a8a);">${groupLabel}</div>
                   <div class="grid grid-cols-4 gap-1.5">
                     ${groupData.templates.map(template => {
                       const isSelected = this.selectedTemplate?.id === template.id;
                       return html`
                         <div
-                          class="flex flex-col items-center justify-center p-1.5 rounded border cursor-pointer transition-all
-                            ${isSelected
-                              ? 'bg-[#e8e0f5] border-[#5b47c9] ring-1 ring-[#5b47c9]'
-                              : 'bg-white border-[#e0e0e0] hover:bg-[#f5f5f5] hover:border-[#d0d0d0]'}"
+                          class="flex flex-col items-center justify-center p-1.5 rounded cursor-pointer transition-all"
+                          style="${isSelected
+                            ? 'background: var(--app-selection-background, #e8e0f5); border: 1px solid var(--brand-primary, #5b47c9); box-shadow: 0 0 0 1px var(--brand-primary, #5b47c9);'
+                            : 'background: var(--app-bg, #ffffff); border: 1px solid var(--app-border, #e0e0e0);'}"
                           @click=${() => this.handleTemplateSelect(template)}
                           title="${template.description || template.name}"
                         >
                           ${template.icon
                             ? html`<file-icon path="${template.icon}" size="22"></file-icon>`
-                            : html`<os-icon name="file" color="#5a5a5a" size="22"></os-icon>`
+                            : html`<os-icon name="file" color="var(--app-secondary-foreground, #5a5a5a)" size="22"></os-icon>`
                           }
-                          <span class="text-[9px] text-center mt-1 text-[#1a1a1a] truncate w-full">${template.name}</span>
+                          <span class="text-[9px] text-center mt-1 truncate w-full" style="color: var(--app-foreground, #1a1a1a);">${template.name}</span>
                         </div>
                       `;
                     })}

@@ -1,9 +1,21 @@
-<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Subtle glow filter -->
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
   <!-- Background rounded rectangle (greyish black) -->
   <rect x="20" y="20" width="472" height="472" rx="100" fill="#23232d"/>
 
   <!-- AI texture lines (subtle blue grid) -->
   <g opacity="0.06" stroke="#3574f0" stroke-width="1" fill="none">
+    <!-- Horizontal lines -->
     <line x1="50" y1="80" x2="462" y2="80"/>
     <line x1="50" y1="140" x2="462" y2="140"/>
     <line x1="50" y1="200" x2="462" y2="200"/>
@@ -11,6 +23,7 @@
     <line x1="50" y1="320" x2="462" y2="320"/>
     <line x1="50" y1="380" x2="462" y2="380"/>
     <line x1="50" y1="440" x2="462" y2="440"/>
+    <!-- Vertical lines -->
     <line x1="80" y1="50" x2="80" y2="462"/>
     <line x1="140" y1="50" x2="140" y2="462"/>
     <line x1="200" y1="50" x2="200" y2="462"/>
@@ -20,11 +33,20 @@
     <line x1="440" y1="50" x2="440" y2="462"/>
   </g>
 
+  <!-- Subtle glow behind rhombus -->
+  <ellipse cx="256" cy="256" rx="140" ry="140" fill="rgba(53, 116, 240, 0.12)" filter="url(#glow)"/>
+
   <!-- Blue rounded rhombus (rotated square) -->
   <g transform="rotate(45, 256, 256)">
     <rect x="96" y="96" width="320" height="320" rx="45" fill="#3574f0"/>
   </g>
 
   <!-- "OS" text -->
-  <text x="256" y="275" font-family="Arial, Helvetica, sans-serif" font-weight="bold" font-size="160" fill="white" text-anchor="middle" dominant-baseline="middle">OS</text>
+  <text x="256" y="275" 
+        font-family="'Arial', 'Helvetica Neue', sans-serif" 
+        font-weight="bold" 
+        font-size="160" 
+        fill="white" 
+        text-anchor="middle"
+        dominant-baseline="middle">OS</text>
 </svg>

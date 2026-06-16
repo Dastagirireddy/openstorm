@@ -6,7 +6,6 @@
 
 // Syntax highlighting and language support
 export {
-  openStormHighlight,
   getSyntaxHighlighting,
   getLanguageExtension,
   detectIndentUnit,

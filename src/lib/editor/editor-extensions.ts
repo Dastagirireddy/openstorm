@@ -5,7 +5,7 @@
  */
 
 import { EditorState } from '@codemirror/state';
-import { syntaxHighlighting, indentUnit, bracketMatching, indentOnInput } from '@codemirror/language';
+import { indentUnit, bracketMatching, indentOnInput } from '@codemirror/language';
 import {
   lineNumbers,
   highlightActiveLineGutter,
@@ -15,10 +15,12 @@ import {
   drawSelection,
   dropCursor,
 } from '@codemirror/view';
-import { indentationMarkers } from '@replit/codemirror-indentation-markers';
+import { scopeLines } from './scope-lines';
+import { tooltipHighlight } from './tooltip-highlight';
 import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
+import { closeBrackets } from '@codemirror/autocomplete';
 import { customFoldGutter } from '../utils';
-import { openStormHighlight } from './editor-syntax.js';
+import { getSyntaxHighlighting } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
 import { dispatch } from '../types/events.js';
 
@@ -47,21 +49,13 @@ export function getCommonExtensions(
     dropCursor(),
     highlightActiveLine(),
     bracketMatching(),
+    closeBrackets(),
     indentOnInput(),
-    // indentationMarkers with "fullScope" tracks both tabs and spaces
-    indentationMarkers({
-      highlightActiveBlock: true,
-      markerType: "fullScope",
-      thickness: 1,
-      activeThickness: 1,
-      colors: {
-        light: '#d0d0d0',
-        dark: '#505050',
-        activeLight: '#b0b0b0',
-        activeDark: '#707070',
-      },
-    }),
-    syntaxHighlighting(openStormHighlight),
+    // Scope lines based on syntax tree structure
+    ...scopeLines(),
+    // Syntax highlighting for code blocks in tooltips
+    tooltipHighlight(),
+    getSyntaxHighlighting(),
     // Track cursor position changes
     EditorView.updateListener.of((update) => {
       if (update.selectionSet) {

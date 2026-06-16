@@ -4,6 +4,7 @@ import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
 import { LspService, LspServerInfo, LspInstallProgress } from '../../lib/lsp/lsp-service.js';
 import './icon.js';
+import '../header/update-button.js';
 
 @customElement('status-bar')
 export class StatusBar extends TailwindElement() {
@@ -240,6 +241,7 @@ export class StatusBar extends TailwindElement() {
             <span>${encoding.toUpperCase()}</span>
             <span>${lineEnding}</span>
           </div>
+          <update-button></update-button>
           <global-event-log></global-event-log>
         </div>
       </footer>

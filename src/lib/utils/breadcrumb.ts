@@ -164,45 +164,38 @@ export function getFileIconColor(path: string): string {
   const ext = basename.split('.').pop()?.toLowerCase() || '';
 
   const colorMap: Record<string, string> = {
-    // Rust
-    rs: '#dea584',
-    // Go
-    go: '#00add8',
-    // TypeScript/JavaScript
-    ts: '#3178c6',
-    tsx: '#3178c6',
-    js: '#f7df1e',
-    jsx: '#f7df1e',
-    json: '#f7df1e',
-    // YAML/TOML
-    yaml: '#cb171e',
-    yml: '#cb171e',
-    toml: '#9c4221',
-    // Styles
-    css: '#42a5f5',
-    scss: '#c6538c',
-    sass: '#c6538c',
-    less: '#1d365d',
-    // Web
-    html: '#e34c26',
-    xml: '#f1662a',
-    sql: '#4479a1',
-    // Python
-    py: '#3776ab',
-    // JVM
-    java: '#f89820',
-    kt: '#7f52ff',
-    kts: '#7f52ff',
+    rs: 'var(--file-rs, #dea584)',
+    go: 'var(--file-go, #00add8)',
+    ts: 'var(--file-ts, #3178c6)',
+    tsx: 'var(--file-tsx, #3178c6)',
+    js: 'var(--file-js, #f7df1e)',
+    jsx: 'var(--file-jsx, #f7df1e)',
+    json: 'var(--file-json, #f7df1e)',
+    yaml: 'var(--file-yaml, #cb171e)',
+    yml: 'var(--file-yaml, #cb171e)',
+    toml: 'var(--file-toml, #9c4221)',
+    css: 'var(--file-css, #42a5f5)',
+    scss: 'var(--file-scss, #c6538c)',
+    sass: 'var(--file-scss, #c6538c)',
+    less: 'var(--file-less, #1d365d)',
+    html: 'var(--file-html, #e34c26)',
+    xml: 'var(--file-xml, #f1662a)',
+    sql: 'var(--file-sql, #4479a1)',
+    py: 'var(--file-py, #3776ab)',
+    java: 'var(--file-java, #f89820)',
+    kt: 'var(--file-kt, #7f52ff)',
+    kts: 'var(--file-kt, #7f52ff)',
     scala: '#dc322f',
-    swift: '#f05138',
-    // C/C++
-    c: '#519aba',
-    cpp: '#519aba',
-    // Other
-    md: '#519aba',
-    gitignore: '#f44d27',
-    dockerfile: '#2496ed',
+    swift: 'var(--file-swift, #f05138)',
+    c: 'var(--file-c, #519aba)',
+    cpp: 'var(--file-cpp, #519aba)',
+    cs: 'var(--file-cs, #239120)',
+    php: 'var(--file-php, #777bb4)',
+    rb: 'var(--file-rb, #cc342d)',
+    md: 'var(--file-md, #519aba)',
+    gitignore: 'var(--file-gitignore, #f44d27)',
+    dockerfile: 'var(--file-dockerfile, #2496ed)',
   };
 
-  return colorMap[ext] || '#5f6368';
+  return colorMap[ext] || 'var(--app-secondary-foreground, #5f6368)';
 }

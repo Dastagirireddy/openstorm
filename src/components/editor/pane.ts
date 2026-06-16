@@ -9,6 +9,7 @@ import { indentationMarkers } from '@replit/codemirror-indentation-markers';
 
 import { TailwindElement } from '../../tailwind-element.js';
 import { customFoldGutter } from '../../lib/utils/custom-fold-gutter.js';
+import { debounce } from '../../lib/utils/debounce.js';
 import { getFileExtension } from '../../lib/icons/file-icons.js';
 import { dispatch } from '../../lib/types/events.js';
 import type { EditorTab } from '../../lib/types/file-types.js';
@@ -38,11 +39,11 @@ import {
 import {
   lspCompletionSource,
   debugHoverTooltip,
+  lspHoverTooltip,
   notifyLspDocumentOpen,
   notifyLspDocumentChange,
   handleGoToDefinition,
   checkDefinitionAtPosition,
-  showLspHoverTooltip,
 } from '../../lib/editor/editor-lsp.js';
 import {
   getCompletions,
@@ -77,9 +78,22 @@ export class EditorPane extends TailwindElement() {
   // Project path for breakpoint persistence
   private _projectPath: string = '';
 
-  // Hover tooltip debounce
-  private _hoverTimeout: ReturnType<typeof setTimeout> | null = null;
-  private _lastHoverPos: number | null = null;
+  // Debounced LSP document sync (300ms)
+  private _debouncedNotifyChange = debounce((content: string) => {
+    this._doNotifyDocumentChanged(content);
+  }, 300);
+
+  // Stored bound references for event listeners (prevents leak in disconnectedCallback)
+  private _boundHandleFileSaved = this._handleFileSaved.bind(this);
+  private _boundHandleRestoreCursorPosition = this._handleRestoreCursorPosition.bind(this);
+  private _boundHandleDebugSessionStarted = this._handleDebugSessionStarted.bind(this);
+  private _boundHandleDebugSessionEnded = this._handleDebugSessionEnded.bind(this);
+  private _boundHandleDebugStopped = ((e: Event) => this._handleDebugStopped(e as CustomEvent).catch(console.error)) as EventListener;
+  private _boundHandleDebugPanelRequestBreakpoints = this._handleDebugPanelRequestBreakpoints.bind(this);
+  private _boundHandleBreakpointToggled = this._handleBreakpointToggled.bind(this);
+  private _boundHandleBreakpointRemovedExternal = this._handleBreakpointRemovedExternal.bind(this);
+  private _boundHandleLspServerReady = this._handleLspServerReady.bind(this);
+  private _boundHandleProjectOpened = this._handleProjectOpened.bind(this);
 
   // Conditional breakpoint dialog
   private conditionalDialog: HTMLDivElement | null = null;
@@ -621,32 +635,6 @@ export class EditorPane extends TailwindElement() {
   }
 
   /**
-   * Handle mouse hover in editor to show LSP tooltip
-   */
-  private _handleEditorHover(event: MouseEvent): void {
-    if (!this.editorView) return;
-    const activeTab = this.tabs.find(t => t.id === this.activeTabId);
-    if (!activeTab) return;
-
-    const pos = this.editorView.posAtCoords({ x: event.clientX, y: event.clientY });
-    if (pos === null) return;
-
-    // Debounce hover requests - only trigger if position changed significantly
-    if (pos === this._lastHoverPos) return;
-    this._lastHoverPos = pos;
-
-    // Clear pending hover request
-    if (this._hoverTimeout) {
-      clearTimeout(this._hoverTimeout);
-    }
-
-    // Delay hover request to avoid flickering
-    this._hoverTimeout = setTimeout(() => {
-      showLspHoverTooltip(this.editorView, pos, activeTab.path);
-    }, 150);
-  }
-
-  /**
    * Notify backend of document changes for LSP sync
    */
   private _documentVersion = 0;
@@ -681,7 +669,7 @@ export class EditorPane extends TailwindElement() {
     console.log('[LSP] Document opened:', activeTab.path);
   }
 
-  private async _notifyDocumentChanged(content: string): Promise<void> {
+  private async _doNotifyDocumentChanged(content: string): Promise<void> {
     const activeTab = this.tabs.find(t => t.id === this.activeTabId);
     if (!activeTab) return;
 
@@ -755,16 +743,21 @@ export class EditorPane extends TailwindElement() {
             this._handleBreakpointClick(lineNum, wasThere);
           }),
           getEditorTheme(),
-          language
+          language,
+          // LSP hover tooltip (CodeMirror native)
+          lspHoverTooltip(activeTab.path),
+          // LSP document sync on change
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) {
+              const content = update.state.doc.toString();
+              this._debouncedNotifyChange(content);
+            }
+          }),
         ]
       });
       this.editorView = new EditorView({
         state,
         parent: editorContainer
-      });
-      // Add hover listener for LSP tooltips
-      this.editorView.dom.addEventListener('mousemove', (e: MouseEvent) => {
-        this._handleEditorHover(e);
       });
       // Notify LSP server that document is opened
       this._notifyDocumentOpened(activeTab.content);
@@ -805,7 +798,16 @@ export class EditorPane extends TailwindElement() {
               this._handleBreakpointClick(lineNum, wasThere);
             }),
             getEditorTheme(),
-            language
+            language,
+            // LSP hover tooltip (CodeMirror native)
+            lspHoverTooltip(activeTab.path),
+            // LSP document sync on change
+            EditorView.updateListener.of((update) => {
+              if (update.docChanged) {
+                const content = update.state.doc.toString();
+                this._debouncedNotifyChange(content);
+              }
+            }),
           ],
           selection: EditorSelection.create([EditorSelection.cursor(pos)])
         });
@@ -849,14 +851,14 @@ export class EditorPane extends TailwindElement() {
 
   updated(changedProperties: Map<string, unknown>): void {
     super.updated(changedProperties);
-    // Only update editor when activeTabId changes, not when tabs content changes
-    // The editor view handles content changes internally via EditorView.updateListener
     if (changedProperties.has('activeTabId')) {
-      // Wait for DOM to be ready before updating editor
       requestAnimationFrame(() => {
         this._updateEditor();
         this._notifyLanguageChange();
       });
+    }
+    if (changedProperties.has('projectPath') && this.projectPath) {
+      this._projectPath = this.projectPath;
     }
   }
 
@@ -925,37 +927,30 @@ export class EditorPane extends TailwindElement() {
     );
   }
 
-  updated(changedProperties: Map<string, unknown>): void {
-    super.updated(changedProperties);
-    if (changedProperties.has('projectPath') && this.projectPath) {
-      this._projectPath = this.projectPath;
-    }
-  }
-
   connectedCallback(): void {
     super.connectedCallback();
     // Listen for save events to update saved content
-    document.addEventListener('file-saved', this._handleFileSaved.bind(this));
+    document.addEventListener('file-saved', this._boundHandleFileSaved);
     // Listen for cursor position restore events (e.g., from go-to-definition)
-    document.addEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
+    document.addEventListener('restore-cursor-position', this._boundHandleRestoreCursorPosition);
 
     // Listen for debug session events
-    document.addEventListener('debug-session-started', this._handleDebugSessionStarted.bind(this));
-    document.addEventListener('debug-session-ended', this._handleDebugSessionEnded.bind(this));
-    document.addEventListener('debug-stopped', ((e: Event) => this._handleDebugStopped(e as CustomEvent).catch(console.error)) as EventListener);
-    document.addEventListener('debug-panel-request-breakpoints', this._handleDebugPanelRequestBreakpoints.bind(this));
+    document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.addEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.addEventListener('debug-panel-request-breakpoints', this._boundHandleDebugPanelRequestBreakpoints);
 
     // Listen for breakpoint events from panels
-    document.addEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
-    document.addEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
+    document.addEventListener('breakpoint-toggled', this._boundHandleBreakpointToggled);
+    document.addEventListener('breakpoint-removed', this._boundHandleBreakpointRemovedExternal);
     // Listen for LSP server ready event (after install)
-    document.addEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
+    document.addEventListener('lsp-server-ready', this._boundHandleLspServerReady);
 
     // Listen for theme changes
     document.addEventListener('theme-changed', this._themeChangeHandler);
 
     // Listen for project opened to load persisted breakpoints
-    document.addEventListener('project-opened', this._handleProjectOpened.bind(this));
+    document.addEventListener('project-opened', this._boundHandleProjectOpened);
   }
 
   private _handleThemeChanged(): void {
@@ -985,18 +980,17 @@ export class EditorPane extends TailwindElement() {
   disconnectedCallback(): void {
     super.disconnectedCallback();
     this.editorView?.destroy();
-    if (this._hoverTimeout) {
-      clearTimeout(this._hoverTimeout);
-    }
-    document.removeEventListener('file-saved', this._handleFileSaved.bind(this));
-    document.removeEventListener('restore-cursor-position', this._handleRestoreCursorPosition.bind(this));
-    document.removeEventListener('debug-session-started', this._handleDebugSessionStarted.bind(this));
-    document.removeEventListener('debug-session-ended', this._handleDebugSessionEnded.bind(this));
-    // Note: debug-stopped listener is wrapped, so we can't easily remove it - minor memory leak but acceptable
-    document.removeEventListener('breakpoint-toggled', this._handleBreakpointToggled.bind(this));
-    document.removeEventListener('breakpoint-removed', this._handleBreakpointRemovedExternal.bind(this));
-    document.removeEventListener('lsp-server-ready', this._handleLspServerReady.bind(this));
+    document.removeEventListener('file-saved', this._boundHandleFileSaved);
+    document.removeEventListener('restore-cursor-position', this._boundHandleRestoreCursorPosition);
+    document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
+    document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
+    document.removeEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.removeEventListener('debug-panel-request-breakpoints', this._boundHandleDebugPanelRequestBreakpoints);
+    document.removeEventListener('breakpoint-toggled', this._boundHandleBreakpointToggled);
+    document.removeEventListener('breakpoint-removed', this._boundHandleBreakpointRemovedExternal);
+    document.removeEventListener('lsp-server-ready', this._boundHandleLspServerReady);
     document.removeEventListener('theme-changed', this._themeChangeHandler);
+    document.removeEventListener('project-opened', this._boundHandleProjectOpened);
   }
 
   private _handleFileSaved(event: Event): void {

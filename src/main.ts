@@ -1143,7 +1143,7 @@ export class OpenStormApp extends TailwindElement() {
     const showGitPanel = !isSingleFileMode && this.gitPanelVisible;
     const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
     const showDebugPanel = this.isDebugging;
-    const showAppConsole = !isSingleFileMode && this.activeStatusBarPanel === 'app-console';
+    const showAppConsole = !isSingleFileMode && !this.isDebugging && this.activeStatusBarPanel === 'app-console';
     const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
 
     return html`

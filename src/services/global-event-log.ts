@@ -164,7 +164,7 @@ export class GlobalEventLogPanel extends TailwindElement(css`
 
         <!-- Status Bar Button -->
         <div
-          class="h-full px-2 flex items-center gap-1.5 hover:bg-[var(--statusbar-hover-background, var(--app-toolbar-hover))] transition-colors border-l cursor-pointer"
+          class="h-full px-2 flex items-center gap-1.5 hover:bg-[var(--statusbar-hover-background, var(--app-toolbar-hover))] transition-colors cursor-pointer"
           style="border-color: var(--statusbar-border, var(--app-border));"
           @click=${() => this.openPanel()}
           title="View event log"

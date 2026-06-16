@@ -8,6 +8,7 @@ import "./debug/debug-watch-panel.js";
 import "./debug/debug-call-stack-panel.js";
 import "./debug/debug-threads-panel.js";
 import "./debug/debug-breakpoints-panel.js";
+import "./debug/debug-console-panel.js";
 
 export interface StackFrame {
   id: number;
@@ -70,7 +71,7 @@ export interface StackFrameWithArgs extends StackFrame {
   arguments?: { name: string; value: string; type?: string }[];
 }
 
-type SectionId = 'callStack' | 'variables' | 'watch' | 'threads' | 'breakpoints';
+type SectionId = 'callStack' | 'variables' | 'watch' | 'threads' | 'breakpoints' | 'console';
 
 interface SectionDef {
   id: SectionId;
@@ -85,6 +86,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'watch',      label: 'Watch',       icon: 'mdi:eye-outline',       color: 'var(--app-tab-watch, #06b6d4)' },
   { id: 'threads',    label: 'Threads',     icon: 'mdi:account-group',     color: 'var(--app-tab-threads, #ea580c)' },
   { id: 'breakpoints',label: 'Breakpoints', icon: 'mdi:map-marker',        color: 'var(--app-tab-breakpoints, #f44336)' },
+  { id: 'console',    label: 'Console',     icon: 'mdi:console',           color: 'var(--app-tab-console, #16825d)' },
 ];
 
 @customElement("debug-panel")
@@ -169,6 +171,8 @@ export class DebugPanel extends TailwindElement() {
         return html`<debug-threads-panel></debug-threads-panel>`;
       case 'breakpoints':
         return html`<debug-breakpoints-panel></debug-breakpoints-panel>`;
+      case 'console':
+        return html`<debug-console-panel></debug-console-panel>`;
       default:
         return html``;
     }
@@ -226,7 +230,7 @@ export class DebugPanel extends TailwindElement() {
       <!-- Master-Detail Layout -->
       <div class="flex flex-1 overflow-hidden">
         <!-- Left: Navigation sidebar -->
-        <div class="flex flex-col py-1 overflow-y-auto" style="width: 44px; min-width: 44px; border-right: 1px solid var(--app-border); background-color: var(--app-tab-inactive);">
+        <div class="flex flex-col py-1 overflow-y-auto h-full" style="width: 44px; min-width: 44px; border-right: 1px solid var(--app-border); background-color: var(--app-tab-inactive);">
           ${SECTIONS.map(s => this.renderNavButton(s))}
         </div>
 
