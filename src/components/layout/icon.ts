@@ -2,7 +2,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { LitElement, svg, css, html } from 'lit';
 
 // Import icons individually (tree-shakeable)
-import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, RotateCw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle, GitMerge, PanelLeft, Copy, SlidersHorizontal } from 'lucide';
+import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, RotateCw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle, GitMerge, PanelLeft, Copy, SlidersHorizontal, Palette, Keyboard, Info, Code, LayoutGrid, Zap, Sparkles, Key, Command, Hash, Type, Save, HardDrive, Cpu, Braces, TextCursorInput, WandSparkles, AppWindow } from 'lucide';
 
 const iconMap: Record<string, any> = {
   'play': Play,
@@ -60,6 +60,24 @@ const iconMap: Record<string, any> = {
   'sidebar': PanelLeft,
   'copy': Copy,
   'sliders-horizontal': SlidersHorizontal,
+  'palette': Palette,
+  'keyboard': Keyboard,
+  'info': Info,
+  'code': Code,
+  'layout-grid': LayoutGrid,
+  'zap': Zap,
+  'sparkles': Sparkles,
+  'key': Key,
+  'command': Command,
+  'hash': Hash,
+  'type': Type,
+  'save': Save,
+  'hard-drive': HardDrive,
+  'cpu': Cpu,
+  'braces': Braces,
+  'text-cursor-input': TextCursorInput,
+  'wand-sparkles': WandSparkles,
+  'app-window': AppWindow,
 };
 
 // OpenStorm brand logo - blue rhombus on dark background

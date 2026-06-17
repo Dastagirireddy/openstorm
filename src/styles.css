@@ -41,9 +41,9 @@
 
   /* Debug panel */
   --app-continue-color: #22c55e;
-  --app-step-color: #0078d4;
-  --app-stop-color: #f44336;
-  --app-pause-color: #d97706;
+  --app-step-color: #3b82f6;
+  --app-stop-color: #ef4444;
+  --app-pause-color: #f59e0b;
   --app-status-running: #16825d;
   --app-status-stopped: #d97706;
   --app-tab-variables: #8b5cf6;

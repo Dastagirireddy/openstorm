@@ -204,7 +204,7 @@ export class TemplatePicker extends TailwindElement() {
       'docker': '#0284c7',
     };
     return html`
-      <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${colors[language] || '#6b7280'}"></span>
+      <span class="w-1.5 h-1.5 rounded-full" style="background-color: ${colors[language] || 'var(--app-disabled-foreground)'}"></span>
     `;
   }
 

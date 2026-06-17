@@ -9,7 +9,6 @@ import { dispatch } from "./lib/types/events.js";
 import {
   loadTerminalPane,
   loadSearchOverlay,
-  loadSettingsPanel,
   loadGitPanel,
   loadCommitPanel,
   loadPullRequestsPanel,
@@ -73,6 +72,7 @@ import "./components/dialogs/rename-dialog.js";
 import "./components/dialogs/delete-dialog.js";
 import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
+import "./components/overlays/settings-panel.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
@@ -107,7 +107,6 @@ export class OpenStormApp extends TailwindElement() {
   @state() private debugSidebarVisible = false;
   @state() private isDebugging = false;
   @state() private debugSessionState: "stopped" | "running" | "terminated" = "terminated";
-  @state() private debugPanelHeight = 250;
   @state() private appConsoleVisible = false;
   @state() private appConsoleHeight = 200;
   @state() private gitPanelVisible = false;
@@ -207,14 +206,10 @@ export class OpenStormApp extends TailwindElement() {
   override willUpdate(changedProperties: Map<string, unknown>): void {
     super.willUpdate(changedProperties);
 
-    // Pre-load terminal when panel is about to be shown
-    if (changedProperties.has("activeStatusBarPanel") && this.activeStatusBarPanel === "terminal") {
+    // Pre-load terminal when terminal tab is active
+    const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
+    if (activeTab?.tabType === 'terminal') {
       loadTerminalPane();
-    }
-
-    // Pre-load settings panel
-    if (changedProperties.has("activeActivity") && this.activeActivity === "settings") {
-      loadSettingsPanel();
     }
 
     // Pre-load search panel
@@ -393,10 +388,7 @@ export class OpenStormApp extends TailwindElement() {
       }
     });
 
-    // Listen for close-settings event
-    document.addEventListener("close-settings", () => {
-      this.activeActivity = "explorer";
-    });
+    // Settings panel manages its own open/close state via 'open-settings' / 'close-settings' events
 
     // Listen for status bar tab clicks
     document.addEventListener("statusbar-tab-click", (e: Event) => {
@@ -410,25 +402,39 @@ export class OpenStormApp extends TailwindElement() {
           this.activeStatusBarPanel = null;
         }
         dispatch('toggle-git-log', { visible: this.gitPanelVisible });
-      } else if (tab === 'terminal' || tab === 'app-console') {
-        // Toggle: if already active, close it; otherwise switch to it
+      } else if (tab === 'terminal') {
+        // Find existing terminal tab or create new one
+        const existingTerminalTab = this.tabs.find(t => t.tabType === 'terminal');
+        if (existingTerminalTab) {
+          // Switch to existing terminal tab
+          this.activeTabId = existingTerminalTab.id;
+          this.handleTabSelect({ detail: { tabId: existingTerminalTab.id } } as CustomEvent);
+        } else {
+          // Create new terminal tab
+          const terminalTab: EditorTab = {
+            id: `terminal-${Date.now()}`,
+            name: 'Terminal',
+            path: '',
+            modified: false,
+            content: '',
+            tabType: 'terminal',
+            pinned: false,
+            lastUsed: Date.now(),
+          };
+          this.tabs = [...this.tabs, terminalTab];
+          this.activeTabId = terminalTab.id;
+          this.terminalCreated = true;
+          this.requestUpdate();
+        }
+        // Clear notification dots
+        this.showTerminalNotification = false;
+      } else if (tab === 'app-console') {
+        // Toggle app console panel (keep as bottom panel for now)
         const wasActive = this.activeStatusBarPanel === tab;
         this.activeStatusBarPanel = wasActive ? null : tab;
 
-        // Create terminal on first open (not auto-created anymore)
-        if (tab === 'terminal' && !wasActive && !this.terminalCreated) {
-          this.terminalCreated = true;
-        }
-
-        // Close git panel when opening terminal/console
-        if (this.activeStatusBarPanel !== null && this.gitPanelVisible) {
-          this.gitPanelVisible = false;
-          dispatch('toggle-git-log', { visible: false });
-        }
-
         // Clear notification dots
-        if (tab === 'app-console') this.showConsoleNotification = false;
-        if (tab === 'terminal') this.showTerminalNotification = false;
+        this.showConsoleNotification = false;
       }
 
       this.requestUpdate();
@@ -857,26 +863,55 @@ export class OpenStormApp extends TailwindElement() {
   private handleActivityChange = (e: CustomEvent<{ item: ActivityItem }>): void => {
     const newItem = e.detail.item;
 
-    if (newItem === 'commits') {
-      this.commitPanelVisible = true;
-      this.gitPanelVisible = false;
-      this.activeActivity = 'commits';
-    } else if (newItem === 'pull-requests') {
-      this.commitPanelVisible = true;
-      this.gitPanelVisible = false;
-      this.activeActivity = 'pull-requests';
-    } else if (newItem === 'explorer') {
-      this.gitPanelVisible = false;
-      this.commitPanelVisible = false;
+    if (newItem === 'explorer') {
       this.activeActivity = 'explorer';
-    } else if (newItem === 'search') {
-      this.gitPanelVisible = false;
-      this.commitPanelVisible = false;
-      this.activeActivity = 'search';
-    } else {
-      this.activeActivity = newItem;
-      this.gitPanelVisible = false;
-      this.commitPanelVisible = false;
+    } else if (newItem === 'terminal') {
+      this.activeActivity = 'terminal';
+      // Find existing terminal tab or create new one
+      const existingTerminalTab = this.tabs.find(t => t.tabType === 'terminal');
+      if (existingTerminalTab) {
+        this.activeTabId = existingTerminalTab.id;
+        this.handleTabSelect({ detail: { tabId: existingTerminalTab.id } } as CustomEvent);
+      } else {
+        // Create new terminal tab
+        const terminalTab: EditorTab = {
+          id: `terminal-${Date.now()}`,
+          name: `Terminal ${this.tabs.filter(t => t.tabType === 'terminal').length + 1}`,
+          path: '',
+          modified: false,
+          content: '',
+          tabType: 'terminal',
+          pinned: false,
+          lastUsed: Date.now(),
+          metadata: { initialized: false },
+        };
+        this.tabs = [...this.tabs, terminalTab];
+        this.activeTabId = terminalTab.id;
+        this.requestUpdate();
+      }
+    } else if (newItem === 'ai') {
+      this.activeActivity = 'ai';
+      // Find existing AI tab or create new one
+      const existingAiTab = this.tabs.find(t => t.tabType === 'opencode');
+      if (existingAiTab) {
+        this.activeTabId = existingAiTab.id;
+        this.handleTabSelect({ detail: { tabId: existingAiTab.id } } as CustomEvent);
+      } else {
+        // Create new AI tab
+        const aiTab: EditorTab = {
+          id: `opencode-${Date.now()}`,
+          name: 'OpenCode',
+          path: '',
+          modified: false,
+          content: '',
+          tabType: 'opencode',
+          pinned: false,
+          lastUsed: Date.now(),
+        };
+        this.tabs = [...this.tabs, aiTab];
+        this.activeTabId = aiTab.id;
+        this.requestUpdate();
+      }
     }
   };
 
@@ -979,6 +1014,16 @@ export class OpenStormApp extends TailwindElement() {
     if (tab) {
       this.activeFilePath = tab.path;
       this.saveStatus = tab.modified ? "unsaved" : "saved";
+
+      // Update left nav activity based on tab type
+      if (tab.tabType === 'terminal') {
+        this.activeActivity = 'terminal';
+      } else if (tab.tabType === 'opencode') {
+        this.activeActivity = 'ai';
+      } else {
+        this.activeActivity = 'explorer';
+      }
+
       // Check if this is a query editor tab
       if (tab.id.startsWith('query:')) {
         // Dispatch open-query-editor event for query editor tabs
@@ -989,7 +1034,7 @@ export class OpenStormApp extends TailwindElement() {
           tableName: tab.metadata?.tableName || '',
           projectPath: tab.metadata?.projectPath || this.projectPath,
         });
-      } else {
+      } else if (tab.tabType === 'file') {
         // Use open-file-external to avoid triggering the global open-file handler
         dispatch("open-file-external", { path: tab.path, content: tab.content });
       }
@@ -1005,6 +1050,173 @@ export class OpenStormApp extends TailwindElement() {
     this.tabs = this.tabs.map((t) =>
       t.id === tabId ? { ...t, pinned: !t.pinned } : t,
     );
+  };
+
+  private renderActiveContent = () => {
+    const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
+    const activeTabType = activeTab?.tabType || 'file';
+
+    if (activeTabType === 'terminal') {
+      // Ensure terminal-pane is loaded
+      loadTerminalPane();
+      // Check if this terminal tab needs initialization
+      const needsInit = activeTab && !activeTab.metadata?.initialized;
+      return html`
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <terminal-pane
+            .terminalCreated=${needsInit}
+            .projectPath=${this.projectPath}
+            @terminal-create=${() => {
+              // Mark this terminal tab as initialized
+              if (activeTab) {
+                activeTab.metadata = { ...activeTab.metadata, initialized: true };
+              }
+              this.terminalCreated = false;
+            }}
+            @terminal-close=${() => {
+              this.terminalCreated = false;
+            }}>
+          </terminal-pane>
+        </div>
+      `;
+    }
+
+    if (activeTabType === 'opencode') {
+      return html`
+        <div class="flex-1 flex flex-col overflow-hidden items-center justify-center" style="color: var(--app-disabled-foreground);">
+          <os-icon name="sparkles" size="48"></os-icon>
+          <span class="mt-2 text-[14px]">OpenCode AI - Coming Soon</span>
+        </div>
+      `;
+    }
+
+    // Default: file editor
+    return html`
+      <file-viewer-container
+        id="editor"
+        class="flex-1 flex flex-col overflow-hidden min-h-0"
+        .projectPath=${this.projectPath}
+        .tabs=${this.tabs}
+        .activeTabId=${this.activeTabId}
+        @folder-opened=${this.handleFolderOpened}
+        @content-changed=${this.handleContentChanged}
+        @open-folder=${() => dispatch("open-folder")}
+        @quick-search=${() => dispatch("quick-search")}
+      >
+      </file-viewer-container>
+    `;
+  };
+
+  private renderContentArea = () => {
+    const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
+    const activeTabType = activeTab?.tabType || 'file';
+
+    // Get all terminal tabs
+    const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal');
+    const opencodeTabs = this.tabs.filter(t => t.tabType === 'opencode');
+    const hasTerminalTabs = terminalTabs.length > 0;
+
+    // Always render all panes, show only the active one
+    return html`
+      <div class="flex-1 flex flex-col overflow-hidden relative">
+        <!-- File viewer (visible when active) -->
+        <div class="${activeTabType === 'file' ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
+          <file-viewer-container
+            id="editor"
+            class="flex-1 flex flex-col overflow-hidden min-h-0"
+            .projectPath=${this.projectPath}
+            .tabs=${this.tabs}
+            .activeTabId=${this.activeTabId}
+            @folder-opened=${this.handleFolderOpened}
+            @content-changed=${this.handleContentChanged}
+            @open-folder=${() => dispatch("open-folder")}
+            @quick-search=${() => dispatch("quick-search")}
+          >
+          </file-viewer-container>
+        </div>
+
+        <!-- Terminal panes (one per terminal tab, kept alive) -->
+        ${terminalTabs.map(terminalTab => {
+          const isActive = activeTab?.id === terminalTab.id;
+          const needsInit = !terminalTab.metadata?.initialized;
+          return html`
+            <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden' : 'hidden'}">
+              <terminal-pane
+                .terminalCreated=${needsInit}
+                .projectPath=${this.projectPath}
+                @terminal-create=${() => {
+                  terminalTab.metadata = { ...terminalTab.metadata, initialized: true };
+                  this.terminalCreated = false;
+                }}
+                @terminal-close=${() => {
+                  this.terminalCreated = false;
+                }}>
+              </terminal-pane>
+            </div>
+          `;
+        })}
+
+        <!-- OpenCode panes (one per opencode tab) -->
+        ${opencodeTabs.map(opencodeTab => {
+          const isActive = activeTab?.id === opencodeTab.id;
+          return html`
+            <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden items-center justify-center' : 'hidden'}" style="color: var(--app-disabled-foreground);">
+              <os-icon name="sparkles" size="48"></os-icon>
+              <span class="mt-2 text-[14px]">OpenCode AI - Coming Soon</span>
+            </div>
+          `;
+        })}
+      </div>
+    `;
+  };
+
+  private handleTabAdd = (e: CustomEvent<{ type: string }>): void => {
+    const tabType = e.detail?.type || 'terminal';
+
+    if (tabType === 'terminal') {
+      const terminalTab: EditorTab = {
+        id: `terminal-${Date.now()}`,
+        name: `Terminal ${this.tabs.filter(t => t.tabType === 'terminal').length + 1}`,
+        path: '',
+        modified: false,
+        content: '',
+        tabType: 'terminal',
+        pinned: false,
+        lastUsed: Date.now(),
+        metadata: { initialized: false },
+      };
+      this.tabs = [...this.tabs, terminalTab];
+      this.activeTabId = terminalTab.id;
+    } else if (tabType === 'opencode') {
+      const opencodeTab: EditorTab = {
+        id: `opencode-${Date.now()}`,
+        name: 'OpenCode',
+        path: '',
+        modified: false,
+        content: '',
+        tabType: 'opencode',
+        pinned: false,
+        lastUsed: Date.now(),
+      };
+      this.tabs = [...this.tabs, opencodeTab];
+      this.activeTabId = opencodeTab.id;
+    } else if (tabType === 'file') {
+      // For now, just create a new untitled file tab
+      const fileTab: EditorTab = {
+        id: `file-${Date.now()}`,
+        name: 'untitled',
+        path: '',
+        modified: true,
+        content: '',
+        tabType: 'file',
+        pinned: false,
+        lastUsed: Date.now(),
+      };
+      this.tabs = [...this.tabs, fileTab];
+      this.activeTabId = fileTab.id;
+    }
+
+    this.requestUpdate();
   };
 
   private handleFolderOpened = async (
@@ -1135,13 +1347,13 @@ export class OpenStormApp extends TailwindElement() {
     const activeFile =
       this.tabs.find((t) => t.id === this.activeTabId)?.path || "";
 
-    // In single-file mode, hide explorer and terminal by default
-    const showExplorer = !isSingleFileMode && this.activeActivity === "explorer";
-    const showSettings = !isSingleFileMode && this.activeActivity === "settings";
-    const showSearch = !isSingleFileMode && this.activeActivity === "search";
-    const showCommitPanel = !isSingleFileMode && (this.activeActivity === 'commits' || this.activeActivity === 'pull-requests');
+    // Get active tab type for content switching
+    const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
+    const activeTabType = activeTab?.tabType || 'file';
+
+    // Show explorer when project is open (always show if not single-file mode)
+    const showExplorer = !isSingleFileMode;
     const showGitPanel = !isSingleFileMode && this.gitPanelVisible;
-    const showTerminal = !isSingleFileMode && !this.isDebugging && !showGitPanel && this.activeStatusBarPanel === 'terminal';
     const showDebugPanel = this.isDebugging;
     const showAppConsole = !isSingleFileMode && !this.isDebugging && this.activeStatusBarPanel === 'app-console';
     const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
@@ -1155,6 +1367,11 @@ export class OpenStormApp extends TailwindElement() {
           .activeFile=${activeFile}
           .saveStatus=${this.saveStatus === "unsaved" ? "unsaved" : "saved"}
           .isSingleFileMode=${isSingleFileMode}
+          .tabs=${this.tabs}
+          .activeTabId=${this.activeTabId}
+          @tab-select=${this.handleTabSelect}
+          @tab-close=${this.handleTabClose}
+          @tab-add=${this.handleTabAdd}
         >
         </app-header>
 
@@ -1177,215 +1394,55 @@ export class OpenStormApp extends TailwindElement() {
 
           <!-- Editor + Terminal Column -->
           <div class="flex flex-col flex-1 overflow-hidden min-h-0 relative">
-            <!-- Editor Area -->
+            <!-- Content Area -->
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
-              ${showSettings
-                ? html`
-                    <settings-panel class="flex-1"></settings-panel>
-                  `
-                : showSearch
-                ? html`
-                    <search-panel
-                      class="flex-1"
-                      .projectPath=${this.projectPath}
-                      @file-selected=${this.handleFileSelect}
-                    ></search-panel>
-                  `
-                : showExplorer || showDatabase
-                ? html`
-                    <div class="flex flex-1 overflow-hidden">
-                      <resizable-container
-                        direction="horizontal"
-                        class="flex-1"
-                        .initialSize=${this.sidebarWidth}
-                        .minSize=${150}
-                        .maxSize=${600}
-                        @size-change=${(e: CustomEvent<{ size: number }>) => {
-                          this.sidebarWidth = e.detail.size;
-                        }}
+              <!-- Normal view: Explorer + Content (editor/terminal/opencode) -->
+              <div class="flex flex-1 overflow-hidden">
+                ${showExplorer || showDatabase ? html`
+                  <resizable-container
+                    direction="horizontal"
+                    class="flex-1"
+                    .initialSize=${this.sidebarWidth}
+                    .minSize=${150}
+                    .maxSize=${600}
+                    @size-change=${(e: CustomEvent<{ size: number }>) => {
+                      this.sidebarWidth = e.detail.size;
+                    }}
+                  >
+                    <div slot="first" class="h-full w-full">
+                      <project-explorer
+                        class="flex flex-col overflow-hidden border-r h-full"
+                        style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
+                        .projectPath=${this.projectPath}
+                        .selectedPath=${this.activeFilePath}
+                        @file-selected=${this.handleFileSelect}
+                        @open-folder=${() => dispatch("open-folder")}
                       >
-                        <div slot="first" class="h-full w-full">
-                          <project-explorer
-                            class="flex flex-col overflow-hidden border-r h-full"
-                            style="width: ${this.sidebarWidth}px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
-                            .projectPath=${this.projectPath}
-                            .selectedPath=${this.activeFilePath}
-                            @file-selected=${this.handleFileSelect}
-                            @open-folder=${() => dispatch("open-folder")}
-                          >
-                          </project-explorer>
-                        </div>
-                        <div
-                          slot="second"
-                          class="flex flex-col overflow-hidden min-w-0 w-full h-full"
-                          style="background-color: var(--app-bg);"
-                        >
-                          <!-- Tab Bar -->
-                          ${this.tabs.length > 0
-                            ? html`
-                                <tab-bar
-                                  class="h-[35px] shrink-0"
-                                  .tabs=${this.tabs}
-                                  .activeTab=${this.activeTabId}
-                                  @tab-select=${this.handleTabSelect}
-                                  @tab-close=${this.handleTabClose}
-                                  @tab-pin-toggle=${this.handleTabPinToggle}
-                                >
-                                </tab-bar>
-                              `
-                            : ""}
-                          <!-- File Viewer Container -->
-                          <file-viewer-container
-                            id="editor"
-                            class="flex-1 flex flex-col overflow-hidden min-h-0"
-                            .projectPath=${this.projectPath}
-                            .tabs=${this.tabs}
-                            .activeTabId=${this.activeTabId}
-                            @folder-opened=${this.handleFolderOpened}
-                            @content-changed=${this.handleContentChanged}
-                            @open-folder=${() => dispatch("open-folder")}
-                            @quick-search=${() => dispatch("quick-search")}
-                          >
-                          </file-viewer-container>
-                        </div>
-                      </resizable-container>
-                      <!-- Data Sources Panel on the right (shown when database activity is active) -->
-                      ${showDatabase
-                        ? html`
-                            <div class="shrink-0 border-l" style="width: 250px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
-                              <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
-                            </div>
-                          `
-                        : nothing}
+                      </project-explorer>
                     </div>
-                  `
-                : showCommitPanel
-                ? html`
-                    <resizable-container
-                      direction="horizontal"
-                      class="flex-1"
-                      .initialSize=${this.commitPanelWidth}
-                      .minSize=${200}
-                      .maxSize=${600}
-                      @size-change=${(e: CustomEvent<{ size: number }>) => {
-                        this.commitPanelWidth = e.detail.size;
-                      }}
-                    >
-                      <div slot="first" class="h-full w-full">
-                        ${this.activeActivity === 'pull-requests'
-                          ? html`
-                              <pull-requests-panel
-                                class="flex flex-col overflow-hidden border-r h-full w-full"
-                                style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
-                                .projectPath=${this.projectPath}>
-                              </pull-requests-panel>
-                            `
-                          : html`
-                              <commit-panel
-                                class="flex flex-col overflow-hidden border-r h-full w-full"
-                                style="background-color: var(--activitybar-background); border-color: var(--activitybar-border);"
-                                .projectPath=${this.projectPath}>
-                              </commit-panel>
-                            `
-                        }
-                      </div>
-                      <div
-                        slot="second"
-                        class="flex flex-col overflow-hidden min-w-0 w-full h-full"
-                        style="background-color: var(--app-bg);"
-                      >
-                        <!-- Tab Bar -->
-                        ${this.tabs.length > 0
-                          ? html`
-                              <tab-bar
-                                class="h-[35px] shrink-0"
-                                .tabs=${this.tabs}
-                                .activeTab=${this.activeTabId}
-                                @tab-select=${this.handleTabSelect}
-                                @tab-close=${this.handleTabClose}
-                                @tab-pin-toggle=${this.handleTabPinToggle}
-                              >
-                              </tab-bar>
-                            `
-                          : ""}
-                        <!-- File Viewer Container -->
-                        <file-viewer-container
-                          id="editor"
-                          class="flex-1 flex flex-col overflow-hidden min-h-0"
-                          .projectPath=${this.projectPath}
-                          .tabs=${this.tabs}
-                          .activeTabId=${this.activeTabId}
-                          @folder-opened=${this.handleFolderOpened}
-                          @content-changed=${this.handleContentChanged}
-                          @open-folder=${() => dispatch("open-folder")}
-                          @quick-search=${() => dispatch("quick-search")}
-                        >
-                        </file-viewer-container>
-                      </div>
-                    </resizable-container>
-                  `
-                : html`
-                    <!-- Editor only (explorer hidden or single-file mode) -->
                     <div
-                      class="flex flex-col flex-1 overflow-hidden h-full w-full"
+                      slot="second"
+                      class="flex flex-col overflow-hidden min-w-0 w-full h-full"
                       style="background-color: var(--app-bg);"
                     >
-                      ${this.tabs.length > 0
-                        ? html`
-                            <tab-bar
-                              class="h-[35px] shrink-0"
-                              .tabs=${this.tabs}
-                              .activeTab=${this.activeTabId}
-                              @tab-select=${this.handleTabSelect}
-                              @tab-close=${this.handleTabClose}
-                              @tab-pin-toggle=${this.handleTabPinToggle}
-                            >
-                            </tab-bar>
-                          `
-                        : ""}
-                      <file-viewer-container
-                        id="editor"
-                        class="flex-1 flex flex-col overflow-hidden"
-                        .projectPath=${this.projectPath}
-                        .tabs=${this.tabs}
-                        .activeTabId=${this.activeTabId}
-                        @folder-opened=${this.handleFolderOpened}
-                        @content-changed=${this.handleContentChanged}
-                        @open-folder=${() => dispatch("open-folder")}
-                        @quick-search=${() => dispatch("quick-search")}
-                      >
-                      </file-viewer-container>
+                      ${this.renderContentArea()}
                     </div>
-                  `}
-            </div>
-
-            <!-- Terminal Area (resizable) + Resize Handle -->
-            ${showTerminal
-              ? html`
-                  <!-- Terminal container with absolute resize handle -->
+                  </resizable-container>
+                  ${showDatabase ? html`
+                    <div class="shrink-0 border-l" style="width: 250px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                      <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
+                    </div>
+                  ` : nothing}
+                ` : html`
                   <div
-                    class="relative shrink-0 border-t border-[var(--app-border)]"
-                    style="height: ${this.terminalHeight}px;">
-                    <!-- Resize handle - absolutely positioned at top -->
-                    <div
-                      class="absolute top-0 left-0 right-0 h-[6px] cursor-row-resize z-10 flex items-center justify-center"
-                      @mousedown=${this.handleTerminalResizeStart}>
-                    </div>
-                    <!-- Terminal content -->
-                    <div class="w-full h-full overflow-hidden" style="touch-action: auto; -webkit-overflow-scrolling: touch;">
-                      <terminal-pane
-                        .terminalCreated=${this.terminalCreated}
-                        .projectPath=${this.projectPath}
-                        @terminal-create=${() => (this.terminalCreated = true)}
-                        @terminal-close=${() => {
-                          this.terminalCreated = false;
-                          this.activeStatusBarPanel = null;
-                        }}>
-                      </terminal-pane>
-                    </div>
+                    class="flex flex-col flex-1 overflow-hidden h-full w-full"
+                    style="background-color: var(--app-bg);"
+                  >
+                    ${this.renderContentArea()}
                   </div>
-                `
-              : ''}
+                `}
+              </div>
+            </div>
 
             <!-- Git Panel (Famous-style bottom panel - Repository/Log view) -->
             ${showGitPanel
@@ -1414,9 +1471,8 @@ export class OpenStormApp extends TailwindElement() {
               ? html`
                   <!-- Debug panel container -->
                   <div
-                    class="shrink-0 border-t border-[var(--app-border)]"
-                    style="height: ${this.debugPanelHeight}px;">
-                    <debug-panel></debug-panel>
+                    class="flex-1 border-t border-[var(--app-border)] overflow-hidden min-h-0">
+                    <debug-panel class="h-full"></debug-panel>
                   </div>
                 `
               : ''}
@@ -1463,6 +1519,9 @@ export class OpenStormApp extends TailwindElement() {
           @file-selected=${this.handleFileSelect}
         >
         </search-overlay>
+
+        <!-- Settings Panel (modal overlay) -->
+        <settings-panel></settings-panel>
 
         <!-- Theme Palette -->
         <theme-palette></theme-palette>

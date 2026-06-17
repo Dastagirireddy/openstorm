@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, css } from "lit";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { TailwindElement } from "../tailwind-element.js";
@@ -9,6 +9,16 @@ import "./debug/debug-call-stack-panel.js";
 import "./debug/debug-threads-panel.js";
 import "./debug/debug-breakpoints-panel.js";
 import "./debug/debug-console-panel.js";
+
+const componentStyles = css`
+  :host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+`;
 
 export interface StackFrame {
   id: number;
@@ -90,7 +100,7 @@ const SECTIONS: SectionDef[] = [
 ];
 
 @customElement("debug-panel")
-export class DebugPanel extends TailwindElement() {
+export class DebugPanel extends TailwindElement(componentStyles) {
   @state() private isDebugging = false;
   @state() private debugState: "stopped" | "running" | "terminated" = "terminated";
   @state() private variableFilter: string = "";
@@ -148,13 +158,11 @@ export class DebugPanel extends TailwindElement() {
   private renderNavButton(section: SectionDef) {
     const isActive = this.activeSection === section.id;
     return html`
-      <button class="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11px] border-none rounded cursor-pointer transition-all text-left"
-        style="background-color: ${isActive ? 'color-mix(in srgb, ' + section.color + ' 15%, transparent)' : 'transparent'};
-               color: ${isActive ? section.color : 'var(--app-disabled-foreground)'};"
+      <button class="w-full flex flex-col items-center gap-0.5 py-1.5 px-1 border-none rounded cursor-pointer transition-all"
+        style="background-color: ${isActive ? 'color-mix(in srgb, ' + section.color + ' 15%, transparent)' : 'transparent'};"
         @click=${() => this.selectSection(section.id)}>
-        <iconify-icon icon="${section.icon}" width="14" style="color: inherit;"></iconify-icon>
-        <span class="flex-1 truncate">${section.label}</span>
-        ${isActive ? html`<div class="w-1 h-1 rounded-full" style="background-color: ${section.color};"></div>` : ''}
+        <iconify-icon icon="${section.icon}" width="16" style="color: ${section.color};"></iconify-icon>
+        <span class="text-[8px] leading-tight truncate w-full text-center" style="color: ${isActive ? section.color : 'var(--app-disabled-foreground)'};">${section.label}</span>
       </button>
     `;
   }
@@ -187,36 +195,40 @@ export class DebugPanel extends TailwindElement() {
         .debug-action-icon { transition: transform 0.1s ease; }
         .debug-action:hover:not(:disabled) .debug-action-icon { transform: scale(1.05); }
         .debug-action:active:not(:disabled) .debug-action-icon { transform: scale(0.95); }
+        .icon-continue { color: var(--app-continue-color, #22c55e) !important; }
+        .icon-step { color: var(--app-step-color, #3b82f6) !important; }
+        .icon-pause { color: var(--app-pause-color, #f59e0b) !important; }
+        .icon-stop { color: var(--app-stop-color, #ef4444) !important; }
       </style>
 
       <!-- Compact Toolbar -->
       <div class="flex items-center gap-0.5 px-2 py-1" style="background-color: var(--app-toolbar-hover); border-bottom: 1px solid var(--app-border);">
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${this.debugState !== 'stopped' ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("continue")} ?disabled=${this.debugState !== "stopped"} title="Continue (F5)">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-continue-color, #22c55e);" icon="material-symbols-light:resume-outline-rounded" width="18"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-continue" icon="material-symbols-light:resume-outline-rounded" width="16"></iconify-icon>
         </button>
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${this.debugState !== 'stopped' ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("stepover")} ?disabled=${this.debugState !== "stopped"} title="Step Over (F10)">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-step-color, #0078d4);" icon="mdi:debug-step-over" width="16"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-step" icon="mdi:debug-step-over" width="16"></iconify-icon>
         </button>
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${this.debugState !== 'stopped' ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("stepinto")} ?disabled=${this.debugState !== "stopped"} title="Step Into (F11)">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-step-color, #0078d4);" icon="mdi:debug-step-into" width="16"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-step" icon="mdi:debug-step-into" width="16"></iconify-icon>
         </button>
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${this.debugState !== 'stopped' ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("stepout")} ?disabled=${this.debugState !== "stopped"} title="Step Out (Shift+F11)">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-step-color, #0078d4);" icon="mdi:debug-step-out" width="16"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-step" icon="mdi:debug-step-out" width="16"></iconify-icon>
         </button>
 
         <div class="w-px h-4 mx-1" style="background-color: var(--app-border);"></div>
 
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${this.debugState !== 'running' ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("pause")} ?disabled=${this.debugState !== "running"} title="Pause">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-pause-color, #d97706);" icon="mdi:pause" width="16"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-pause" icon="mdi:pause" width="16"></iconify-icon>
         </button>
         <button class="debug-action w-6 h-6 flex items-center justify-center border-none rounded bg-transparent cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-active)] ${!this.isDebugging ? 'opacity-40 cursor-not-allowed' : ''}"
           @click=${() => this.sendAction("terminate")} ?disabled=${!this.isDebugging} title="Stop (Shift+F5)">
-          <iconify-icon class="debug-action-icon" style="color: var(--app-stop-color, #f44336);" icon="mdi:stop" width="16"></iconify-icon>
+          <iconify-icon class="debug-action-icon icon-stop" icon="mdi:stop" width="16"></iconify-icon>
         </button>
 
         <!-- Status pill -->
@@ -230,7 +242,7 @@ export class DebugPanel extends TailwindElement() {
       <!-- Master-Detail Layout -->
       <div class="flex flex-1 overflow-hidden">
         <!-- Left: Navigation sidebar -->
-        <div class="flex flex-col py-1 overflow-y-auto h-full" style="width: 44px; min-width: 44px; border-right: 1px solid var(--app-border); background-color: var(--app-tab-inactive);">
+        <div class="flex flex-col py-1 overflow-y-auto h-full" style="width: 46px; min-width: 46px; border-right: 1px solid var(--app-border); background-color: var(--app-tab-inactive);">
           ${SECTIONS.map(s => this.renderNavButton(s))}
         </div>
 

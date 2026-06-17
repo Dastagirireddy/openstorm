@@ -98,7 +98,7 @@ export class GitNotFoundBanner extends TailwindElement() {
           style="background-color: var(--app-warning-background, #fef3c7); border-color: var(--app-warning-border, #fcd34d);">
 
           <div class="flex items-center gap-2.5">
-            <os-icon name="alert-circle" color="#ca8a04" size="18"></os-icon>
+            <os-icon name="alert-circle" color="var(--app-pause-color)" size="18"></os-icon>
             <span class="text-[13px] font-medium" style="color: var(--app-warning-foreground, #92400e);">
               Git repository not initialized. Initialize to enable version control features.
             </span>

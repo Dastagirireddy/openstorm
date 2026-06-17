@@ -592,39 +592,7 @@ export class TerminalPane extends TailwindElement(componentStyles) {
   render() {
     return html`
       <div class="flex flex-col h-full w-full" style="background-color: var(--terminal-background);">
-        <!-- Terminal tab bar -->
-        <div class="flex items-center justify-between h-[36px] px-2 shrink-0" style="background-color: var(--app-tab-inactive);">
-          <div class="flex items-center gap-0.5 h-full">
-            <!-- Terminal instance tabs -->
-            ${this.terminals.map(t => {
-              const isActive = this.activeTerminalId === t.id;
-              return html`
-                <div class="flex items-center gap-1 px-3 h-full cursor-pointer transition-colors border-t-2"
-                  style="background-color: ${isActive ? 'var(--app-tab-active)' : 'var(--app-tab-inactive)'}; color: ${isActive ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'}; border-top-color: ${isActive ? 'var(--app-tab-active-border)' : 'transparent'};"
-                  @mouseenter=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-hover)'; }}
-                  @mouseleave=${(e: Event) => { if (!isActive) (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'; }}
-                  @click=${() => { this.switchTerminal(t.id); }}>
-                  <span class="text-[13px]">${t.name}</span>
-                  <button @click=${(e: MouseEvent) => { e.stopPropagation(); this.requestCloseTerminal(t.id); }}
-                    class="ml-1 p-0.5 rounded opacity-0 hover:opacity-100 flex items-center justify-center"
-                    @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-active)'; }}
-                    @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}
-                    title="Close terminal"
-                  >
-                    <iconify-icon icon="mdi:close" width="12"></iconify-icon>
-                  </button>
-                </div>
-              `;
-            })}
-          </div>
-          <button @click=${() => this.addTerminal()} class="p-1 rounded flex items-center justify-center" title="New terminal"
-            @mouseenter=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'var(--app-toolbar-active)'; }}
-            @mouseleave=${(e: Event) => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; }}>
-            <os-icon name="plus" size="14"></os-icon>
-          </button>
-        </div>
-
-        <!-- Terminal content area -->
+        <!-- Terminal content area (internal tab bar hidden - using header tabs instead) -->
         <div class="flex-1 min-h-0 relative w-full h-full overflow-hidden">
           <div id="terminal-container" class="absolute inset-0 w-full h-full">
             <div id="terminal-wrapper" class="absolute inset-0 w-full h-full"></div>

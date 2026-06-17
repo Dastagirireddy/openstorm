@@ -14,6 +14,11 @@ export interface FileNode {
 }
 
 /**
+ * Tab types - discriminator for different content types
+ */
+export type TabType = 'file' | 'terminal' | 'opencode';
+
+/**
  * Tab state for editor tabs
  */
 export interface EditorTab {
@@ -27,6 +32,10 @@ export interface EditorTab {
   cursorLine?: number;
   cursorCol?: number;
   metadata?: Record<string, any>;
+  /** Type of tab content - defaults to 'file' for backwards compatibility */
+  tabType?: TabType;
+  /** For terminal tabs: terminal instance ID */
+  terminalId?: string;
 }
 
 /**
@@ -37,12 +46,7 @@ export type TerminalTabType = 'terminal' | 'output' | 'debug';
 /**
  * Activity bar items
  */
-export type ActivityItem =
-  | 'explorer'
-  | 'search'
-  | 'commits'
-  | 'pull-requests'
-  | 'settings';
+export type ActivityItem = 'explorer' | 'terminal' | 'ai';
 
 /**
  * Right activity bar items

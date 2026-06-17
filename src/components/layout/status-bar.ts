@@ -191,11 +191,10 @@ export class StatusBar extends TailwindElement() {
     return html`
       <footer class="flex h-[28px] items-center justify-between px-3 text-[12px] bg-[var(--statusbar-background)] text-[var(--statusbar-foreground)] border-t border-[var(--statusbar-border)] select-none">
 
-        <!-- Left: Git, Console, Terminal -->
+        <!-- Left: Git, Console -->
         <div class="flex items-center gap-1">
           ${this._renderTab('git-commit-vertical', 'Git', this.gitPanelVisible, 'git')}
           ${this._renderTab('play-circle', 'Console', this.activePanel === 'app-console', 'app-console', this.showConsoleNotification)}
-          ${this._renderTab('terminal', 'Terminal', this.activePanel === 'terminal', 'terminal', this.showTerminalNotification)}
         </div>
 
         <!-- Right: Status Messages, LSP, Branch, Cursor, Encoding, Event Log -->

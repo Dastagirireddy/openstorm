@@ -220,7 +220,7 @@ export class ThemePalette extends TailwindElement() {
                           <span class="px-2 py-0.5 rounded-md text-[10px] font-medium flex-shrink-0"
                                 style="
                                   background: ${theme.type === 'dark' ? 'var(--app-button-background)' : 'var(--app-tab-inactive)'};
-                                  color: ${theme.type === 'dark' ? '#fff' : 'var(--app-disabled-foreground)'};
+                                  color: ${theme.type === 'dark' ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'};
                                 ">
                             ${theme.type === 'dark' ? 'Dark' : 'Light'}
                           </span>

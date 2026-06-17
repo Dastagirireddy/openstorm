@@ -810,7 +810,7 @@ export class ProjectExplorer extends TailwindElement() {
   }
 
   private getFolderColor(node: FileNode, isExpanded: boolean): string {
-    if (!node.is_dir) return '#5a5a5a';
+    if (!node.is_dir) return 'var(--app-disabled-foreground)';
 
     const folderInfo = getFolderInfo(node.name, node.path);
     // Use darker color when expanded, lighter when collapsed
@@ -1035,7 +1035,7 @@ export class ProjectExplorer extends TailwindElement() {
                     @mouseleave=${(e: Event) => (e.target as HTMLElement).style.backgroundColor = 'var(--app-tab-inactive)'}
                     @click=${() => { this.isProjectExpanded = !this.isProjectExpanded; this.requestUpdate(); }}>
                     <os-icon name=${this.isProjectExpanded ? 'chevron-down' : 'chevron-right'} style="color: var(--app-disabled-foreground);" size="14"></os-icon>
-                    <os-icon name=${this.isProjectExpanded ? 'folder-open' : 'folder'} color=${this.isProjectExpanded ? '#c9a228' : 'var(--app-disabled-foreground)'} size="14"></os-icon>
+                    <os-icon name=${this.isProjectExpanded ? 'folder-open' : 'folder'} color=${this.isProjectExpanded ? 'var(--brand-primary)' : 'var(--app-disabled-foreground)'} size="14"></os-icon>
                     <span class="truncate flex-1">${projectName}</span>
                   </div>
                   ${this.isProjectExpanded

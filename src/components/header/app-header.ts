@@ -5,22 +5,11 @@ import { getVersion } from '@tauri-apps/api/app';
 import '../layout/icon.js';
 import '../layout/file-icon.js';
 import '../debug/run-toolbar.js';
+import '../editor/editor-tab-bar.js';
 import { parsePathToSegments, getFileIconColor } from '../../lib/utils/breadcrumb.js';
 import * as git from '../../lib/git/git-api.js';
 import { dispatch } from '../../lib/types/events.js';
-
-export interface HeaderAction {
-  id: string;
-  icon: string;
-  title: string;
-  color?: string;
-  label?: string;
-}
-
-export interface HeaderSection {
-  id: string;
-  actions: HeaderAction[];
-}
+import type { EditorTab } from '../../lib/types/file-types.js';
 
 export interface BreadcrumbSegment {
   label: string;
@@ -35,6 +24,8 @@ export class AppHeader extends TailwindElement() {
   @property() activeFile = '';
   @property() saveStatus: 'saved' | 'unsaved' = 'saved';
   @property() isSingleFileMode = false;
+  @property({ type: Array }) tabs: EditorTab[] = [];
+  @property({ type: String }) activeTabId = '';
 
   @state() private gitOperationInProgress = false;
   @state() private appVersion = '';
@@ -44,90 +35,20 @@ export class AppHeader extends TailwindElement() {
     getVersion().then(v => { this.appVersion = v; }).catch(() => {});
   }
 
-  private async handleGitAction(actionId: string): Promise<void> {
-    if (!this.projectPath || this.gitOperationInProgress) return;
-
-    try {
-      this.gitOperationInProgress = true;
-
-      switch (actionId) {
-        case 'pull': {
-          console.log('[Git] Pulling from remote...');
-          const result = await git.gitPull(this.projectPath);
-          console.log('[Git] Pull result:', result);
-          dispatch('git-refresh');
-          dispatch('status-message', { message: result || 'Pull completed', type: 'success' });
-          break;
-        }
-        case 'commit': {
-          // Open commit panel
-          dispatch('set-active-activity', { activity: 'commits' });
-          break;
-        }
-        case 'push': {
-          console.log('[Git] Pushing to remote...');
-          const result = await git.gitPush(this.projectPath, false);
-          console.log('[Git] Push result:', result);
-          dispatch('git-refresh');
-          dispatch('status-message', { message: result || 'Push completed', type: 'success' });
-          break;
-        }
-        case 'history': {
-          // Toggle git panel
-          dispatch('toggle-git-log', { visible: true });
-          break;
-        }
-        case 'rollback': {
-          const confirmed = confirm('Are you sure you want to discard all local changes? This cannot be undone.');
-          if (confirmed) {
-            await git.gitDiscardAll(this.projectPath);
-            dispatch('git-refresh');
-            dispatch('status-message', { message: 'All local changes discarded', type: 'success' });
-          }
-          break;
-        }
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Operation failed';
-      console.error('[Git] Error:', message);
-      dispatch('status-message', { message, type: 'error' });
-    } finally {
-      this.gitOperationInProgress = false;
-    }
+  private handleTabSelect(e: CustomEvent): void {
+    this.dispatchEvent(new CustomEvent('tab-select', {
+      detail: e.detail,
+      bubbles: true,
+      composed: true,
+    }));
   }
 
-  private renderAction(action: HeaderAction): TemplateResult {
-    const isLabel = action.id === 'git-label';
-    if (isLabel) {
-      return html`
-        <span class="text-[12px] font-medium" style="color: var(--app-disabled-foreground);">${action.label}</span>
-      `;
-    }
-
-    const isGitAction = ['pull', 'commit', 'push', 'history', 'rollback'].includes(action.id);
-    const disabled = this.gitOperationInProgress && isGitAction;
-
-    return html`
-      <button
-        class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer overflow-hidden transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--app-toolbar-hover)]"
-        title="${action.title}"
-        data-action="${action.id}"
-        ?disabled=${disabled}
-        @click=${() => this.handleGitAction(action.id)}>
-        <os-icon
-          name="${action.icon}"
-          color="${action.color || 'var(--app-disabled-foreground)'}"
-          width="16"></os-icon>
-      </button>
-    `;
-  }
-
-  private renderSection(section: HeaderSection): TemplateResult {
-    return html`
-      <div class="flex items-center gap-0.5">
-        ${section.actions.map(action => this.renderAction(action))}
-      </div>
-    `;
+  private handleTabClose(e: CustomEvent): void {
+    this.dispatchEvent(new CustomEvent('tab-close', {
+      detail: e.detail,
+      bubbles: true,
+      composed: true,
+    }));
   }
 
   private renderBreadcrumbSegment(segment: BreadcrumbSegment, index: number, totalSegments: number): TemplateResult {
@@ -138,18 +59,18 @@ export class AppHeader extends TailwindElement() {
     return html`
       <div class="flex items-center gap-1">
         ${isFolder ? html`
-          <os-icon name="folder" color="${iconColor}" size=${14}></os-icon>
+          <os-icon name="folder" color="${iconColor}" size=${12}></os-icon>
         ` : html`
-          <file-icon path="${segment.path || segment.label}" size=${14}></file-icon>
+          <file-icon path="${segment.path || segment.label}" size=${12}></file-icon>
         `}
         <span
-          class="${isLast ? 'font-semibold' : 'hover:opacity-80 cursor-pointer transition-colors'} text-[13px]"
+          class="${isLast ? 'font-medium' : 'hover:opacity-80 cursor-pointer transition-opacity'} text-[11px]"
           style="color: ${isLast ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'};"
           ${!isLast && segment.path ? 'data-path="' + segment.path + '"' : ''}>
           ${segment.label}
         </span>
         ${!isLast ? html`
-          <os-icon name="chevron-right" color="var(--app-disabled-foreground)" size=${18}></os-icon>
+          <os-icon name="chevron-right" color="var(--app-disabled-foreground)" size=${14}></os-icon>
         ` : ''}
       </div>
     `;
@@ -162,46 +83,54 @@ export class AppHeader extends TailwindElement() {
 
     return html`
       <div class="flex flex-col shrink-0">
-        <!-- Titlebar with integrated breadcrumb -->
+        <!-- Single header row: project selector + tabs + actions (terax-style) -->
         <div
-          class="flex items-center justify-between h-[36px] px-2 border-b select-none"
-          style="background: var(--app-toolbar-hover); border-bottom-color: var(--app-input-border);">
+          class="flex items-center h-[36px] px-2 border-b select-none gap-2"
+          style="background: var(--app-toolbar-hover); border-bottom-color: var(--app-border);">
 
-          <!-- Left: Project name + Breadcrumb -->
-          <div class="flex items-center gap-2 min-w-0 flex-1">
-            <os-brand-logo size="20"></os-brand-logo>
-            <span class="text-[12px] font-medium shrink-0" style="color: var(--app-foreground);">${projectName}</span>
+          <!-- Left: Project selector (like terax) -->
+          <div class="flex items-center gap-1.5 shrink-0">
+            <os-brand-logo size="18"></os-brand-logo>
+            <span class="text-[12px] font-medium" style="color: var(--app-foreground);">${projectName}</span>
+            <os-icon name="chevron-down" color="var(--app-disabled-foreground)" size=${14}></os-icon>
+          </div>
 
-            ${showBreadcrumb && breadcrumbSegments.length > 0 ? html`
-              <div class="flex items-center gap-1 min-w-0">
-                ${breadcrumbSegments.map((segment, index) => this.renderBreadcrumbSegment(segment, index, breadcrumbSegments.length))}
-              </div>
+          <!-- Separator -->
+          <div class="w-[1px] h-4" style="background-color: var(--app-border);"></div>
+
+          <!-- Middle: Tabs (integrated into header like terax) -->
+          <div class="flex-1 min-w-0">
+            ${this.tabs.length > 0 ? html`
+              <tab-bar
+                class="h-[32px]"
+                .tabs=${this.tabs}
+                .activeTab=${this.activeTabId}
+                @tab-select=${this.handleTabSelect}
+                @tab-close=${this.handleTabClose}
+              >
+              </tab-bar>
             ` : ''}
           </div>
 
-          <!-- Right: Toolbar sections (hidden in single-file mode) -->
-          ${!this.isSingleFileMode
-            ? html`
-                <div class="flex items-center gap-2 shrink-0">
-                  <run-toolbar id="run-toolbar"></run-toolbar>
+          <!-- Right: Run toolbar + Search + Settings -->
+          <div class="flex items-center gap-1 shrink-0">
+            <run-toolbar id="run-toolbar"></run-toolbar>
 
-                  <div class="w-[1px] h-3.5 mx-0.5" style="background-color: var(--app-scrollbar);"></div>
+            <div class="w-[1px] h-4 mx-0.5" style="background-color: var(--app-border);"></div>
 
-                  <!-- Git section -->
-                  ${this.renderSection({
-                    id: 'git',
-                    actions: [
-                      { id: 'git-label', icon: '', title: 'Git:', label: 'Git:' },
-                      { id: 'pull', icon: 'arrow-down-to-line', title: 'Pull', color: 'var(--brand-primary)' },
-                      { id: 'commit', icon: 'check', title: 'Commit', color: 'var(--app-continue-color)' },
-                      { id: 'push', icon: 'arrow-up-from-line', title: 'Push', color: 'var(--app-tab-watch)' },
-                      { id: 'history', icon: 'clock', title: 'History' },
-                      { id: 'rollback', icon: 'rotate-ccw', title: 'Rollback', color: 'var(--app-stopped-state)' },
-                    ],
-                  }                  )}
-                </div>
-              `
-            : ''}
+            <button
+              class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer hover:bg-[var(--app-toolbar-active)]"
+              title="Search (⌘F)"
+              @click=${() => dispatch('quick-search')}>
+              <os-icon name="search" color="var(--app-disabled-foreground)" width="14"></os-icon>
+            </button>
+            <button
+              class="w-7 h-7 flex items-center justify-center border-none rounded bg-transparent cursor-pointer hover:bg-[var(--app-toolbar-active)]"
+              title="Settings"
+              @click=${() => dispatch('open-settings')}>
+              <os-icon name="settings" color="var(--app-disabled-foreground)" width="14"></os-icon>
+            </button>
+          </div>
         </div>
 
         <!-- Unsaved indicator bar -->

@@ -540,7 +540,7 @@ export class DatabaseMultiTree extends TailwindElement() {
                   width="8"
                   height="8"
                   class="absolute -bottom-0.5 -right-0.5"
-                  style="color: ${isSelected ? 'var(--app-selection-foreground)' : (isHovered ? 'var(--app-foreground)' : '#F59E0B')};"
+                  style="color: ${isSelected ? 'var(--app-selection-foreground)' : (isHovered ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)')};"
                   title="Primary Key"
                 ></iconify-icon>
               </div>`

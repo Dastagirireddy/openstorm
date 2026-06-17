@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../layout/icon.js';
 
-export type ActivityItem = 'explorer' | 'search' | 'commits' | 'pull-requests' | 'settings';
+export type ActivityItem = 'explorer' | 'terminal' | 'ai';
 
 interface ActivityDefinition {
   id: ActivityItem;
@@ -24,22 +24,16 @@ export class ActivityBar extends TailwindElement() {
       filledIcon: html`<os-icon name="folder-check" size="16"></os-icon>`,
     },
     {
-      id: 'search',
-      label: 'Search',
-      icon: html`<os-icon name="search" size="16"></os-icon>`,
-      filledIcon: html`<os-icon name="search" size="16"></os-icon>`,
+      id: 'terminal',
+      label: 'Terminal',
+      icon: html`<os-icon name="terminal" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="terminal" size="16"></os-icon>`,
     },
     {
-      id: 'commits',
-      label: 'Commit',
-      icon: html`<os-icon name="git-commit-vertical" size="16"></os-icon>`,
-      filledIcon: html`<os-icon name="git-commit-vertical" size="16"></os-icon>`,
-    },
-    {
-      id: 'pull-requests',
-      label: 'Pull Requests',
-      icon: html`<os-icon name="git-pull-request" size="16"></os-icon>`,
-      filledIcon: html`<os-icon name="git-pull-request" size="16"></os-icon>`,
+      id: 'ai',
+      label: 'AI',
+      icon: html`<os-icon name="sparkles" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="sparkles" size="16"></os-icon>`,
     },
   ];
 
@@ -73,39 +67,13 @@ export class ActivityBar extends TailwindElement() {
     `;
   }
 
-  private renderSettingsItem(): TemplateResult {
-    const isActive = this.activeItem === 'settings';
-
-    return html`
-      <div
-        class="gap-1 flex flex-col items-center justify-center py-2 cursor-pointer border-l-2 transition-colors duration-150 hover:bg-[var(--activitybar-active-background)]"
-        style="border-left-color: transparent;"
-        @click=${() => this.setActive('settings')}
-        title="Settings">
-        <span
-          class="text-[11px] font-medium tracking-wide"
-          style="writing-mode: vertical-rl; transform: rotate(180deg); margin-top: 4px; color: var(--activitybar-inactive-foreground);">
-          Settings
-        </span>
-        <div style="color: ${isActive ? 'var(--activitybar-active-foreground)' : 'var(--activitybar-inactive-foreground)'};">
-          <os-icon name="settings" size="16"></os-icon>
-        </div>
-      </div>
-    `;
-  }
-
   render() {
     return html`
       <div class="w-[28px] h-full flex flex-col shrink-0"
            style="background-color: var(--activitybar-background); border-right-color: var(--activitybar-border); border-right-width: 1px; border-right-style: solid;">
-        <!-- Top Section: Main Activities -->
+        <!-- Main Activities -->
         <div class="flex flex-col gap-1">
           ${this.items.map(item => this.renderActivityItem(item))}
-        </div>
-
-        <!-- Bottom Section: Settings -->
-        <div class="mt-auto flex flex-col">
-          ${this.renderSettingsItem()}
         </div>
       </div>
     `;

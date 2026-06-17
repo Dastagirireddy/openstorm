@@ -23,6 +23,7 @@ import { customFoldGutter } from '../utils';
 import { getSyntaxHighlighting } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
 import { dispatch } from '../types/events.js';
+import { settingsStore } from '../services/settings-store.js';
 
 /**
  * Generates the core extension stack
@@ -33,14 +34,14 @@ export function getCommonExtensions(
   indentUnitStr: string = "    ",
   onBreakpointClick?: (lineNum: number, hasBreakpoint: boolean) => void
 ) {
-  return [
+  const extensions = [
     EditorState.tabSize.of(4),
     indentUnit.of(indentUnitStr),
     inlineValueField,
     inlineValueDecorations(),
     breakpointField,
     breakpointGutter(onBreakpointClick ?? (() => {})),
-    lineNumbers(),
+    ...(settingsStore.get('lineNumbers') ? [lineNumbers()] : []),
     highlightActiveLineGutter(),
     ...customFoldGutter(),
     ...debugLineHighlight(),
@@ -93,7 +94,11 @@ export function getCommonExtensions(
       ...historyKeymap,
       ...defaultKeymap,
     ]),
+    // Word wrap from settings
+    ...(settingsStore.get('wordWrap') ? [EditorView.lineWrapping] : []),
   ];
+
+  return extensions;
 }
 
 // Re-export these for convenience

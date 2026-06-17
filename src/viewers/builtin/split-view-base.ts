@@ -361,7 +361,15 @@ export abstract class SplitViewViewerBase extends TailwindElement() {
     if (this.autoSaveTimer) {
       clearTimeout(this.autoSaveTimer);
     }
+
     this.autoSaveTimer = setTimeout(async () => {
+      // Check if auto-save is enabled in settings
+      const { settingsStore } = await import('../../lib/services/settings-store.js');
+      if (!settingsStore.get('autoSave')) {
+        this.autoSaveTimer = null;
+        return;
+      }
+
       if (this.isDirty && this.filePath) {
         try {
           await invoke('write_file', { path: this.filePath, content });
