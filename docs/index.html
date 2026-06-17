@@ -466,7 +466,7 @@ footer {
   <div class="hero-text">
     <div class="hero-badge">
       <span class="dot"></span>
-      v1.0.0 — Open Source IDE
+      <span id="hero-version">Loading...</span> — Open Source IDE
     </div>
     <h1>Code at the<br><span class="highlight">speed of thought</span></h1>
     <p class="hero-sub">OpenStorm is a high-performance, lightweight IDE built in Rust with Tauri. Lightning-fast startup, built-in LSP, terminal, debugger, and database tools — all in one app.</p>
@@ -666,7 +666,7 @@ footer {
       </div>
 
       <div class="download-options">
-        <a id="dl-linux-deb" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.deb" class="dl-option">
+        <a id="dl-linux-deb" href="#" class="dl-option">
           <div class="dl-option-icon">📦</div>
           <div class="dl-option-info">
             <span class="dl-option-name">.deb Package</span>
@@ -674,7 +674,7 @@ footer {
           </div>
           <span class="dl-option-arch" id="dl-deb-arch">amd64</span>
         </a>
-        <a id="dl-linux-appimage" href="https://github.com/Dastagirireddy/openstorm/releases/latest/download/openstorm_1.0.0_amd64.AppImage" class="dl-option">
+        <a id="dl-linux-appimage" href="#" class="dl-option">
           <div class="dl-option-icon">⚡</div>
           <div class="dl-option-info">
             <span class="dl-option-name">AppImage</span>
@@ -690,7 +690,7 @@ footer {
     </div>
 
     <div class="version-note">
-      <span>Latest: <span id="latest-version">v1.0.0</span></span>
+      <span>Latest: <span id="latest-version">Loading...</span></span>
       <span class="version-dot"></span>
       <span>Auto-updates enabled</span>
       <span class="version-dot"></span>
@@ -804,6 +804,7 @@ async function loadLatestRelease() {
 
     if (data.tag_name) {
       document.getElementById('latest-version').textContent = data.tag_name;
+      document.getElementById('hero-version').textContent = data.tag_name;
     }
   } catch (e) {
     console.warn('Failed to load latest release:', e);
