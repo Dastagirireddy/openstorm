@@ -3836,6 +3836,7 @@ dependencies = [
 name = "openstorm"
 version = "1.2.0"
 dependencies = [
+ "async-trait",
  "base64 0.21.7",
  "chrono",
  "dark-light",

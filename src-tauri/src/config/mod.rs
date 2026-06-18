@@ -4,6 +4,7 @@
 //! that were previously hardcoded throughout the codebase.
 
 use std::path::{Path, PathBuf};
+use serde::{Deserialize, Serialize};
 use directories::ProjectDirs;
 
 /// Path configuration for OpenStorm
@@ -273,6 +274,60 @@ impl Default for DebugpyConfig {
             install_command: "pip install debugpy",
             verify_command: "import debugpy; print(debugpy.__version__)",
         }
+    }
+}
+
+// ── AI Provider Configuration ────────────────────────────────
+
+/// AI provider configuration (stored as plaintext JSON)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AiProviderConfig {
+    /// Provider ID: "ollama", "openai", "anthropic", etc.
+    pub provider: String,
+    /// API key (empty for Ollama)
+    pub api_key: String,
+    /// Base URL for the provider API
+    pub base_url: String,
+    /// Currently selected model ID
+    pub model: String,
+}
+
+impl Default for AiProviderConfig {
+    fn default() -> Self {
+        Self {
+            provider: "ollama".to_string(),
+            api_key: String::new(),
+            base_url: "http://localhost:11434".to_string(),
+            model: String::new(),
+        }
+    }
+}
+
+impl AiProviderConfig {
+    /// Config file path: <global_config_dir>/ai-providers.json
+    pub fn file_path() -> PathBuf {
+        let proj_dirs = ProjectDirs::from("com", "OpenStorm", "OpenStorm")
+            .expect("no valid home directory");
+        proj_dirs.config_dir().join("ai-providers.json")
+    }
+
+    /// Load config from disk, or return defaults
+    pub fn load() -> Self {
+        let path = Self::file_path();
+        match std::fs::read_to_string(&path) {
+            Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+            Err(_) => Self::default(),
+        }
+    }
+
+    /// Save config to disk
+    pub fn save(&self) -> Result<(), String> {
+        let path = Self::file_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
+        std::fs::write(&path, json).map_err(|e| e.to_string())
     }
 }
 

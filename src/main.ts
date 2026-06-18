@@ -19,6 +19,7 @@ import {
   loadSearchPanel,
 } from "./lib/utils/lazy-loader.js";
 import "./components/dialogs/database-connection-picker.js";
+import "./components/layout/code-block.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/services/theme-service.js";
@@ -73,6 +74,7 @@ import "./components/dialogs/delete-dialog.js";
 import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/overlays/settings-panel.js";
+import "./components/ai/ai-panel.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
@@ -95,7 +97,7 @@ export class OpenStormApp extends TailwindElement() {
   @state() private activeTabId = "";
   @state() private saveStatus: SaveStatus = "saved";
   @state() private tabLimit = 10;
-  @state() private activeActivity: ActivityItem = "explorer";
+  @state() private activeActivity: ActivityItem = "ai";
   @state() private activeRightActivity: RightActivityItem = "";
   @state() private terminalCreated = false;
   @state() private sidebarWidth = 250;
@@ -620,10 +622,24 @@ export class OpenStormApp extends TailwindElement() {
 
     // Reset state for new project
     this.projectPath = path;
-    this.activeActivity = "explorer";
+    this.activeActivity = "ai";
     this.tabs = [];
     this.activeTabId = "";
     this.terminalCreated = false;
+
+    // Create AI tab by default
+    const aiTab: EditorTab = {
+      id: `opencode-${Date.now()}`,
+      name: 'OpenCode',
+      path: '',
+      modified: false,
+      content: '',
+      tabType: 'opencode',
+      pinned: false,
+      lastUsed: Date.now(),
+    };
+    this.tabs = [aiTab];
+    this.activeTabId = aiTab.id;
 
     // Call handleFolderOpened to start file watcher and create terminal
     await this.handleFolderOpened({
@@ -653,10 +669,24 @@ export class OpenStormApp extends TailwindElement() {
 
         // Reset state for new project
         this.projectPath = newProjectPath;
-        this.activeActivity = "explorer";
+        this.activeActivity = "ai";
         this.tabs = [];
         this.activeTabId = "";
         this.terminalCreated = false; // Will be set to true by handleFolderOpened
+
+        // Create AI tab by default
+        const aiTab: EditorTab = {
+          id: `opencode-${Date.now()}`,
+          name: 'OpenCode',
+          path: '',
+          modified: false,
+          content: '',
+          tabType: 'opencode',
+          pinned: false,
+          lastUsed: Date.now(),
+        };
+        this.tabs = [aiTab];
+        this.activeTabId = aiTab.id;
 
         // Call handleFolderOpened to start file watcher and create terminal
         await this.handleFolderOpened({
@@ -1083,10 +1113,10 @@ export class OpenStormApp extends TailwindElement() {
 
     if (activeTabType === 'opencode') {
       return html`
-        <div class="flex-1 flex flex-col overflow-hidden items-center justify-center" style="color: var(--app-disabled-foreground);">
-          <os-icon name="sparkles" size="48"></os-icon>
-          <span class="mt-2 text-[14px]">OpenCode AI - Coming Soon</span>
-        </div>
+        <ai-panel
+          class="flex-1 flex flex-col overflow-hidden min-h-0"
+          .projectPath=${this.projectPath}>
+        </ai-panel>
       `;
     }
 
@@ -1160,9 +1190,11 @@ export class OpenStormApp extends TailwindElement() {
         ${opencodeTabs.map(opencodeTab => {
           const isActive = activeTab?.id === opencodeTab.id;
           return html`
-            <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden items-center justify-center' : 'hidden'}" style="color: var(--app-disabled-foreground);">
-              <os-icon name="sparkles" size="48"></os-icon>
-              <span class="mt-2 text-[14px]">OpenCode AI - Coming Soon</span>
+            <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
+              <ai-panel
+                class="flex-1 flex flex-col overflow-hidden min-h-0"
+                .projectPath=${this.projectPath}>
+              </ai-panel>
             </div>
           `;
         })}

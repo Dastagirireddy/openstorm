@@ -196,6 +196,208 @@
   --editor-debug-line: rgba(255, 235, 59, 0.2);
   --editor-indent-marker: #d0d0d0;
   --editor-indent-marker-active: #b0b0b0;
+
+  /* AI Panel - Neutral dark theme (like OpenCode CLI) */
+  --ai-background: rgba(13, 17, 23, 0.5);
+  --ai-panel-background: #161b22;
+  --ai-panel-border: #30363d;
+  --ai-text: #e6edf3;
+  --ai-text-muted: #8b949e;
+  --ai-text-dim: #6e7681;
+
+  /* AI Panel - Message hierarchy */
+  --ai-user-border: #58a6ff;
+  --ai-user-background: #161b22;
+  --ai-user-background-hover: #1c2128;
+  --ai-assistant-background: transparent;
+  --ai-assistant-background-hover: transparent;
+
+  /* AI Panel - Status colors */
+  --ai-primary: #58a6ff;
+  --ai-secondary: #bc8cff;
+  --ai-accent: #58a6ff;
+  --ai-success: #3fb950;
+  --ai-warning: #d29922;
+  --ai-error: #f85149;
+
+  /* AI Panel - Thinking */
+  --ai-thinking-opacity: 1;
+  --ai-thinking-color: #d29922;
+
+  /* AI Panel - Tool use */
+  --ai-tool-background: #161b22;
+  --ai-tool-border: #30363d;
+  --ai-tool-header-background: #1c2128;
+
+  /* AI Panel - Code blocks */
+  --ai-code-background: #161b22;
+  --ai-code-border: #30363d;
+  --ai-code-header-background: #1c2128;
+  --ai-code-header-text: #8b949e;
+
+  /* AI Panel - Syntax highlighting */
+  --ai-syntax-comment: #8b949e;
+  --ai-syntax-keyword: #ff7b72;
+  --ai-syntax-function: #d2a8ff;
+  --ai-syntax-variable: #e6edf3;
+  --ai-syntax-string: #a5d6ff;
+  --ai-syntax-number: #79c0ff;
+  --ai-syntax-type: #ffa657;
+  --ai-syntax-operator: #ff7b72;
+  --ai-syntax-punctuation: #e6edf3;
+
+  /* AI Panel - Input area */
+  --ai-input-background: #0d1117;
+  --ai-input-border: #30363d;
+  --ai-input-text: #e6edf3;
+  --ai-input-placeholder: #6e7681;
+  --ai-input-prompt: #58a6ff;
+
+  /* AI Panel - Status bar */
+  --ai-statusbar-background: #161b22;
+  --ai-statusbar-border: #30363d;
+  --ai-statusbar-text: #8b949e;
+
+  /* AI Panel - Sidebar */
+  --ai-sidebar-background: #161b22;
+  --ai-sidebar-border: #30363d;
+  --ai-sidebar-item-hover: #1c2128;
+  --ai-sidebar-item-active: #21262d;
+  --ai-sidebar-item-active-border: #58a6ff;
+
+  /* AI Panel - Buttons */
+  --ai-button-background: #238636;
+  --ai-button-foreground: #ffffff;
+  --ai-button-hover: #2ea043;
+  --ai-button-danger: #da3633;
+  --ai-button-danger-foreground: #ffffff;
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Application */
+    --app-bg: #1a1b26;
+    --app-background: #1a1b26;
+    --app-foreground: #c0caf5;
+    --app-secondary-foreground: #565f89;
+    --app-disabled-foreground: #737aa2;
+    --app-disabled-background: #292e42;
+    --app-border: #292e42;
+    --app-focus-border: #7aa2f7;
+    --app-hover-background: #24283b;
+    --app-selection-background: #283457;
+    --app-selection-foreground: #c0caf5;
+    --app-input-background: #1a1b26;
+    --app-input-foreground: #c0caf5;
+    --app-input-border: #292e42;
+    --app-input-placeholder: #565f89;
+    --app-button-background: #7aa2f7;
+    --app-button-foreground: #1a1b26;
+    --app-button-hover: #3d59a1;
+    --app-toolbar-hover: #292e42;
+    --app-toolbar-active: #3b4261;
+    --app-toolbar-background: #16161e;
+    --app-badge-bg: #292e42;
+    --app-badge-border: #3b4261;
+    --app-badge-shadow: rgba(0, 0, 0, 0.3);
+    --app-badge-foreground: #c0caf5;
+    --app-menu-background: #1a1b26;
+    --app-tab-active: #1a1b26;
+    --app-tab-inactive: #16161e;
+    --app-tab-border: #292e42;
+    --app-tab-active-border: #7aa2f7;
+    --app-scrollbar: #3b4261;
+    --app-scrollbar-hover: #545c7e;
+
+    /* Syntax highlighting */
+    --app-keyword: #bb9af7;
+    --app-type: #2ac3de;
+    --app-string: #9ece6a;
+    --app-number: #ff9e64;
+    --app-boolean: #ff9e64;
+    --app-null: #737aa2;
+
+    /* Console */
+    --app-console-info: #c0caf5;
+    --app-console-warning: #e0af68;
+    --app-console-error: #f7768e;
+    --app-console-success: #9ece6a;
+
+    /* Editor */
+    --editor-background: #1a1b26;
+    --editor-gutter-background: #16161e;
+    --editor-gutter-border: #292e42;
+    --editor-active-line: #292e42;
+    --editor-selection: #33467c;
+    --editor-line-numbers: #3b4261;
+
+    /* Additional UI surfaces */
+    --app-workbench: #16161e;
+
+    /* Brand colors */
+    --brand-primary: #7aa2f7;
+    --brand-primary-hover: #3d59a1;
+    --brand-secondary: #bb9af7;
+
+    /* Semantic colors */
+    --error: #f7768e;
+    --success: #9ece6a;
+    --warning: #e0af68;
+
+    /* Status bar */
+    --statusbar-background: #16161e;
+    --statusbar-foreground: #565f89;
+    --statusbar-hover-background: #292e42;
+    --statusbar-hover-foreground: #c0caf5;
+    --statusbar-border: #292e42;
+
+    /* Activity bar */
+    --activitybar-background: #16161e;
+    --activitybar-border: #292e42;
+    --activitybar-active-background: #292e42;
+    --activitybar-inactive-foreground: #565f89;
+    --activitybar-active-foreground: #c0caf5;
+
+    /* Terminal */
+    --terminal-background: #1a1b26;
+
+    /* AI Panel - Syntax highlighting (dark) */
+    --ai-syntax-comment: #565f89;
+    --ai-syntax-keyword: #bb9af7;
+    --ai-syntax-function: #7aa2f7;
+    --ai-syntax-variable: #c0caf5;
+    --ai-syntax-string: #9ece6a;
+    --ai-syntax-number: #ff9e64;
+    --ai-syntax-type: #2ac3de;
+    --ai-syntax-operator: #89ddff;
+    --ai-syntax-punctuation: #c0caf5;
+  }
+}
+
+/* AI Panel - Todo checkboxes */
+.ai-todo-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.1em;
+  height: 1.1em;
+  border-radius: 3px;
+  margin-right: 0.3em;
+  font-size: 0.85em;
+  vertical-align: middle;
+  line-height: 1;
+  position: relative;
+  top: -0.05em;
+}
+.ai-todo-checkbox.completed {
+  color: var(--ai-success, #22c55e);
+}
+.ai-todo-checkbox.in-progress {
+  color: var(--ai-warning, #eab308);
+}
+.ai-todo-checkbox.pending {
+  color: var(--ai-text-dim, #999);
 }
 
 /* Global resets */

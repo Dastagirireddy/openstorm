@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod ai;
 mod commands;
 mod config;
 mod dap;
@@ -317,6 +318,7 @@ fn main() {
         .manage(Mutex::new(dap::DapClient::new()))
         .manage(dap_installer::DebugAdapterInstaller::new())
         .manage(database::DatabaseManager::new())
+        .manage(ai::commands::AiState::new())
         .setup(|app| {
             let handle = app.handle().clone();
             log::init(handle.clone());
@@ -593,6 +595,15 @@ fn main() {
             commands::project::load_recent_projects,
             commands::project::save_recent_project,
             commands::project::remove_recent_project,
+
+            // === AI / LLM ===
+            ai::commands::ai_get_config,
+            ai::commands::ai_set_config,
+            ai::commands::ai_list_providers,
+            ai::commands::ai_list_models,
+            ai::commands::ai_check_connection,
+            ai::commands::ai_chat,
+            ai::commands::ai_abort,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

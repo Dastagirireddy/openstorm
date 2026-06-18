@@ -1,14 +1,16 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
+import { invoke } from '@tauri-apps/api/core';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
 import { ThemeService } from '../../lib/services/theme-service.js';
 import { settingsStore } from '../../lib/services/settings-store.js';
 import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
 import type { UserSettings } from '../../lib/services/settings-store.js';
+import type { AiProviderConfig, ProviderInfo, ModelInfo } from '../../lib/types/ai-types.js';
 import '../layout/icon.js';
 
-type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'about';
+type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'models' | 'about';
 
 const SHORTCUTS = [
   { keys: ['Cmd', 'P'], description: 'Quick file search' },
@@ -42,6 +44,11 @@ export class SettingsPanel extends TailwindElement() {
   @state() private currentThemeMode: ThemeMode = 'system';
   @state() private previewTheme: string | null = null;
   @state() private settings: UserSettings = settingsStore.getAll();
+  @state() private aiConfig: AiProviderConfig = { provider: 'ollama', api_key: '', base_url: 'http://localhost:11434', model: '' };
+  @state() private aiProviders: ProviderInfo[] = [];
+  @state() private aiModels: ModelInfo[] = [];
+  @state() private aiConnectionStatus: boolean | null = null;
+  @state() private aiLoading = false;
 
   connectedCallback(): Promise<void> | void {
     super.connectedCallback();
@@ -102,6 +109,7 @@ export class SettingsPanel extends TailwindElement() {
 
   open(): void {
     this.loadThemes();
+    this.loadAiConfig();
     this.isOpen = true;
     this.activeTab = 'general';
     this.requestUpdate();
@@ -222,6 +230,7 @@ export class SettingsPanel extends TailwindElement() {
               ${this.tabBtn('general', 'settings', 'General')}
               ${this.tabBtn('themes', 'palette', 'Themes')}
               ${this.tabBtn('shortcuts', 'keyboard', 'Shortcuts')}
+              ${this.tabBtn('models', 'cpu', 'Models')}
               ${this.tabBtn('about', 'info', 'About')}
             </div>
 
@@ -234,6 +243,7 @@ export class SettingsPanel extends TailwindElement() {
             ${this.activeTab === 'general' ? this.renderGeneralTab() : ''}
             ${this.activeTab === 'themes' ? this.renderThemesTab() : ''}
             ${this.activeTab === 'shortcuts' ? this.renderShortcutsTab() : ''}
+            ${this.activeTab === 'models' ? this.renderModelsTab() : ''}
             ${this.activeTab === 'about' ? this.renderAboutTab() : ''}
           </div>
         </div>
@@ -458,6 +468,141 @@ export class SettingsPanel extends TailwindElement() {
               </div>
             </div>
           `)}
+        </div>
+      </div>
+    `;
+  }
+
+  private async loadAiConfig() {
+    try {
+      const [config, providers] = await Promise.all([
+        invoke<AiProviderConfig>('ai_get_config'),
+        invoke<ProviderInfo[]>('ai_list_providers'),
+      ]);
+      this.aiConfig = config;
+      this.aiProviders = providers;
+      await this.testAndFetch();
+    } catch (e) {
+      console.error('[Settings] Failed to load AI config:', e);
+    }
+  }
+
+  private async testAndFetch() {
+    this.aiLoading = true;
+    this.aiConnectionStatus = null;
+    this.aiModels = [];
+    try {
+      this.aiConnectionStatus = await invoke<boolean>('ai_check_connection', {
+        providerId: this.aiConfig.provider,
+      });
+      if (this.aiConnectionStatus) {
+        this.aiModels = await invoke<ModelInfo[]>('ai_list_models', {
+          providerId: this.aiConfig.provider,
+        });
+      }
+    } catch (e) {
+      this.aiConnectionStatus = false;
+    } finally {
+      this.aiLoading = false;
+    }
+  }
+
+  private async saveAiConfig() {
+    try {
+      await invoke('ai_set_config', { config: this.aiConfig });
+    } catch (e) {
+      console.error('[Settings] Failed to save AI config:', e);
+    }
+  }
+
+  private renderModelsTab() {
+    const providerDefaults: Record<string, string> = {
+      ollama: 'http://localhost:11434',
+      lmstudio: 'http://localhost:1234/v1',
+    };
+
+    return html`
+      <div class="space-y-7">
+        <div>
+          <h1 class="text-xl font-bold mb-1">Models</h1>
+          <p class="text-sm" style="color: var(--app-disabled-foreground);">Configure AI providers and models.</p>
+        </div>
+
+        <!-- Provider -->
+        <div>
+          <label class="text-sm font-semibold mb-2 block" style="color: var(--app-disabled-foreground);">Provider</label>
+          <div class="flex gap-2">
+            ${this.aiProviders.map(p => html`
+              <button
+                class="flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
+                style="
+                  background-color: ${this.aiConfig.provider === p.id ? 'var(--app-hover-background)' : 'transparent'};
+                  color: ${this.aiConfig.provider === p.id ? 'var(--app-foreground)' : 'var(--app-disabled-foreground)'};
+                  border: 1px solid ${this.aiConfig.provider === p.id ? 'var(--app-border)' : 'transparent'};
+                "
+                @click=${() => {
+                  if (this.aiConfig.provider === p.id) return;
+                  this.aiConfig = {
+                    ...this.aiConfig,
+                    provider: p.id,
+                    base_url: providerDefaults[p.id] || '',
+                  };
+                  this.testAndFetch();
+                }}>
+                <span class="w-2 h-2 rounded-full shrink-0 ${
+                  this.aiConfig.provider !== p.id ? ''
+                  : this.aiLoading ? 'bg-yellow-500 animate-pulse'
+                  : this.aiConnectionStatus ? 'bg-green-500'
+                  : this.aiConnectionStatus === false ? 'bg-red-500'
+                  : ''
+                }"></span>
+                ${p.name}
+              </button>
+            `)}
+          </div>
+        </div>
+
+        <!-- Base URL -->
+        <div>
+          <label class="text-sm font-semibold mb-2 block" style="color: var(--app-disabled-foreground);">Base URL</label>
+          <input
+            type="text"
+            class="w-full px-3 py-2 text-sm rounded-lg outline-none font-mono"
+            style="background: var(--app-input-background, var(--app-hover-background)); border: 1px solid var(--app-border); color: var(--app-foreground);"
+            .value=${this.aiConfig.base_url}
+            @input=${(e: Event) => {
+              this.aiConfig = { ...this.aiConfig, base_url: (e.target as HTMLInputElement).value };
+            }}
+          />
+        </div>
+
+        <!-- Model -->
+        ${this.aiConnectionStatus && this.aiModels.length > 0 ? html`
+          <div>
+            <label class="text-sm font-semibold mb-2 block" style="color: var(--app-disabled-foreground);">Model</label>
+            <select
+              class="w-full px-3 py-2 text-sm rounded-lg outline-none cursor-pointer"
+              style="background: var(--app-input-background, var(--app-hover-background)); border: 1px solid var(--app-border); color: var(--app-foreground);"
+              .value=${this.aiConfig.model}
+              @change=${(e: Event) => {
+                this.aiConfig = { ...this.aiConfig, model: (e.target as HTMLSelectElement).value };
+              }}>
+              <option value="">Select a model</option>
+              ${this.aiModels.map(m => html`
+                <option value="${m.id}">${m.name}</option>
+              `)}
+            </select>
+          </div>
+        ` : ''}
+
+        <!-- Save -->
+        <div>
+          <button
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+            style="background: var(--app-foreground); color: var(--app-bg);"
+            @click=${() => this.saveAiConfig()}>
+            Save
+          </button>
         </div>
       </div>
     `;
