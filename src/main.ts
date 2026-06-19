@@ -629,12 +629,12 @@ export class OpenStormApp extends TailwindElement() {
 
     // Create AI tab by default
     const aiTab: EditorTab = {
-      id: `opencode-${Date.now()}`,
-      name: 'OpenCode',
+      id: `openstorm-${Date.now()}`,
+      name: 'OpenStorm',
       path: '',
       modified: false,
       content: '',
-      tabType: 'opencode',
+      tabType: 'openstorm',
       pinned: false,
       lastUsed: Date.now(),
     };
@@ -676,12 +676,12 @@ export class OpenStormApp extends TailwindElement() {
 
         // Create AI tab by default
         const aiTab: EditorTab = {
-          id: `opencode-${Date.now()}`,
-          name: 'OpenCode',
+          id: `openstorm-${Date.now()}`,
+          name: 'OpenStorm',
           path: '',
           modified: false,
           content: '',
-          tabType: 'opencode',
+          tabType: 'openstorm',
           pinned: false,
           lastUsed: Date.now(),
         };
@@ -922,19 +922,19 @@ export class OpenStormApp extends TailwindElement() {
     } else if (newItem === 'ai') {
       this.activeActivity = 'ai';
       // Find existing AI tab or create new one
-      const existingAiTab = this.tabs.find(t => t.tabType === 'opencode');
+      const existingAiTab = this.tabs.find(t => t.tabType === 'openstorm');
       if (existingAiTab) {
         this.activeTabId = existingAiTab.id;
         this.handleTabSelect({ detail: { tabId: existingAiTab.id } } as CustomEvent);
       } else {
         // Create new AI tab
         const aiTab: EditorTab = {
-          id: `opencode-${Date.now()}`,
-          name: 'OpenCode',
+          id: `openstorm-${Date.now()}`,
+          name: 'OpenStorm',
           path: '',
           modified: false,
           content: '',
-          tabType: 'opencode',
+          tabType: 'openstorm',
           pinned: false,
           lastUsed: Date.now(),
         };
@@ -1048,7 +1048,7 @@ export class OpenStormApp extends TailwindElement() {
       // Update left nav activity based on tab type
       if (tab.tabType === 'terminal') {
         this.activeActivity = 'terminal';
-      } else if (tab.tabType === 'opencode') {
+      } else if (tab.tabType === 'openstorm') {
         this.activeActivity = 'ai';
       } else {
         this.activeActivity = 'explorer';
@@ -1111,7 +1111,7 @@ export class OpenStormApp extends TailwindElement() {
       `;
     }
 
-    if (activeTabType === 'opencode') {
+    if (activeTabType === 'openstorm') {
       return html`
         <ai-panel
           class="flex-1 flex flex-col overflow-hidden min-h-0"
@@ -1143,7 +1143,7 @@ export class OpenStormApp extends TailwindElement() {
 
     // Get all terminal tabs
     const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal');
-    const opencodeTabs = this.tabs.filter(t => t.tabType === 'opencode');
+    const openstormTabs = this.tabs.filter(t => t.tabType === 'openstorm');
     const hasTerminalTabs = terminalTabs.length > 0;
 
     // Always render all panes, show only the active one
@@ -1186,9 +1186,9 @@ export class OpenStormApp extends TailwindElement() {
           `;
         })}
 
-        <!-- OpenCode panes (one per opencode tab) -->
-        ${opencodeTabs.map(opencodeTab => {
-          const isActive = activeTab?.id === opencodeTab.id;
+        <!-- OpenStorm panes (one per openstorm tab) -->
+        ${openstormTabs.map(openstormTab => {
+          const isActive = activeTab?.id === openstormTab.id;
           return html`
             <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
               <ai-panel
@@ -1219,19 +1219,19 @@ export class OpenStormApp extends TailwindElement() {
       };
       this.tabs = [...this.tabs, terminalTab];
       this.activeTabId = terminalTab.id;
-    } else if (tabType === 'opencode') {
-      const opencodeTab: EditorTab = {
-        id: `opencode-${Date.now()}`,
-        name: 'OpenCode',
+    } else if (tabType === 'openstorm') {
+      const openstormTab: EditorTab = {
+        id: `openstorm-${Date.now()}`,
+        name: 'OpenStorm',
         path: '',
         modified: false,
         content: '',
-        tabType: 'opencode',
+        tabType: 'openstorm',
         pinned: false,
         lastUsed: Date.now(),
       };
-      this.tabs = [...this.tabs, opencodeTab];
-      this.activeTabId = opencodeTab.id;
+      this.tabs = [...this.tabs, openstormTab];
+      this.activeTabId = openstormTab.id;
     } else if (tabType === 'file') {
       // For now, just create a new untitled file tab
       const fileTab: EditorTab = {
@@ -1428,7 +1428,7 @@ export class OpenStormApp extends TailwindElement() {
           <div class="flex flex-col flex-1 overflow-hidden min-h-0 relative">
             <!-- Content Area -->
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
-              <!-- Normal view: Explorer + Content (editor/terminal/opencode) -->
+              <!-- Normal view: Explorer + Content (editor/terminal/openstorm) -->
               <div class="flex flex-1 overflow-hidden">
                 ${showExplorer || showDatabase ? html`
                   <resizable-container

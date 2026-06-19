@@ -12,6 +12,8 @@ export interface AIAttachment {
   name: string;
   content?: string;
   type: 'file' | 'folder';
+  lineCount?: number;
+  byteCount?: number;
 }
 
 export interface TokenUsage {

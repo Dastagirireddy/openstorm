@@ -206,7 +206,7 @@ export class AiPanel extends TailwindElement(css`
       color: #6a9955;
       font-style: italic;
     }
-    /* Lists - OpenCode style */
+    /* Lists - OpenStorm style */
     .ai-markdown-content ul,
     .ai-markdown-content ol {
       margin: 0.75em 0;
@@ -286,7 +286,7 @@ export class AiPanel extends TailwindElement(css`
     .ai-markdown-content blockquote p {
       margin: 0.25em 0;
     }
-    /* Headings - Vibrant OpenCode style */
+    /* Headings - Vibrant OpenStorm style */
     .ai-markdown-content h1,
     .ai-markdown-content h2,
     .ai-markdown-content h3,
@@ -1034,7 +1034,7 @@ export class AiPanel extends TailwindElement(css`
       background: var(--ai-error);
     }
 
-    /* Input area - OpenCode TUI style */
+    /* Input area - OpenStorm TUI style */
     .ai-input-area {
       background: transparent;
       padding: 0.75em 1em 0.5em;
@@ -1053,7 +1053,7 @@ export class AiPanel extends TailwindElement(css`
       background: color-mix(in srgb, var(--ai-primary) 5%, var(--ai-input-background));
     }
 
-    /* OpenCode-style prompt frame */
+    /* OpenStorm-style prompt frame */
     .ai-prompt-frame {
       display: flex;
       flex-direction: column;
@@ -1195,13 +1195,14 @@ export class AiPanel extends TailwindElement(css`
       height: 15px;
     }
 
-    /* Bottom bar with attachments */
+    /* Attachments bar - ABOVE input */
     .ai-prompt-attachments-bar {
       display: flex;
       align-items: center;
       gap: 0.5em;
       padding: 0.4em 0.6em;
-      border-top: 1px solid var(--ai-panel-border);
+      border-bottom: 1px solid var(--ai-panel-border);
+      background: color-mix(in srgb, var(--ai-primary) 5%, transparent);
     }
     .ai-prompt-attachments {
       display: flex;
@@ -1213,12 +1214,25 @@ export class AiPanel extends TailwindElement(css`
       display: flex;
       align-items: center;
       gap: 0.3em;
-      padding: 0.15em 0.4em;
+      padding: 0.25em 0.5em;
       background: var(--ai-tool-background);
-      border: 1px solid var(--ai-panel-border);
-      border-radius: 3px;
-      font-size: 10px;
+      border: 1px solid var(--ai-primary);
+      border-radius: 4px;
+      font-size: 11px;
       color: var(--ai-text);
+      max-width: 200px;
+    }
+    .ai-attachment-chip-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ai-primary);
+      font-weight: 500;
+    }
+    .ai-attachment-chip-meta {
+      color: var(--ai-text-dim);
+      font-size: 10px;
+      margin-left: 0.2em;
     }
     .ai-attachment-chip button {
       background: none;
@@ -1228,6 +1242,7 @@ export class AiPanel extends TailwindElement(css`
       padding: 0;
       font-size: 12px;
       line-height: 1;
+      margin-left: 0.2em;
     }
     .ai-attachment-chip button:hover {
       color: var(--ai-error);
@@ -1241,14 +1256,6 @@ export class AiPanel extends TailwindElement(css`
       min-width: 0;
       border-left: 3px solid var(--ai-primary);
       background: var(--activitybar-background);
-    }
-
-    /* Attachments bar */
-    .ai-prompt-attachments-bar {
-      display: flex;
-      align-items: center;
-      padding: 0.3em 0.6em;
-      border-top: 1px solid var(--ai-panel-border);
     }
 
     /* Stats bar at bottom */
@@ -1365,7 +1372,7 @@ export class AiPanel extends TailwindElement(css`
     }
 
     /* ============================================
-       OpenCode-style MESSAGE SYSTEM
+       OpenStorm-style MESSAGE SYSTEM
        Clean, minimal, terminal-like
        ============================================ */
 
@@ -1382,6 +1389,16 @@ export class AiPanel extends TailwindElement(css`
     }
     .ai-msg-user-label {
       display: none;
+    }
+    .ai-msg-user-content {
+      white-space: pre-wrap;
+    }
+    .ai-msg-user-content .file-mention {
+      color: var(--ai-primary);
+      font-weight: 500;
+      background: color-mix(in srgb, var(--ai-primary) 10%, transparent);
+      padding: 0.1em 0.3em;
+      border-radius: 3px;
     }
 
     /* L1: Thinking - indented under user, clean text */
@@ -1620,9 +1637,15 @@ export class AiPanel extends TailwindElement(css`
   @state() private showCommands = false;
   @state() private commandFilter = '';
   @state() private selectedCommandIndex = 0;
-  @state() private attachments: AIAttachment[] = [];
   @state() private currentTipIndex = 0;
+  @state() private showFileSuggestions = false;
+  @state() private fileSuggestions: string[] = [];
+  @state() private fileFilter = '';
+  @state() private selectedFileIndex = 0;
+  private searchFilesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchFilesRequestId = 0;
   private _iterationStartTime: number = 0;
+  private _scrollRafId: number = 0;
 
   @query('#chat-scroll') private chatScroll!: HTMLDivElement;
   @query('#chat-input') private chatInput!: HTMLTextAreaElement;
@@ -1664,7 +1687,6 @@ export class AiPanel extends TailwindElement(css`
 
     aiState.on('session-switched', (sessionId: string) => {
       this.activeSessionId = sessionId;
-      this.attachments = [];
       this.updateSessionStats();
     });
 
@@ -1805,7 +1827,6 @@ export class AiPanel extends TailwindElement(css`
     if (!this.activeSessionId) return;
     aiState.clearSession(this.activeSessionId);
     this.sessions = [...aiState.sessions];
-    this.attachments = [];
     this.updateSessionStats();
   }
 
@@ -1915,8 +1936,14 @@ export class AiPanel extends TailwindElement(css`
         break;
 
       case 'response':
-        console.log('[AI] Response received:', event.content?.substring(0, 50), 'usage:', event.usage);
-        this.appendToOrCreateAssistant(sessionId, event.content);
+        console.log('[AI] Response received, usage:', event.usage);
+        // Content was already streamed via text_delta events - just finalize
+        // Mark streaming complete on the last assistant message
+        const msgs = this.getMessages();
+        const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          aiState.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
+        }
         if (this.responseStartTime) {
           this.lastResponseTime = (Date.now() - this.responseStartTime) / 1000;
           this.responseStartTime = 0;
@@ -1960,6 +1987,12 @@ export class AiPanel extends TailwindElement(css`
         timestamp: Date.now(),
         isStreaming: true,
       });
+      // New message created - force scroll to bottom immediately
+      requestAnimationFrame(() => {
+        if (this.chatScroll) {
+          this.chatScroll.scrollTop = this.chatScroll.scrollHeight;
+        }
+      });
     }
   }
 
@@ -1976,9 +2009,20 @@ export class AiPanel extends TailwindElement(css`
   }
 
   private scrollToBottom() {
-    requestAnimationFrame(() => {
+    // Cancel any pending scroll to avoid layout thrashing
+    if (this._scrollRafId) cancelAnimationFrame(this._scrollRafId);
+    
+    this._scrollRafId = requestAnimationFrame(() => {
       if (this.chatScroll) {
-        this.chatScroll.scrollTop = this.chatScroll.scrollHeight;
+        const el = this.chatScroll;
+        // Only auto-scroll if user is already near the bottom (within 100px)
+        const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+        if (isNearBottom) {
+          el.scrollTo({
+            top: el.scrollHeight,
+            behavior: 'smooth',
+          });
+        }
       }
     });
   }
@@ -1997,6 +2041,48 @@ export class AiPanel extends TailwindElement(css`
     }
     const sessionId = this.activeSessionId!;
 
+    // Parse all @mentions from text and read files
+    const mentions = this.parseFileMentions(text);
+    const attachments: { path: string; content: string; startLine?: number; endLine?: number }[] = [];
+    
+    for (const mention of mentions) {
+      try {
+        const fullContent = await invoke<string>('ai_read_file', {
+          projectPath: this.projectPath,
+          path: mention.path,
+          maxLines: 500,
+        });
+        
+        let content = fullContent;
+        if (mention.startLine !== undefined) {
+          const lines = fullContent.split('\n');
+          const start = Math.max(0, mention.startLine - 1);
+          const end = mention.endLine !== undefined ? Math.min(lines.length, mention.endLine) : lines.length;
+          content = lines.slice(start, end).join('\n');
+        }
+        
+        attachments.push({
+          path: mention.path,
+          content,
+          startLine: mention.startLine,
+          endLine: mention.endLine,
+        });
+      } catch (e) {
+        console.error(`Failed to read file: ${mention.path}`, e);
+      }
+    }
+
+    // Build context for AI (with file content, invisible to user)
+    let contextMessage = text;
+    if (attachments.length > 0) {
+      const attachmentBlocks = attachments.map(a => {
+        const range = a.startLine !== undefined ? ` (lines ${a.startLine}-${a.endLine || 'end'})` : '';
+        return `[File: ${a.path}${range}]\n${a.content}\n[/File]`;
+      });
+      contextMessage = text + '\n\n' + attachmentBlocks.join('\n\n');
+    }
+
+    // Show user message with @mentions
     aiState.addMessage(sessionId, {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -2009,7 +2095,6 @@ export class AiPanel extends TailwindElement(css`
     aiState.setThinking(true);
 
     const messages = this.getMessages();
-    // Exclude the just-added user message from history (it's already in `message`)
     const history = messages
       .filter((m, i) => (m.role === 'user' || m.role === 'assistant') && i < messages.length - 1)
       .map(m => ({
@@ -2021,7 +2106,7 @@ export class AiPanel extends TailwindElement(css`
       await invoke('ai_chat', {
         providerId: this.currentProvider,
         model: this.selectedModel,
-        message: text,
+        message: contextMessage,
         projectPath: this.projectPath,
         history,
       });
@@ -2035,6 +2120,26 @@ export class AiPanel extends TailwindElement(css`
       aiState.setThinking(false);
     }
     this.sessions = [...aiState.sessions];
+  }
+
+  private parseFileMentions(text: string): { path: string; startLine?: number; endLine?: number }[] {
+    const mentions: { path: string; startLine?: number; endLine?: number }[] = [];
+    // Match @path/to/file or @path/to/file#5-10 or @path/to/file#5
+    const regex = /@([\w\-\.\/]+)(?:#(\d+)(?:-(\d+))?)?/g;
+    let match;
+    
+    while ((match = regex.exec(text)) !== null) {
+      const path = match[1];
+      const startLine = match[2] ? parseInt(match[2]) : undefined;
+      const endLine = match[3] ? parseInt(match[3]) : startLine;
+      
+      // Skip if it looks like a URL or email
+      if (!path.includes('.') || path.endsWith('.com') || path.endsWith('.org')) continue;
+      
+      mentions.push({ path, startLine, endLine });
+    }
+    
+    return mentions;
   }
 
   private async abortRequest() {
@@ -2086,6 +2191,30 @@ export class AiPanel extends TailwindElement(css`
       }
     }
 
+    // Handle file suggestions navigation
+    if (this.showFileSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.selectedFileIndex = Math.min(this.selectedFileIndex + 1, this.fileSuggestions.length - 1);
+        this.scrollSelectedIntoView();
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.selectedFileIndex = Math.max(this.selectedFileIndex - 1, 0);
+        this.scrollSelectedIntoView();
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (this.fileSuggestions.length > 0) {
+          e.preventDefault();
+          this.selectFile(this.fileSuggestions[this.selectedFileIndex]);
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        this.showFileSuggestions = false;
+        return;
+      }
+    }
+
     // ESC to interrupt
     if (e.key === 'Escape' && this.isThinking) {
       e.preventDefault();
@@ -2117,10 +2246,85 @@ export class AiPanel extends TailwindElement(css`
       this.commandFilter = this.inputText;
       this.showCommands = true;
       this.selectedCommandIndex = 0;
+      this.showFileSuggestions = false;
     } else {
       this.showCommands = false;
+
+      // Check for @ mention trigger - only when @ is at end of input or followed by a non-space search term
+      const lastAtIndex = this.inputText.lastIndexOf('@');
+      if (lastAtIndex >= 0) {
+        const afterAt = this.inputText.slice(lastAtIndex + 1);
+        // Show suggestions if @ is at end (empty search) or search term has no spaces (still typing filename)
+        if (afterAt.indexOf(' ') === -1) {
+          // Strip #line-range for search query
+          const searchQuery = afterAt.split('#')[0];
+          this.fileFilter = searchQuery;
+          this.showFileSuggestions = true;
+          this.selectedFileIndex = 0;
+          // Debounce search to avoid hammering backend on every keystroke
+          if (this.searchFilesDebounceTimer) clearTimeout(this.searchFilesDebounceTimer);
+          const requestId = ++this.searchFilesRequestId;
+          this.searchFilesDebounceTimer = setTimeout(() => {
+            this.searchFiles(this.fileFilter, requestId);
+          }, 150);
+        } else {
+          this.showFileSuggestions = false;
+        }
+      } else {
+        this.showFileSuggestions = false;
+      }
     }
     this.updateCustomCaret();
+  }
+
+  private async searchFiles(query: string, requestId: number) {
+    try {
+      const result = await invoke<string>('ai_search_files', {
+        projectPath: this.projectPath,
+        query: query || '',
+        maxResults: 10,
+      });
+      
+      // Only update if this is still the latest request
+      if (requestId !== this.searchFilesRequestId) return;
+      
+      // Parse flat list: one file per line
+      const files = result
+        .split('\n')
+        .map(line => line.trim())
+        .filter(line => line && !line.startsWith('No files'));
+      
+      this.fileSuggestions = files;
+    } catch (error) {
+      console.error('Failed to search files:', error);
+      if (requestId === this.searchFilesRequestId) {
+        this.fileSuggestions = [];
+      }
+    }
+  }
+
+  private selectFile(file: string) {
+    // Preserve any #line-range the user already typed
+    const lastAtIndex = this.inputText.lastIndexOf('@');
+    if (lastAtIndex >= 0) {
+      const afterAt = this.inputText.slice(lastAtIndex + 1);
+      const hashIndex = afterAt.indexOf('#');
+      const lineRange = hashIndex >= 0 ? afterAt.slice(hashIndex) : '';
+      this.inputText = this.inputText.slice(0, lastAtIndex) + `@${file}${lineRange}`;
+    }
+    this.showFileSuggestions = false;
+    this.fileSuggestions = [];
+    this.fileFilter = '';
+
+    if (this.chatInput) {
+      this.chatInput.value = this.inputText;
+      this.chatInput.focus();
+      // Position cursor after the file path, before #line-range
+      const cursorPos = this.inputText.lastIndexOf('#') >= 0 
+        ? this.inputText.lastIndexOf('#') 
+        : this.inputText.length;
+      this.chatInput.setSelectionRange(cursorPos, cursorPos);
+    }
   }
 
   private updateCustomCaret = () => {
@@ -2295,36 +2499,6 @@ export class AiPanel extends TailwindElement(css`
     }
   }
 
-  private attachFiles(files: File[]) {
-    for (const file of files.slice(0, 5)) { // Limit to 5 files
-      const attachment: AIAttachment = {
-        id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        path: file.name,
-        name: file.name,
-        type: 'file',
-      };
-      this.attachments = [...this.attachments, attachment];
-    }
-  }
-
-  private attachImage() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*,.gif';
-    input.multiple = true;
-    input.onchange = (e: Event) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files) {
-        this.attachFiles(Array.from(target.files));
-      }
-    };
-    input.click();
-  }
-
-  private removeAttachment(id: string) {
-    this.attachments = this.attachments.filter(a => a.id !== id);
-  }
-
   private toggleToolDetails(id: string) {
     const next = new Set(this.showToolDetails);
     if (next.has(id)) next.delete(id);
@@ -2355,12 +2529,18 @@ export class AiPanel extends TailwindElement(css`
 
   private renderMessage(msg: ChatMessage) {
     switch (msg.role) {
-      case 'user':
+      case 'user': {
+        // Highlight @mentions in user messages
+        const highlighted = msg.content.replace(
+          /@([\w\-\.\/]+)/g,
+          '<span class="file-mention">@$1</span>'
+        );
         return html`
           <div class="ai-msg-user">
             <div class="ai-msg-user-label">You</div>
-            <div>${msg.content}</div>
+            <div class="ai-msg-user-content">${unsafeHTML(highlighted)}</div>
           </div>`;
+      }
 
       case 'thinking':
         return html`
@@ -2616,7 +2796,7 @@ export class AiPanel extends TailwindElement(css`
           `}
         </div>
 
-        <!-- Input area - OpenCode TUI style -->
+        <!-- Input area - OpenStorm TUI style -->
         <div class="ai-input-area">
           <div class="ai-input-container ${this.isDragging ? 'dragging' : ''}"
                @dragenter=${this.handleDragEnter}
@@ -2639,6 +2819,22 @@ export class AiPanel extends TailwindElement(css`
               </div>
             ` : ''}
 
+            ${this.showFileSuggestions ? html`
+              <div class="ai-command-menu">
+                ${this.fileSuggestions.length === 0 ? html`
+                  <div class="ai-command-item">
+                    <span class="ai-command-item-name">No files found</span>
+                  </div>
+                ` : this.fileSuggestions.map((file, i) => html`
+                  <div class="ai-command-item ${i === this.selectedFileIndex ? 'selected' : ''}"
+                       @click=${() => this.selectFile(file)}>
+                    <span class="ai-command-item-icon"><os-icon name="file" size="14"></os-icon></span>
+                    <span class="ai-command-item-name">${file}</span>
+                  </div>
+                `)}
+              </div>
+            ` : ''}
+
             <div class="ai-prompt-frame">
                 <div class="ai-prompt-content">
                   <div class="ai-prompt-border-left"></div>
@@ -2647,7 +2843,7 @@ export class AiPanel extends TailwindElement(css`
                       <textarea
                         id="chat-input"
                         class="ai-prompt-textarea"
-                        placeholder=""
+                        placeholder="Ask about your code... (@filename to attach)"
                         .disabled=${!this.providerConnected}
                         .value=${this.inputText}
                         @input=${this.handleInput}

@@ -16,7 +16,7 @@ export interface FileNode {
 /**
  * Tab types - discriminator for different content types
  */
-export type TabType = 'file' | 'terminal' | 'opencode';
+export type TabType = 'file' | 'terminal' | 'openstorm';
 
 /**
  * Tab state for editor tabs

@@ -163,7 +163,7 @@ pub struct ProviderInfo {
 
 /// LLM Provider trait — implement this to add new providers.
 ///
-/// Follows OpenCode's pattern: providers expose a list of models,
+/// Follows OpenStorm's pattern: providers expose a list of models,
 /// accept chat completion requests, and optionally support streaming.
 #[async_trait]
 pub trait LlmProvider: Send + Sync {

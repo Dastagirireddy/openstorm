@@ -1,8 +1,13 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
+use super::context::ContextManager;
+use super::cost_tracker::{CostTracker, SharedCostTracker, create_shared_cost_tracker};
+use super::embedding_store::EmbeddingStore;
+use super::permissions::{PermissionProfile, PermissionResult, PermissionSystem};
 use super::project_context::ProjectContext;
 use super::provider::*;
+use super::sandbox::Sandbox;
 use super::tools::ToolRegistry;
 
 /// Status of a plan step
@@ -77,6 +82,23 @@ pub enum AgentEvent {
     /// Error occurred
     #[serde(rename = "error")]
     Error { message: String },
+
+    /// Context window status update
+    #[serde(rename = "context_status")]
+    ContextStatus {
+        tokens_used: usize,
+        tokens_max: usize,
+        utilization: f64,
+    },
+
+    /// Cost tracking update
+    #[serde(rename = "cost_update")]
+    CostUpdate {
+        model: String,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        cost: f64,
+    },
 }
 
 /// The agent orchestrates the LLM tool-calling loop
@@ -92,22 +114,99 @@ pub struct Agent {
     approval_tx: Mutex<Option<mpsc::Sender<bool>>>,
     /// Current plan steps
     plan_steps: Mutex<Vec<PlanStep>>,
+    /// Context window manager
+    context_manager: Mutex<ContextManager>,
+    /// Permission system
+    permissions: PermissionSystem,
+    /// Sandbox for safe execution
+    sandbox: Sandbox,
+    /// Embedding store for RAG
+    embedding_store: Arc<Mutex<EmbeddingStore>>,
+    /// Cost tracker for LLM API usage
+    cost_tracker: SharedCostTracker,
 }
 
 impl Agent {
     pub fn new(provider: Arc<dyn LlmProvider>, model: String, project_path: String) -> Self {
         let project_context = ProjectContext::detect(&project_path);
         let (approval_tx, approval_rx) = mpsc::channel(1);
+        let sandbox = Sandbox::new();
+        let permissions = PermissionSystem::new(PermissionProfile::Smart);
+        let embedding_store = Arc::new(Mutex::new(EmbeddingStore::new()));
+        let tools = ToolRegistry::with_embedding_store(
+            project_path.clone(),
+            sandbox.clone(),
+            embedding_store.clone(),
+        );
+        let cost_tracker = create_shared_cost_tracker();
+
         Self {
             provider,
             model,
-            tools: ToolRegistry::new(project_path),
-            max_iterations: 10, // Safety limit
+            tools,
+            max_iterations: 15, // Increased from 10
             project_context,
             approval_rx: Mutex::new(Some(approval_rx)),
             approval_tx: Mutex::new(Some(approval_tx)),
             plan_steps: Mutex::new(Vec::new()),
+            context_manager: Mutex::new(ContextManager::new(8192)),
+            permissions,
+            sandbox,
+            embedding_store,
+            cost_tracker,
         }
+    }
+
+    /// Create an agent with custom permission profile
+    pub fn with_permissions(
+        provider: Arc<dyn LlmProvider>,
+        model: String,
+        project_path: String,
+        profile: PermissionProfile,
+    ) -> Self {
+        let project_context = ProjectContext::detect(&project_path);
+        let (approval_tx, approval_rx) = mpsc::channel(1);
+        let sandbox = Sandbox::new();
+        let permissions = PermissionSystem::new(profile);
+        let embedding_store = Arc::new(Mutex::new(EmbeddingStore::new()));
+        let tools = ToolRegistry::with_embedding_store(
+            project_path.clone(),
+            sandbox.clone(),
+            embedding_store.clone(),
+        );
+        let cost_tracker = create_shared_cost_tracker();
+
+        Self {
+            provider,
+            model,
+            tools,
+            max_iterations: 15,
+            project_context,
+            approval_rx: Mutex::new(Some(approval_rx)),
+            approval_tx: Mutex::new(Some(approval_tx)),
+            plan_steps: Mutex::new(Vec::new()),
+            context_manager: Mutex::new(ContextManager::new(8192)),
+            permissions,
+            sandbox,
+            embedding_store,
+            cost_tracker,
+        }
+    }
+
+    /// Index the project directory for RAG
+    pub async fn index_project(&self) -> Result<usize, std::io::Error> {
+        let mut store = self.embedding_store.lock().await;
+        store.index_directory(&self.tools.project_path).await
+    }
+
+    /// Get the embedding store for external access
+    pub fn embedding_store(&self) -> Arc<Mutex<EmbeddingStore>> {
+        self.embedding_store.clone()
+    }
+
+    /// Get the cost tracker for external access
+    pub fn cost_tracker(&self) -> SharedCostTracker {
+        self.cost_tracker.clone()
     }
 
     /// Get a sender that the frontend can use to approve/deny tool execution
@@ -144,223 +243,319 @@ impl Agent {
         history: Vec<Message>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<(), ProviderError> {
+        // Initialize context manager with system prompt
         let system_prompt = self.build_system_prompt();
-        let mut messages = vec![Message::System {
-            content: system_prompt,
-        }];
-        messages.extend(history);
-        messages.push(Message::User {
+        let mut ctx = ContextManager::new(8192);
+        ctx.set_system_prompt(system_prompt);
+
+        // Add history to context
+        ctx.extend(history);
+
+        // Add user message
+        ctx.push(Message::User {
             content: user_message,
         });
 
         let tool_defs = self.tools.definitions();
         let mut total_tool_calls = 0u32;
+        let mut consecutive_failures = 0u32;
+        const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
         for iteration in 0..self.max_iterations {
+            // Send context status update
+            let stats = ctx.stats();
             let _ = tx
                 .send(AgentEvent::Thinking {
                     message: if iteration == 0 {
-                        "Thinking...".to_string()
+                        format!("Thinking... ({})", stats)
                     } else {
-                        format!("Continuing (iteration {})...", iteration + 1)
+                        format!("Continuing (iteration {}, {})...", iteration + 1, stats)
                     },
                 })
                 .await;
 
+            // Build messages from context manager
+            let messages = ctx.build_messages();
+
             let request = ChatCompletionRequest {
                 model: self.model.clone(),
-                messages: messages.clone(),
+                messages,
                 tools: Some(tool_defs.clone()),
-                stream: Some(false),
+                stream: Some(true),  // Enable streaming
                 temperature: Some(0.7),
                 max_tokens: Some(4096),
             };
 
-            let response = self.provider.chat_completion(request).await?;
-            let usage = response.usage.clone();
+            // Clone request for fallback in case streaming fails
+            let fallback_request = ChatCompletionRequest {
+                model: request.model.clone(),
+                messages: request.messages.clone(),
+                tools: request.tools.clone(),
+                stream: Some(false),
+                temperature: request.temperature,
+                max_tokens: request.max_tokens,
+            };
 
-            let choice = response
-                .choices
-                .first()
-                .ok_or_else(|| ProviderError::ServerError("No choices in response".to_string()))?;
+            // Use streaming for better UX
+            let mut stream = match self.provider.chat_completion_stream(request).await {
+                Ok(s) => s,
+                Err(_) => {
+                    // Fall back to non-streaming if streaming fails
+                    let response = self.provider.chat_completion(fallback_request).await?;
+                    self.handle_response(response, &mut ctx, &mut total_tool_calls, &mut consecutive_failures, tx).await?;
+                    continue;
+                }
+            };
 
-            match &choice.message {
-                Message::Assistant {
-                    content,
-                    tool_calls,
-                } => {
-                    // Only parse and show plan if there are actual tool calls
-                    let has_plan = if let Some(calls) = tool_calls {
-                        if !calls.is_empty() {
-                            // There are tool calls - parse plan if present
-                            if let Some(text) = content {
-                                if !text.is_empty() {
-                                    let new_steps = self.parse_plan(text);
-                                    if !new_steps.is_empty() {
-                                        let mut steps = self.plan_steps.lock().await;
-                                        *steps = new_steps.clone();
-                                        let _ = tx.send(AgentEvent::PlanUpdate { steps: new_steps }).await;
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
+            // Collect streaming response
+            let mut full_content = String::new();
+            let mut tool_calls: Vec<ToolCall> = Vec::new();
+            let mut usage: Option<Usage> = None;
+
+            while let Some(chunk) = stream.recv().await {
+                // Send text deltas to frontend for real-time display
+                if let Some(text) = &chunk.choices.first().and_then(|c| c.delta.content.as_ref()) {
+                    full_content.push_str(text);
+                    let _ = tx.send(AgentEvent::TextDelta { content: text.to_string() }).await;
+                }
+
+                // Collect tool calls
+                if let Some(delta) = chunk.choices.first().and_then(|c| c.delta.tool_calls.as_ref()) {
+                    for tc_delta in delta {
+                        let idx = tc_delta.index as usize;
+                        while tool_calls.len() <= idx {
+                            tool_calls.push(ToolCall {
+                                id: String::new(),
+                                call_type: "function".to_string(),
+                                function: FunctionCall {
+                                    name: String::new(),
+                                    arguments: String::new(),
+                                },
+                            });
                         }
-                    } else {
-                        false
-                    };
-
-                    // Send TextDelta for the response content (unless it's just a plan)
-                    if let Some(text) = content {
-                        if !text.is_empty() && !has_plan {
-                            let _ = tx.send(AgentEvent::TextDelta { content: text.clone() }).await;
+                        if let Some(id) = &tc_delta.id {
+                            tool_calls[idx].id = id.clone();
+                        }
+                        if let Some(name) = &tc_delta.function.as_ref().and_then(|f| f.name.as_ref()) {
+                            tool_calls[idx].function.name.push_str(name);
+                        }
+                        if let Some(args) = &tc_delta.function.as_ref().and_then(|f| f.arguments.as_ref()) {
+                            tool_calls[idx].function.arguments.push_str(args);
                         }
                     }
+                }
 
-                    // Handle tool calls
-                    if let Some(calls) = tool_calls {
-                        if calls.is_empty() {
-                            // No tool calls - this is the final response
-                            // If there's a plan, send empty content to avoid duplicate display
-                            let _ = tx
-                                .send(AgentEvent::Response {
-                                    content: if has_plan { String::new() } else { content.clone().unwrap_or_default() },
-                                    tool_calls_made: total_tool_calls,
-                                    usage: usage.clone(),
-                                })
-                                .await;
-                            return Ok(());
-                        }
+                // Capture usage from final chunk
+                if chunk.choices.first().and_then(|c| c.finish_reason.as_ref()).is_some() {
+                    // Usage might be in the final chunk for some providers
+                }
+            }
 
-                        // Add assistant message to history
-                        messages.push(choice.message.clone());
+            // Record cost if usage is available
+            if let Some(ref usage) = usage {
+                let cost = {
+                    let mut tracker = self.cost_tracker.lock().await;
+                    tracker.record(&self.model, usage)
+                };
+                let _ = tx.send(AgentEvent::CostUpdate {
+                    model: self.model.clone(),
+                    prompt_tokens: usage.prompt_tokens,
+                    completion_tokens: usage.completion_tokens,
+                    cost,
+                }).await;
+            }
 
-                        // Execute each tool call
-                        for call in calls {
-                            total_tool_calls += 1;
+            // Build the complete message
+            let has_plan = if !tool_calls.is_empty() && !full_content.is_empty() {
+                let new_steps = self.parse_plan(&full_content);
+                if !new_steps.is_empty() {
+                    let mut steps = self.plan_steps.lock().await;
+                    *steps = new_steps.clone();
+                    let _ = tx.send(AgentEvent::PlanUpdate { steps: new_steps }).await;
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
 
-                            // Check if this tool requires approval
-                            let needs_approval = matches!(
-                                call.function.name.as_str(),
-                                "write_file" | "run_command"
+            // Handle tool calls
+            if !tool_calls.is_empty() {
+                // Add assistant message to context
+                ctx.push(Message::Assistant {
+                    content: Some(full_content),
+                    tool_calls: Some(tool_calls.clone()),
+                });
+
+                // Execute each tool call
+                for call in &tool_calls {
+                    total_tool_calls += 1;
+
+                    // Check if we've had too many consecutive failures
+                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                        let result = format!(
+                            "Too many consecutive tool failures ({}). Stopping to prevent infinite loop. Please try a different approach.",
+                            consecutive_failures
+                        );
+                        let _ = tx
+                            .send(AgentEvent::ToolResult {
+                                tool_name: call.function.name.clone(),
+                                result: result.clone(),
+                            })
+                            .await;
+                        ctx.push(Message::Tool {
+                            tool_call_id: call.id.clone(),
+                            content: result,
+                        });
+                        // Send final response and stop
+                        let _ = tx
+                            .send(AgentEvent::Response {
+                                content: "Stopping due to too many consecutive tool failures. Please try a different approach.".to_string(),
+                                tool_calls_made: total_tool_calls,
+                                usage,
+                            })
+                            .await;
+                        return Ok(());
+                    }
+
+                    // Check permissions using the permission system
+                    let perm_result = self.permissions.check(
+                        &call.function.name,
+                        &call.function.arguments,
+                    );
+
+                    let needs_approval = match &perm_result {
+                        PermissionResult::ApprovalRequired { .. } => true,
+                        PermissionResult::Denied { reason } => {
+                            // Tool is denied - send error and track failure
+                            consecutive_failures += 1;
+                            let result = format!(
+                                "Tool '{}' denied: {}. Use a different tool or approach.",
+                                call.function.name, reason
                             );
-
-                            if needs_approval {
-                                // Generate preview
-                                let preview = self.generate_tool_preview(&call.function.name, &call.function.arguments);
-
-                                // Send approval request
-                                let _ = tx
-                                    .send(AgentEvent::ToolApprovalRequired {
-                                        tool_name: call.function.name.clone(),
-                                        arguments: call.function.arguments.clone(),
-                                        preview,
-                                    })
-                                    .await;
-
-                                // Wait for approval (60s timeout)
-                                let approved = {
-                                    let mut rx = self.approval_rx.lock().await;
-                                    if let Some(ref mut receiver) = *rx {
-                                        tokio::select! {
-                                            response = receiver.recv() => response.unwrap_or(false),
-                                            _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => false,
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                };
-
-                                if !approved {
-                                    let result = "Tool execution denied by user.".to_string();
-                                    let _ = tx
-                                        .send(AgentEvent::ToolResult {
-                                            tool_name: call.function.name.clone(),
-                                            result: result.clone(),
-                                        })
-                                        .await;
-                                    messages.push(Message::Tool {
-                                        tool_call_id: call.id.clone(),
-                                        content: result,
-                                    });
-                                    continue;
-                                }
-                            }
-
-                            let _ = tx
-                                .send(AgentEvent::ToolUse {
-                                    tool_name: call.function.name.clone(),
-                                    arguments: call.function.arguments.clone(),
-                                })
-                                .await;
-
-                            let result = self
-                                .tools
-                                .execute(&call.function.name, &call.function.arguments)
-                                .await;
-
-                            // Update plan step status to in_progress
-                            {
-                                let mut steps = self.plan_steps.lock().await;
-                                if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::Pending) {
-                                    step.status = PlanStepStatus::InProgress;
-                                    let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
-                                }
-                            }
-
                             let _ = tx
                                 .send(AgentEvent::ToolResult {
                                     tool_name: call.function.name.clone(),
                                     result: result.clone(),
                                 })
                                 .await;
-
-                            // Update plan step status to done
-                            {
-                                let mut steps = self.plan_steps.lock().await;
-                                if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::InProgress) {
-                                    step.status = PlanStepStatus::Done;
-                                    let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
-                                }
-                            }
-
-                            // Add tool result to messages
-                            messages.push(Message::Tool {
+                            ctx.push(Message::Tool {
                                 tool_call_id: call.id.clone(),
                                 content: result,
                             });
+                            continue;
                         }
-                    } else {
-                        // No tool calls - final response
-                        // If there's a plan, send empty content to avoid duplicate display
+                        PermissionResult::Allowed => false,
+                    };
+
+                    if needs_approval {
+                        // Generate preview
+                        let preview = self.generate_tool_preview(&call.function.name, &call.function.arguments);
+
+                        // Send approval request
                         let _ = tx
-                            .send(AgentEvent::Response {
-                                content: if has_plan { String::new() } else { content.clone().unwrap_or_default() },
-                                tool_calls_made: total_tool_calls,
-                                usage: usage.clone(),
+                            .send(AgentEvent::ToolApprovalRequired {
+                                tool_name: call.function.name.clone(),
+                                arguments: call.function.arguments.clone(),
+                                preview,
                             })
                             .await;
-                        return Ok(());
+
+                        // Wait for approval (60s timeout)
+                        let approved = {
+                            let mut rx = self.approval_rx.lock().await;
+                            if let Some(ref mut receiver) = *rx {
+                                tokio::select! {
+                                    response = receiver.recv() => response.unwrap_or(false),
+                                    _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => false,
+                                }
+                            } else {
+                                false
+                            }
+                        };
+
+                        if !approved {
+                            consecutive_failures += 1;
+                            let result = "Tool execution denied by user.".to_string();
+                            let _ = tx
+                                .send(AgentEvent::ToolResult {
+                                    tool_name: call.function.name.clone(),
+                                    result: result.clone(),
+                                })
+                                .await;
+                            ctx.push(Message::Tool {
+                                tool_call_id: call.id.clone(),
+                                content: result,
+                            });
+                            continue;
+                        }
                     }
-                }
-                _ => {
-                    // Unexpected message type
+
                     let _ = tx
-                        .send(AgentEvent::Response {
-                            content: "Unexpected response from model".to_string(),
-                            tool_calls_made: total_tool_calls,
-                            usage: usage.clone(),
+                        .send(AgentEvent::ToolUse {
+                            tool_name: call.function.name.clone(),
+                            arguments: call.function.arguments.clone(),
                         })
                         .await;
-                    return Ok(());
+
+                    let result = self
+                        .tools
+                        .execute(&call.function.name, &call.function.arguments)
+                        .await;
+
+                    // Track if this was a failure
+                    if result.starts_with("Unknown tool:")
+                        || result.starts_with("Error")
+                        || result.contains("not found")
+                        || result.contains("failed")
+                    {
+                        consecutive_failures += 1;
+                    } else {
+                        consecutive_failures = 0; // Reset on success
+                    }
+
+                    // Update plan step status to in_progress
+                    {
+                        let mut steps = self.plan_steps.lock().await;
+                        if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::Pending) {
+                            step.status = PlanStepStatus::InProgress;
+                            let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
+                        }
+                    }
+
+                    let _ = tx
+                        .send(AgentEvent::ToolResult {
+                            tool_name: call.function.name.clone(),
+                            result: result.clone(),
+                        })
+                        .await;
+
+                    // Update plan step status to done
+                    {
+                        let mut steps = self.plan_steps.lock().await;
+                        if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::InProgress) {
+                            step.status = PlanStepStatus::Done;
+                            let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
+                        }
+                    }
+
+                    // Add tool result to context
+                    ctx.push(Message::Tool {
+                        tool_call_id: call.id.clone(),
+                        content: result,
+                    });
                 }
+            } else {
+                // No tool calls - final response
+                let _ = tx
+                    .send(AgentEvent::Response {
+                        content: if has_plan { String::new() } else { full_content },
+                        tool_calls_made: total_tool_calls,
+                        usage,
+                    })
+                    .await;
+                return Ok(());
             }
         }
 
@@ -379,8 +574,199 @@ impl Agent {
         Ok(())
     }
 
+    /// Handle a non-streaming response (fallback when streaming fails)
+    async fn handle_response(
+        &self,
+        response: ChatCompletionResponse,
+        ctx: &mut ContextManager,
+        total_tool_calls: &mut u32,
+        consecutive_failures: &mut u32,
+        tx: &mpsc::Sender<AgentEvent>,
+    ) -> Result<(), ProviderError> {
+        let usage = response.usage.clone();
+
+        // Record cost if usage is available
+        if let Some(ref usage) = usage {
+            let cost = {
+                let mut tracker = self.cost_tracker.lock().await;
+                tracker.record(&self.model, usage)
+            };
+            let _ = tx.send(AgentEvent::CostUpdate {
+                model: self.model.clone(),
+                prompt_tokens: usage.prompt_tokens,
+                completion_tokens: usage.completion_tokens,
+                cost,
+            }).await;
+        }
+
+        let choice = response
+            .choices
+            .first()
+            .ok_or_else(|| ProviderError::ServerError("No choices in response".to_string()))?;
+
+        match &choice.message {
+            Message::Assistant {
+                content,
+                tool_calls,
+            } => {
+                // Send TextDelta for the response content
+                if let Some(text) = content {
+                    if !text.is_empty() {
+                    let _ = tx.send(AgentEvent::TextDelta { content: text.to_string() }).await;
+                    }
+                }
+
+                // Handle tool calls
+                if let Some(calls) = tool_calls {
+                    if calls.is_empty() {
+                        // No tool calls - this is the final response
+                        let _ = tx
+                            .send(AgentEvent::Response {
+                                content: content.clone().unwrap_or_default(),
+                                tool_calls_made: *total_tool_calls,
+                                usage,
+                            })
+                            .await;
+                        return Ok(());
+                    }
+
+                    // Add assistant message to context
+                    ctx.push(choice.message.clone());
+
+                    // Execute each tool call
+                    for call in calls {
+                        *total_tool_calls += 1;
+
+                        // Check permissions
+                        let perm_result = self.permissions.check(
+                            &call.function.name,
+                            &call.function.arguments,
+                        );
+
+                        let needs_approval = match &perm_result {
+                            PermissionResult::ApprovalRequired { .. } => true,
+                            PermissionResult::Denied { reason } => {
+                                *consecutive_failures += 1;
+                                let result = format!(
+                                    "Tool '{}' denied: {}. Use a different tool or approach.",
+                                    call.function.name, reason
+                                );
+                                let _ = tx
+                                    .send(AgentEvent::ToolResult {
+                                        tool_name: call.function.name.clone(),
+                                        result: result.clone(),
+                                    })
+                                    .await;
+                                ctx.push(Message::Tool {
+                                    tool_call_id: call.id.clone(),
+                                    content: result,
+                                });
+                                continue;
+                            }
+                            PermissionResult::Allowed => false,
+                        };
+
+                        if needs_approval {
+                            let preview = self.generate_tool_preview(&call.function.name, &call.function.arguments);
+                            let _ = tx
+                                .send(AgentEvent::ToolApprovalRequired {
+                                    tool_name: call.function.name.clone(),
+                                    arguments: call.function.arguments.clone(),
+                                    preview,
+                                })
+                                .await;
+
+                            let approved = {
+                                let mut rx = self.approval_rx.lock().await;
+                                if let Some(ref mut receiver) = *rx {
+                                    tokio::select! {
+                                        response = receiver.recv() => response.unwrap_or(false),
+                                        _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => false,
+                                    }
+                                } else {
+                                    false
+                                }
+                            };
+
+                            if !approved {
+                                *consecutive_failures += 1;
+                                let result = "Tool execution denied by user.".to_string();
+                                let _ = tx
+                                    .send(AgentEvent::ToolResult {
+                                        tool_name: call.function.name.clone(),
+                                        result: result.clone(),
+                                    })
+                                    .await;
+                                ctx.push(Message::Tool {
+                                    tool_call_id: call.id.clone(),
+                                    content: result,
+                                });
+                                continue;
+                            }
+                        }
+
+                        let _ = tx
+                            .send(AgentEvent::ToolUse {
+                                tool_name: call.function.name.clone(),
+                                arguments: call.function.arguments.clone(),
+                            })
+                            .await;
+
+                        let result = self
+                            .tools
+                            .execute(&call.function.name, &call.function.arguments)
+                            .await;
+
+                        if result.starts_with("Unknown tool:")
+                            || result.starts_with("Error")
+                            || result.contains("not found")
+                            || result.contains("failed")
+                        {
+                            *consecutive_failures += 1;
+                        } else {
+                            *consecutive_failures = 0;
+                        }
+
+                        let _ = tx
+                            .send(AgentEvent::ToolResult {
+                                tool_name: call.function.name.clone(),
+                                result: result.clone(),
+                            })
+                            .await;
+
+                        ctx.push(Message::Tool {
+                            tool_call_id: call.id.clone(),
+                            content: result,
+                        });
+                    }
+                } else {
+                    // No tool calls - final response
+                    let _ = tx
+                        .send(AgentEvent::Response {
+                            content: content.clone().unwrap_or_default(),
+                            tool_calls_made: *total_tool_calls,
+                            usage,
+                        })
+                        .await;
+                }
+            }
+            _ => {
+                let _ = tx
+                    .send(AgentEvent::Response {
+                        content: "Unexpected response from model".to_string(),
+                        tool_calls_made: *total_tool_calls,
+                        usage,
+                    })
+                    .await;
+            }
+        }
+
+        Ok(())
+    }
+
     fn build_system_prompt(&self) -> String {
         let project_section = self.project_context.to_prompt_section();
+        let permissions_section = self.permissions.to_prompt_section();
 
         format!(
             r#"You are an AI coding assistant embedded in the OpenStorm IDE.
@@ -388,28 +774,51 @@ You have access to tools that let you read, write, and search files in the user'
 
 {project_section}
 
-Rules:
-- Use tools to explore the codebase before answering questions about it
-- When writing files, make sure the code is correct and follows the project's conventions
-- Be concise in your responses
-- If you need to see more of a file, use read_file to read it
-- Always explain what you're doing when using tools
-- Follow the language and framework conventions detected in the project context
+{permissions_section}
 
-Planning:
+## Capabilities
+
+You can:
+- Read and analyze code files
+- Write new files or overwrite existing ones
+- Edit specific lines in files (safer than full writes)
+- Search codebases with regex patterns
+- Find all references to symbols
+- Find definitions of functions, structs, types
+- Run shell commands
+- Execute tests (auto-detects framework)
+- Check LSP diagnostics (errors/warnings)
+- View and create git commits
+
+## Decision Framework
+
+1. **Understand first**: Before making changes, read relevant files and understand the context
+2. **Plan before acting**: For complex tasks, output a numbered plan
+3. **Minimize changes**: Make the smallest change that solves the problem
+4. **Verify your work**: After making changes, check for errors
+5. **Explain your reasoning**: Tell the user what you're doing and why
+
+## Planning
+
 - For complex tasks, output a numbered plan before executing tools
 - Use this format: "Plan:\n1. First step\n2. Second step\n..."
 - Keep plans to 3-7 steps
 - Each step should be a clear, actionable task
 - Execute one step at a time using tools
 
-Available tools:
-- read_file: Read a file's contents
-- write_file: Write content to a file (creates/overwrites)
-- list_directory: List files in a directory
-- search_code: Search for patterns in code
-- run_command: Execute a shell command
-            - git_status: Get current git status"#
+## Error Handling
+
+- If a tool fails, try a different approach
+- If you're unsure, ask the user
+- If a change might break things, warn the user first
+- Never silently fail
+
+## Safety
+
+- Don't modify files outside the project directory
+- Don't run destructive commands without confirmation
+- Don't expose secrets or credentials
+- Don't commit without user approval"#
         )
     }
 
@@ -538,6 +947,20 @@ Available tools:
                 serde_json::json!({
                     "type": "command",
                     "command": command,
+                }).to_string()
+            }
+            "edit_file" => {
+                let path = args["path"].as_str().unwrap_or("unknown");
+                let start_line = args["start_line"].as_u64().unwrap_or(0);
+                let end_line = args["end_line"].as_u64().unwrap_or(0);
+                let new_content = args["new_content"].as_str().unwrap_or("");
+
+                serde_json::json!({
+                    "type": "edit",
+                    "file_path": path,
+                    "start_line": start_line,
+                    "end_line": end_line,
+                    "new_lines": new_content.lines().count(),
                 }).to_string()
             }
             _ => arguments.to_string(),

@@ -117,7 +117,7 @@ export class TabBar extends TailwindElement() {
       `;
     }
 
-    if (tabType === 'opencode') {
+    if (tabType === 'openstorm') {
       return html`
         <os-icon name="sparkles" size="12" color="var(--app-foreground)"></os-icon>
       `;
@@ -257,10 +257,10 @@ export class TabBar extends TailwindElement() {
                 style="color: var(--app-foreground);"
                 @click=${() => {
                   this.showAddMenu = false;
-                  this.dispatchEvent(new CustomEvent('tab-add', { detail: { type: 'opencode' }, bubbles: true, composed: true }));
+                  this.dispatchEvent(new CustomEvent('tab-add', { detail: { type: 'openstorm' }, bubbles: true, composed: true }));
                 }}>
                 <os-icon name="sparkles" size="12"></os-icon>
-                <span class="text-[12px]">OpenCode AI</span>
+                <span class="text-[12px]">OpenStorm AI</span>
               </div>
             </div>
           ` : ''}

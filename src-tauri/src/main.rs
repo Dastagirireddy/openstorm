@@ -369,11 +369,6 @@ fn main() {
                     &MenuItem::with_id(app, "undo", "Undo", true, Some("Cmd+Z")).unwrap(),
                     &MenuItem::with_id(app, "redo", "Redo", true, Some("Cmd+Shift+Z")).unwrap(),
                     &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
-                    &MenuItem::with_id(app, "cut", "Cut", true, Some("Cmd+X")).unwrap(),
-                    &MenuItem::with_id(app, "copy", "Copy", true, Some("Cmd+C")).unwrap(),
-                    &MenuItem::with_id(app, "paste", "Paste", true, Some("Cmd+V")).unwrap(),
-                    &MenuItem::with_id(app, "select-all", "Select All", true, Some("Cmd+A")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
                     &MenuItem::with_id(app, "find", "Find", true, Some("Cmd+F")).unwrap(),
                     &MenuItem::with_id(app, "replace", "Find and Replace", true, Some("Cmd+Option+F")).unwrap(),
                 ]).unwrap(),
@@ -605,6 +600,8 @@ fn main() {
             ai::commands::ai_chat,
             ai::commands::ai_abort,
             ai::commands::ai_approve_tool,
+            ai::commands::ai_search_files,
+            ai::commands::ai_read_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -197,7 +197,7 @@
   --editor-indent-marker: #d0d0d0;
   --editor-indent-marker-active: #b0b0b0;
 
-  /* AI Panel - Neutral dark theme (like OpenCode CLI) */
+  /* AI Panel - Neutral dark theme (like OpenStorm CLI) */
   --ai-background: rgba(13, 17, 23, 0.5);
   --ai-panel-background: #161b22;
   --ai-panel-border: #30363d;
