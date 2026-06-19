@@ -53,26 +53,24 @@ export class CodeBlock extends LitElement {
 
     .code-copy {
       background: none;
-      border: 1px solid var(--code-border, #30363d);
+      border: none;
       color: var(--code-text-dim, #8b949e);
       cursor: pointer;
-      font-size: 11px;
-      padding: 0.25em 0.6em;
+      padding: 0.25em;
       border-radius: 3px;
       transition: all 0.15s ease;
-      font-family: inherit;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
 
     .code-copy:hover {
-      background: var(--code-header-bg, #161b22);
+      background: var(--code-border, #30363d);
       color: var(--code-text, #e6edf3);
-      border-color: var(--code-text-dim, #8b949e);
     }
 
     .code-copy.copied {
-      background: color-mix(in srgb, var(--code-success, #3fb950) 15%, transparent);
       color: var(--code-success, #3fb950);
-      border-color: var(--code-success, #3fb950);
     }
 
     .code-content {
@@ -145,6 +143,7 @@ export class CodeBlock extends LitElement {
 
   private highlightedCode = '';
   private lines: string[] = [];
+  private displayLanguage = '';
 
   willUpdate(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('code') || changedProperties.has('language')) {
@@ -156,6 +155,7 @@ export class CodeBlock extends LitElement {
     if (!this.code) {
       this.highlightedCode = '';
       this.lines = [];
+      this.displayLanguage = '';
       return;
     }
 
@@ -186,6 +186,7 @@ export class CodeBlock extends LitElement {
       }
     }
 
+    this.displayLanguage = detectedLang || 'text';
     const langClass = detectedLang ? `language-${detectedLang}` : '';
     const hljsClass = hasHighlight ? 'hljs' : '';
     this.highlightedCode = `<code class="${hljsClass} ${langClass}">${code}</code>`;
@@ -196,10 +197,11 @@ export class CodeBlock extends LitElement {
       await navigator.clipboard.writeText(this.code);
       const btn = this.shadowRoot?.querySelector('.code-copy');
       if (btn) {
-        btn.textContent = 'Copied!';
+        const icon = btn.querySelector('iconify-icon');
+        if (icon) icon.setAttribute('icon', 'lucide:check');
         btn.classList.add('copied');
         setTimeout(() => {
-          btn.textContent = 'Copy';
+          if (icon) icon.setAttribute('icon', 'lucide:clipboard');
           btn.classList.remove('copied');
         }, 2000);
       }
@@ -215,9 +217,10 @@ export class CodeBlock extends LitElement {
     return html`
       <div class="code-block">
         <div class="code-header">
-          <span class="code-lang">${this.language || 'code'}</span>
-          <span class="code-lines">${lineCount} lines</span>
-          <button class="code-copy" @click=${this.copyToClipboard}>Copy</button>
+          <span class="code-lang">${this.displayLanguage}</span>
+          <button class="code-copy" @click=${this.copyToClipboard}>
+            <iconify-icon icon="lucide:clipboard" width="14"></iconify-icon>
+          </button>
         </div>
         <div class="code-content">
           ${shouldShowLineNumbers ? html`

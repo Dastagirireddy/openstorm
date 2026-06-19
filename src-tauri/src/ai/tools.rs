@@ -5,7 +5,7 @@ use super::provider::{FunctionDefinition, ToolDefinition};
 
 /// Registry of tools available to the AI agent
 pub struct ToolRegistry {
-    project_path: String,
+    pub project_path: String,
 }
 
 impl ToolRegistry {

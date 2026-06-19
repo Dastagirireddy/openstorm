@@ -1,4 +1,4 @@
-.PHONY: dev build preview tauri dev-full build-full clean install release
+.PHONY: dev build preview tauri dev-full build-full clean install release clear-vite-cache dev-fresh
 
 # Development
 dev-web: ## Run Vite dev server
@@ -30,6 +30,12 @@ install: ## Install dependencies
 clean: ## Remove build artifacts
 	rm -rf dist
 	rm -rf target
+
+clear-vite-cache: ## Clear Vite dependency optimizer cache
+	rm -rf node_modules/.vite
+	@echo "Vite cache cleared. Do a hard refresh (Cmd+Shift+R) if chunks fail to load."
+
+dev-fresh: clear-vite-cache dev ## Clear Vite cache and run Tauri dev
 
 # Release
 release: ## Release a new version (interactive prompt for version)

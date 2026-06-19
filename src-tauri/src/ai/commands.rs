@@ -14,6 +14,8 @@ pub struct AiState {
     active_agent: Mutex<Option<Arc<Agent>>>,
     /// Channel to send abort signals
     abort_tx: Mutex<Option<mpsc::Sender<()>>>,
+    /// Channel to send tool approval responses
+    approval_tx: Mutex<Option<mpsc::Sender<bool>>>,
 }
 
 impl AiState {
@@ -21,6 +23,7 @@ impl AiState {
         Self {
             active_agent: Mutex::new(None),
             abort_tx: Mutex::new(None),
+            approval_tx: Mutex::new(None),
         }
     }
 }
@@ -167,6 +170,13 @@ pub async fn ai_chat(
         *active = Some(agent.clone());
     }
 
+    // Store approval sender from agent
+    {
+        let approval_sender = agent.get_approval_sender().await;
+        let mut tx = state.approval_tx.lock().await;
+        *tx = approval_sender;
+    }
+
     // Create abort channel
     let (abort_tx, mut abort_rx) = mpsc::channel::<()>(1);
     {
@@ -218,6 +228,10 @@ pub async fn ai_chat(
         let mut tx = state.abort_tx.lock().await;
         *tx = None;
     }
+    {
+        let mut tx = state.approval_tx.lock().await;
+        *tx = None;
+    }
 
     Ok(final_response)
 }
@@ -230,5 +244,16 @@ pub async fn ai_abort(state: State<'_, AiState>) -> Result<(), String> {
         Ok(())
     } else {
         Err("No active request to abort".to_string())
+    }
+}
+
+#[tauri::command]
+pub async fn ai_approve_tool(state: State<'_, AiState>, approved: bool) -> Result<(), String> {
+    let tx = state.approval_tx.lock().await;
+    if let Some(sender) = tx.as_ref() {
+        let _ = sender.send(approved).await;
+        Ok(())
+    } else {
+        Err("No pending tool approval".to_string())
     }
 }

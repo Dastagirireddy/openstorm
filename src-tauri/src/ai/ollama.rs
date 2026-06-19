@@ -24,6 +24,28 @@ impl OllamaProvider {
             base_url: base_url.unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string()),
         }
     }
+
+    fn parse_model(&self, m: &serde_json::Value, is_local: bool) -> ModelInfo {
+        let name = m["name"].as_str().unwrap_or("unknown").to_string();
+        let size = m["size"].as_u64().unwrap_or(0);
+        let context_window = if size > 20_000_000_000 {
+            32768
+        } else if size > 8_000_000_000 {
+            16384
+        } else {
+            8192
+        };
+        ModelInfo {
+            id: name.clone(),
+            name,
+            provider: "ollama".to_string(),
+            context_window,
+            max_output: 4096,
+            supports_tools: true,
+            supports_vision: false,
+            is_free: true,
+        }
+    }
 }
 
 #[async_trait]
@@ -68,27 +90,7 @@ impl LlmProvider for OllamaProvider {
             .as_array()
             .map(|arr| {
                 arr.iter()
-                    .map(|m| {
-                        let name = m["name"].as_str().unwrap_or("unknown").to_string();
-                        let size = m["size"].as_u64().unwrap_or(0);
-                        let context_window = if size > 20_000_000_000 {
-                            32768
-                        } else if size > 8_000_000_000 {
-                            16384
-                        } else {
-                            8192
-                        };
-                        ModelInfo {
-                            id: name.clone(),
-                            name,
-                            provider: "ollama".to_string(),
-                            context_window,
-                            max_output: 4096,
-                            supports_tools: true,
-                            supports_vision: false,
-                            is_free: true,
-                        }
-                    })
+                    .map(|m| self.parse_model(m, true))
                     .collect()
             })
             .unwrap_or_default();
@@ -119,7 +121,22 @@ impl LlmProvider for OllamaProvider {
                         "content": content.as_deref().unwrap_or(""),
                     });
                     if let Some(calls) = tool_calls {
-                        obj["tool_calls"] = serde_json::json!(calls);
+                        // Ollama expects arguments as a JSON object, not a string
+                        let ollama_calls: Vec<serde_json::Value> = calls
+                            .iter()
+                            .map(|c| {
+                                let args: serde_json::Value = serde_json::from_str(&c.function.arguments)
+                                    .unwrap_or(serde_json::json!({}));
+                                serde_json::json!({
+                                    "type": "function",
+                                    "function": {
+                                        "name": c.function.name,
+                                        "arguments": args,
+                                    }
+                                })
+                            })
+                            .collect();
+                        obj["tool_calls"] = serde_json::json!(ollama_calls);
                     }
                     Some(obj)
                 }
@@ -248,7 +265,21 @@ impl LlmProvider for OllamaProvider {
                         "content": content.as_deref().unwrap_or(""),
                     });
                     if let Some(calls) = tool_calls {
-                        obj["tool_calls"] = serde_json::json!(calls);
+                        let ollama_calls: Vec<serde_json::Value> = calls
+                            .iter()
+                            .map(|c| {
+                                let args: serde_json::Value = serde_json::from_str(&c.function.arguments)
+                                    .unwrap_or(serde_json::json!({}));
+                                serde_json::json!({
+                                    "type": "function",
+                                    "function": {
+                                        "name": c.function.name,
+                                        "arguments": args,
+                                    }
+                                })
+                            })
+                            .collect();
+                        obj["tool_calls"] = serde_json::json!(ollama_calls);
                     }
                     Some(obj)
                 }
@@ -323,6 +354,30 @@ impl LlmProvider for OllamaProvider {
                             }
 
                             if let Ok(val) = serde_json::from_str::<serde_json::Value>(&line) {
+                                // Parse tool calls from delta if present
+                                let tool_calls = val["message"]["tool_calls"]
+                                    .as_array()
+                                    .map(|calls| {
+                                        calls
+                                            .iter()
+                                            .enumerate()
+                                            .filter_map(|(i, call)| {
+                                                let func = call.get("function")?;
+                                                let args = func.get("arguments").map(|a| a.to_string());
+                                                Some(ToolCallDelta {
+                                                    index: i as u32,
+                                                    id: Some(format!("call_{}", i)),
+                                                    call_type: Some("function".to_string()),
+                                                    function: Some(FunctionCallDelta {
+                                                        name: func["name"].as_str().map(|s| s.to_string()),
+                                                        arguments: args,
+                                                    }),
+                                                })
+                                            })
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .filter(|calls| !calls.is_empty());
+
                                 let chunk = ChatCompletionChunk {
                                     id: val["model"]
                                         .as_str()
@@ -339,7 +394,7 @@ impl LlmProvider for OllamaProvider {
                                             content: val["message"]["content"]
                                                 .as_str()
                                                 .map(|s| s.to_string()),
-                                            tool_calls: None,
+                                            tool_calls,
                                         },
                                         finish_reason: if val["done"].as_bool() == Some(true) {
                                             Some("stop".to_string())

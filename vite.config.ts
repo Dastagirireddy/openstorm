@@ -10,7 +10,7 @@ export default defineConfig({
   },
   envPrefix: ['VITE_', 'TAURI_'],
   optimizeDeps: {
-    include: ['lit'],
+    include: ['lit', 'mermaid'],
   },
   build: {
     target: ['es2021', 'chrome100', 'safari15'],

@@ -10,23 +10,10 @@
 export interface ToolDefinition {
   name: string;
   description: string;
-  iconSvg: string;
+  icon: string;
   color: string;
   category: 'file' | 'search' | 'execute' | 'info';
 }
-
-/**
- * SVG icons for tools (professional, consistent with project icon system)
- */
-const ICONS = {
-  file: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>`,
-  edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`,
-  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>`,
-  folder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`,
-  terminal: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`,
-  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>`,
-  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>`,
-};
 
 /**
  * Registry of available AI tools
@@ -36,21 +23,21 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   read_file: {
     name: 'read_file',
     description: 'Read file contents',
-    iconSvg: ICONS.file,
+    icon: 'lucide:file',
     color: 'var(--ai-primary)',
     category: 'file',
   },
   write_file: {
     name: 'write_file',
     description: 'Write content to file',
-    iconSvg: ICONS.edit,
+    icon: 'lucide:file-plus',
     color: 'var(--ai-success)',
     category: 'file',
   },
   edit_file: {
     name: 'edit_file',
     description: 'Edit file contents',
-    iconSvg: ICONS.edit,
+    icon: 'lucide:pencil',
     color: 'var(--ai-warning)',
     category: 'file',
   },
@@ -59,14 +46,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   search_code: {
     name: 'search_code',
     description: 'Search for pattern in code',
-    iconSvg: ICONS.search,
+    icon: 'lucide:search',
     color: 'var(--ai-accent)',
     category: 'search',
   },
   list_directory: {
     name: 'list_directory',
     description: 'List directory contents',
-    iconSvg: ICONS.folder,
+    icon: 'lucide:folder-open',
     color: 'var(--ai-primary)',
     category: 'search',
   },
@@ -75,7 +62,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   run_command: {
     name: 'run_command',
     description: 'Execute shell command',
-    iconSvg: ICONS.terminal,
+    icon: 'lucide:terminal',
     color: 'var(--ai-warning)',
     category: 'execute',
   },
@@ -84,7 +71,7 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
   git_status: {
     name: 'git_status',
     description: 'Get git status',
-    iconSvg: ICONS.info,
+    icon: 'lucide:git-branch',
     color: 'var(--ai-text-muted)',
     category: 'info',
   },
@@ -98,10 +85,10 @@ export function getToolDefinition(toolName: string): ToolDefinition | undefined 
 }
 
 /**
- * Get tool icon SVG by name
+ * Get tool icon name by name
  */
 export function getToolIcon(toolName: string): string {
-  return TOOL_REGISTRY[toolName]?.iconSvg || `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`;
+  return TOOL_REGISTRY[toolName]?.icon || 'lucide:circle';
 }
 
 /**
@@ -143,6 +130,38 @@ export function formatToolArgs(args: string | undefined): string {
     return JSON.stringify(parsed, null, 2);
   } catch {
     return args;
+  }
+}
+
+/**
+ * Get a friendly one-line label for a tool call
+ */
+export function getToolLabel(toolName: string, args: string | undefined): string {
+  if (!args) return toolName;
+  
+  try {
+    const parsed = JSON.parse(args);
+    
+    switch (toolName) {
+      case 'read_file':
+        return `Reading file ${parsed.path || ''}`;
+      case 'write_file':
+        return `Writing file ${parsed.path || ''}`;
+      case 'edit_file':
+        return `Editing file ${parsed.path || ''}`;
+      case 'run_command':
+        return `Running command: ${parsed.command || parsed.cmd || ''}`;
+      case 'search_code':
+        return `Searching for "${parsed.pattern || parsed.query || ''}"`;
+      case 'list_directory':
+        return `Listing directory ${parsed.path || '.'}`;
+      case 'git_status':
+        return 'Checking git status';
+      default:
+        return toolName;
+    }
+  } catch {
+    return toolName;
   }
 }
 

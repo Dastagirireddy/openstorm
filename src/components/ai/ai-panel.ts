@@ -9,17 +9,25 @@ import '../layout/code-block.js';
 import { aiState } from '../../lib/ai/ai-state.js';
 import type { ChatMessage, ModelInfo, AISession, ProviderInfo, AiProviderConfig } from '../../lib/types/ai-types.js';
 import { parseMessage, extractFilePaths, type MessageBlock } from '../../lib/ai/ai-message-parser.js';
-import { getToolIcon, getToolColor, getToolArgsSummary, formatToolArgs } from '../../lib/ai/ai-tool-registry.js';
+import { getToolIcon, getToolColor, getToolArgsSummary, formatToolArgs, getToolLabel } from '../../lib/ai/ai-tool-registry.js';
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js';
 import hljsTheme from 'highlight.js/styles/monokai-sublime.css?inline';
 
 const md = new MarkdownIt({
-  html: false,
+  html: false,  // Keep HTML disabled for security
   linkify: true,
   typographer: true,
 });
 
+// Custom inline code renderer with syntax highlighting
+md.renderer.rules.code_inline = (tokens, idx) => {
+  const content = tokens[idx].content;
+  const escaped = content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return `<code class="ai-inline-code">${escaped}</code>`;
+};
+
+// Custom fence renderer with syntax highlighting
 md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const token = tokens[idx];
   const lang = token.info ? token.info.trim().split(/\s+/)[0] : '';
@@ -30,6 +38,58 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   
   return `<code-block language="${lang}" code="${escapedCode}"></code-block>`;
 };
+
+// Highlight keywords, strings, numbers in text
+function highlightKeywords(text: string): string {
+  // Rust/JS/TS/Go keywords - vibrant purple/pink
+  const keywords = /\b(fn|let|mut|const|pub|use|mod|struct|impl|trait|enum|if|else|match|return|while|for|loop|break|continue|async|await|self|super|crate|where|move|ref|type|static|extern|unsafe|true|false|undefined|null|function|import|export|from|class|new|this|yield|typeof|instanceof|in|of|func|go|defer|select|chan|map|string|int|bool|error|nil|package|var|println|Println|Print|fmt)\b/g;
+  
+  // Strings (single, double, backtick) - warm orange
+  const strings = /(&quot;[^&]*&quot;|&#39;[^&]*&#39;|`[^`]*`)/g;
+  
+  // Numbers - soft green
+  const numbers = /\b(\d+\.?\d*)\b/g;
+  
+  // File paths - bright cyan
+  const filePaths = /\b([a-zA-Z0-9_\-\.\/]+\.(rs|ts|js|tsx|jsx|py|go|java|cpp|c|h|json|toml|yaml|yml|md|txt))\b/g;
+  
+  // Function calls - warm yellow
+  const functions = /\b([a-z_][a-z_0-9]*)\s*\(/g;
+  
+  // Types/Classes - teal
+  const types = /\b([A-Z][a-zA-Z0-9_]*)\b/g;
+  
+  // Comments - muted green
+  const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
+  
+  let result = text;
+  // Apply in order to avoid conflicts
+  result = result.replace(comments, '<span class="ai-hl-comment">$1</span>');
+  result = result.replace(strings, '<span class="ai-hl-string">$1</span>');
+  result = result.replace(keywords, '<span class="ai-hl-keyword">$1</span>');
+  result = result.replace(filePaths, '<span class="ai-hl-file">$1</span>');
+  result = result.replace(types, '<span class="ai-hl-type">$1</span>');
+  result = result.replace(functions, '<span class="ai-hl-function">$1</span>(');
+  result = result.replace(numbers, '<span class="ai-hl-number">$1</span>');
+  
+  return result;
+}
+
+// Apply syntax highlighting to rendered HTML (only text nodes, not HTML tags)
+function highlightRenderedHtml(html: string): string {
+  // Split by HTML tags to preserve them
+  const parts = html.split(/(<[^>]+>)/);
+  
+  return parts.map((part, i) => {
+    // Even indices are text, odd indices are HTML tags
+    if (i % 2 === 0) {
+      // This is text content - apply highlighting
+      return highlightKeywords(part);
+    }
+    // This is an HTML tag - return as-is
+    return part;
+  }).join('');
+}
 
 const AI_COMMANDS = [
   { name: '/clear', description: 'Clear current session', icon: 'x' },
@@ -94,6 +154,7 @@ export class AiPanel extends TailwindElement(css`
     .ai-markdown-content {
       font-size: 14px;
       line-height: 1.7;
+      color: var(--ai-text);
     }
     .ai-markdown-content p {
       margin: 0.6em 0;
@@ -104,12 +165,181 @@ export class AiPanel extends TailwindElement(css`
     .ai-markdown-content p:last-child {
       margin-bottom: 0;
     }
-    .ai-markdown-content code {
+    /* Inline code */
+    .ai-markdown-content code,
+    .ai-inline-code {
       background: var(--ai-code-background);
-      padding: 0.15em 0.3em;
-      border-radius: 3px;
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
       font-size: 0.9em;
       font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+      border: 1px solid var(--ai-code-border);
+      color: #e06c75;
+    }
+    /* Syntax highlighting colors - Vibrant VS Code Dark+ style */
+    .ai-hl-keyword {
+      color: #c586c0;
+      font-weight: 500;
+    }
+    .ai-hl-string {
+      color: #ce9178;
+    }
+    .ai-hl-number {
+      color: #b5cea8;
+    }
+    .ai-hl-function {
+      color: #dcdcaa;
+    }
+    .ai-hl-file {
+      color: #9cdcfe;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 2px;
+    }
+    .ai-hl-type {
+      color: #4ec9b0;
+    }
+    .ai-hl-variable {
+      color: #9cdcfe;
+    }
+    .ai-hl-comment {
+      color: #6a9955;
+      font-style: italic;
+    }
+    /* Lists - OpenCode style */
+    .ai-markdown-content ul,
+    .ai-markdown-content ol {
+      margin: 0.75em 0;
+      padding-left: 0;
+      list-style: none;
+    }
+    .ai-markdown-content ul li,
+    .ai-markdown-content ol li {
+      margin: 0.4em 0;
+      padding-left: 1.5em;
+      position: relative;
+    }
+    .ai-markdown-content ul li::before {
+      content: '•';
+      color: #58a6ff;
+      font-weight: bold;
+      position: absolute;
+      left: 0;
+      font-size: 1.2em;
+    }
+    .ai-markdown-content ol li {
+      counter-increment: list-counter;
+    }
+    .ai-markdown-content ol li::before {
+      content: counter(list-counter) '.';
+      color: #58a6ff;
+      font-weight: 600;
+      position: absolute;
+      left: 0;
+      min-width: 1.2em;
+    }
+    .ai-markdown-content ol {
+      counter-reset: list-counter;
+    }
+    /* Nested lists */
+    .ai-markdown-content ul ul li::before {
+      content: '◦';
+      color: #7ee787;
+    }
+    .ai-markdown-content ul ul ul li::before {
+      content: '▪';
+      color: #d2a8ff;
+    }
+    /* Tables */
+    .ai-markdown-content table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 0.75em 0;
+      font-size: 13px;
+    }
+    .ai-markdown-content th,
+    .ai-markdown-content td {
+      border: 1px solid var(--ai-code-border);
+      padding: 0.5em 0.75em;
+      text-align: left;
+    }
+    .ai-markdown-content th {
+      background: var(--ai-code-header-background);
+      font-weight: 600;
+      color: var(--ai-text);
+    }
+    .ai-markdown-content td {
+      background: var(--ai-code-background);
+    }
+    .ai-markdown-content tr:nth-child(even) td {
+      background: color-mix(in srgb, var(--ai-code-background) 95%, var(--ai-code-header-background));
+    }
+    /* Blockquotes */
+    .ai-markdown-content blockquote {
+      border-left: 3px solid var(--ai-accent);
+      margin: 0.75em 0;
+      padding: 0.5em 1em;
+      background: color-mix(in srgb, var(--ai-accent) 5%, transparent);
+      color: var(--ai-text-dim);
+      border-radius: 0 4px 4px 0;
+    }
+    .ai-markdown-content blockquote p {
+      margin: 0.25em 0;
+    }
+    /* Headings - Vibrant OpenCode style */
+    .ai-markdown-content h1,
+    .ai-markdown-content h2,
+    .ai-markdown-content h3,
+    .ai-markdown-content h4,
+    .ai-markdown-content h5,
+    .ai-markdown-content h6 {
+      margin: 1.2em 0 0.6em 0;
+      font-weight: 700;
+      color: #e6edf3;
+      letter-spacing: -0.02em;
+    }
+    .ai-markdown-content h1 { 
+      font-size: 1.5em; 
+      color: #ff7b72;
+      border-bottom: 2px solid #ff7b72;
+      padding-bottom: 0.3em;
+    }
+    .ai-markdown-content h2 { 
+      font-size: 1.3em; 
+      color: #d2a8ff;
+      border-bottom: 1px solid #d2a8ff40;
+      padding-bottom: 0.2em;
+    }
+    .ai-markdown-content h3 { 
+      font-size: 1.15em; 
+      color: #7ee787;
+    }
+    .ai-markdown-content h4 { 
+      font-size: 1.05em; 
+      color: #79c0ff;
+    }
+    /* Horizontal rules */
+    .ai-markdown-content hr {
+      border: none;
+      border-top: 1px solid var(--ai-code-border);
+      margin: 1em 0;
+    }
+    /* Links */
+    .ai-markdown-content a {
+      color: var(--ai-accent);
+      text-decoration: none;
+    }
+    .ai-markdown-content a:hover {
+      text-decoration: underline;
+    }
+    /* Strong/Emphasis */
+    .ai-markdown-content strong {
+      font-weight: 600;
+      color: var(--ai-text);
+    }
+    .ai-markdown-content em {
+      font-style: italic;
+      color: var(--ai-text-dim);
     }
     .ai-code-block {
       background: var(--ai-code-background);
@@ -276,13 +506,6 @@ export class AiPanel extends TailwindElement(css`
       border-color: var(--ai-accent);
     }
 
-    .ai-markdown-content ul, .ai-markdown-content ol {
-      margin: 0.4em 0;
-      padding-left: 1.5em;
-    }
-    .ai-markdown-content li {
-      margin: 0.2em 0;
-    }
     .ai-markdown-content blockquote {
       border-left: 3px solid var(--ai-panel-border);
       margin: 0.5em 0;
@@ -290,15 +513,6 @@ export class AiPanel extends TailwindElement(css`
       color: var(--ai-text-muted);
       background: var(--ai-panel-background);
     }
-    .ai-markdown-content h1, .ai-markdown-content h2, .ai-markdown-content h3,
-    .ai-markdown-content h4, .ai-markdown-content h5, .ai-markdown-content h6 {
-      margin: 0.75em 0 0.5em 0;
-      font-weight: 600;
-      color: var(--ai-text);
-    }
-    .ai-markdown-content h1 { font-size: 1.3em; }
-    .ai-markdown-content h2 { font-size: 1.15em; }
-    .ai-markdown-content h3 { font-size: 1.05em; }
     .ai-markdown-content a {
       color: var(--ai-accent);
       text-decoration: none;
@@ -437,6 +651,258 @@ export class AiPanel extends TailwindElement(css`
       overflow-x: auto;
       color: var(--ai-text);
       line-height: 1.6;
+    }
+
+    /* Tool approval */
+    .ai-tool-approval {
+      margin: 0.5em 0 0.75em 1.5em;
+      border: 1px solid var(--ai-warning, #d29922);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .ai-tool-approval-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.5em 0.75em;
+      background: rgba(210, 153, 34, 0.1);
+      border-bottom: 1px solid var(--ai-warning, #d29922);
+    }
+    .ai-tool-approval-header .ai-tool-icon {
+      width: 14px;
+      height: 14px;
+    }
+    .ai-tool-approval-header .ai-tool-name {
+      font-weight: 500;
+      color: var(--ai-text);
+    }
+    .ai-tool-approval-header .ai-tool-status {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--ai-warning, #d29922);
+    }
+    .ai-tool-approval-preview {
+      max-height: 300px;
+      overflow-y: auto;
+      background: var(--ai-code-background, #0d1117);
+    }
+    .ai-tool-approval-preview pre {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ai-text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      padding: 0.75em;
+    }
+
+    /* Diff viewer */
+    .diff-viewer {
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+      font-size: 12px;
+      background: var(--ai-code-bg, #0d1117);
+      border: 1px solid var(--ai-code-border, #30363d);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .diff-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.5em 0.75em;
+      background: var(--ai-code-header-bg, #161b22);
+      border-bottom: 1px solid var(--ai-code-border, #30363d);
+      color: var(--ai-text);
+    }
+    .diff-header svg {
+      color: var(--ai-text-dim);
+    }
+    .diff-stats {
+      margin-left: auto;
+      color: var(--ai-text-dim);
+      font-size: 11px;
+    }
+    .diff-content {
+      line-height: 1.5;
+      background: var(--ai-code-bg, #0d1117);
+    }
+    .diff-line {
+      display: flex;
+      align-items: stretch;
+      min-height: 22px;
+    }
+    .diff-line.context {
+      background: var(--ai-code-bg, #0d1117);
+    }
+    .diff-line.removed {
+      background: #3d1f1f;
+    }
+    .diff-line.added {
+      background: #1a3a2a;
+    }
+    .line-num {
+      width: 50px;
+      padding: 0 8px;
+      text-align: right;
+      color: var(--ai-text-dim, #6e7681);
+      user-select: none;
+      border-right: 1px solid var(--ai-code-border, #30363d);
+      flex-shrink: 0;
+      font-size: 11px;
+      line-height: 22px;
+    }
+    .line-num.old {
+      background: rgba(248, 81, 73, 0.15);
+    }
+    .line-num.new {
+      background: rgba(63, 185, 80, 0.15);
+    }
+    .line-prefix {
+      width: 20px;
+      text-align: center;
+      font-weight: bold;
+      flex-shrink: 0;
+      line-height: 22px;
+    }
+    .diff-line.removed .line-prefix {
+      color: #f85149;
+    }
+    .diff-line.added .line-prefix {
+      color: #3fb950;
+    }
+    .line-code {
+      flex: 1;
+      padding: 0 8px;
+      white-space: pre;
+      overflow-x: auto;
+      line-height: 22px;
+      color: #c9d1d9;
+    }
+
+    /* Syntax highlighting tokens */
+    .line-code .keyword { color: #ff7b72; }
+    .line-code .string { color: #a5d6ff; }
+    .line-code .comment { color: #8b949e; font-style: italic; }
+    .line-code .function { color: #d2a8ff; }
+    .line-code .type { color: #79c0ff; }
+    .line-code .number { color: #79c0ff; }
+    .line-code .macro { color: #d2a8ff; }
+    .line-code .punctuation { color: #c9d1d9; }
+    .line-code .operator { color: #ff7b72; }
+
+    /* Command preview */
+    .diff-command {
+      font-family: 'SF Mono', monospace;
+    }
+    .diff-command-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.5em 0.75em;
+      background: var(--ai-code-header-bg, #161b22);
+      border-bottom: 1px solid var(--ai-code-border, #30363d);
+      color: var(--ai-warning);
+    }
+    .diff-command-content {
+      padding: 0.75em;
+      background: rgba(210, 153, 34, 0.1);
+    }
+    .diff-command-content code {
+      color: var(--ai-text);
+      font-size: 13px;
+    }
+    .diff-plain {
+      margin: 0;
+      padding: 0.75em;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--ai-text);
+      white-space: pre-wrap;
+    }
+    .ai-tool-approval-actions {
+      display: flex;
+      gap: 0.5em;
+      padding: 0.5em 0.75em;
+      background: rgba(210, 153, 34, 0.05);
+    }
+    .ai-tool-approval-btn {
+      padding: 0.4em 1em;
+      border: 1px solid;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .ai-tool-approval-btn.deny {
+      background: transparent;
+      border-color: var(--ai-text-dim, #6e7681);
+      color: var(--ai-text-dim, #6e7681);
+    }
+    .ai-tool-approval-btn.deny:hover {
+      background: rgba(110, 118, 129, 0.1);
+      border-color: var(--ai-text);
+      color: var(--ai-text);
+    }
+    .ai-tool-approval-btn.approve {
+      background: #58a6ff;
+      border-color: #58a6ff;
+      color: #fff;
+    }
+    .ai-tool-approval-btn.approve:hover {
+      background: #79b8ff;
+      border-color: #79b8ff;
+    }
+
+    /* Plan */
+    .ai-plan {
+      margin: 0.5em 0 0.75em 1.5em;
+      border: 1px solid var(--ai-accent, #58a6ff);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .ai-plan-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.5em 0.75em;
+      background: rgba(88, 166, 255, 0.1);
+      border-bottom: 1px solid var(--ai-accent, #58a6ff);
+      font-weight: 500;
+      color: var(--ai-accent, #58a6ff);
+    }
+    .ai-plan-steps {
+      padding: 0.5em 0;
+    }
+    .ai-plan-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5em;
+      padding: 0.35em 0.75em;
+      font-size: 13px;
+    }
+    .ai-plan-step-icon {
+      flex-shrink: 0;
+      width: 16px;
+      text-align: center;
+    }
+    .ai-plan-step.pending .ai-plan-step-icon {
+      color: var(--ai-text-dim, #6e7681);
+    }
+    .ai-plan-step.in_progress .ai-plan-step-icon {
+      color: var(--ai-accent, #58a6ff);
+    }
+    .ai-plan-step.done .ai-plan-step-icon {
+      color: var(--ai-success, #3fb950);
+    }
+    .ai-plan-step.failed .ai-plan-step-icon {
+      color: var(--ai-error, #f85149);
+    }
+    .ai-plan-step-desc {
+      color: var(--ai-text);
+    }
+    .ai-plan-step.done .ai-plan-step-desc {
+      color: var(--ai-text-dim, #6e7681);
     }
 
     /* L2: Error block - indented, readable */
@@ -935,18 +1401,90 @@ export class AiPanel extends TailwindElement(css`
     .ai-msg-thinking .thinking-label {
       font-weight: 500;
     }
-    .ai-msg-thinking .thinking-time {
+    .ai-msg-thinking.completed {
       color: var(--ai-text-muted);
-      font-size: 12px;
+      font-style: italic;
     }
-    .ai-msg-thinking .thinking-dots::after {
-      content: '...';
-      animation: thinking-dots 1.5s infinite;
+    .ai-msg-thinking.tool-use-line {
+      color: var(--ai-accent);
+      font-style: normal;
     }
-    @keyframes thinking-dots {
-      0%, 20% { content: '.'; }
-      40% { content: '..'; }
-      60%, 100% { content: '...'; }
+    .thinking-spinner {
+      display: inline-block;
+      width: 1em;
+      text-align: center;
+    }
+    .thinking-spinner::after {
+      content: '⠋';
+      animation: spinner-cycle 0.8s infinite;
+    }
+    @keyframes spinner-cycle {
+      0% { content: '⠋'; }
+      12.5% { content: '⠙'; }
+      25% { content: '⠹'; }
+      37.5% { content: '⠸'; }
+      50% { content: '⠴'; }
+      62.5% { content: '⠦'; }
+      75% { content: '⠧'; }
+      87.5% { content: '⠇'; }
+      100% { content: '⠏'; }
+    }
+
+    /* Streaming indicator - blinking cursor */
+    .ai-msg-streaming {
+      display: flex;
+      align-items: center;
+      padding: 0.4em 0 0.4em 1.5em;
+      margin: 0.5em 0;
+    }
+    .ai-streaming-cursor {
+      display: inline-block;
+      width: 8px;
+      height: 16px;
+      background-color: var(--ai-text-color, #ccc);
+      animation: cursor-blink 0.8s infinite;
+      border-radius: 1px;
+    }
+    @keyframes cursor-blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+
+    /* Streaming indicator - segmented loader filling left to right */
+    .ai-streaming-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 4px 0;
+    }
+    .ai-loader-segment {
+      width: 8px;
+      height: 8px;
+      background: var(--ai-border, #333);
+      border-radius: 1px;
+      animation: segment-fill 1.6s ease-in-out infinite;
+    }
+    .ai-loader-segment:nth-child(1) { animation-delay: 0s; }
+    .ai-loader-segment:nth-child(2) { animation-delay: 0.15s; }
+    .ai-loader-segment:nth-child(3) { animation-delay: 0.3s; }
+    .ai-loader-segment:nth-child(4) { animation-delay: 0.45s; }
+    .ai-loader-segment:nth-child(5) { animation-delay: 0.6s; }
+    @keyframes segment-fill {
+      0%, 100% { 
+        background: var(--ai-border, #333);
+        opacity: 0.4;
+      }
+      25% { 
+        background: var(--ai-accent, #58a6ff);
+        opacity: 1;
+      }
+      50% { 
+        background: var(--ai-accent, #58a6ff);
+        opacity: 0.6;
+      }
+    }
+    .ai-prompt-hints-spacer {
+      flex: 1;
     }
 
     /* L2: Assistant message - indented under user */
@@ -1074,9 +1612,9 @@ export class AiPanel extends TailwindElement(css`
   @state() private isThinking = false;
   @state() private isStreaming = false;
   @state() private showToolDetails = new Set<string>();
-  @state() private thinkingStartTime: number = 0;
   @state() private responseStartTime: number = 0;
   @state() private lastResponseTime: number = 0;
+  @state() private lastUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null = null;
   @state() private sessionStats = { tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 }, cost: 0, messageCount: 0 };
   @state() private isDragging = false;
   @state() private showCommands = false;
@@ -1084,6 +1622,7 @@ export class AiPanel extends TailwindElement(css`
   @state() private selectedCommandIndex = 0;
   @state() private attachments: AIAttachment[] = [];
   @state() private currentTipIndex = 0;
+  private _iterationStartTime: number = 0;
 
   @query('#chat-scroll') private chatScroll!: HTMLDivElement;
   @query('#chat-input') private chatInput!: HTMLTextAreaElement;
@@ -1150,6 +1689,14 @@ export class AiPanel extends TailwindElement(css`
 
     aiState.on('ollama-status', (connected: boolean) => {
       this.providerConnected = connected;
+    });
+
+    aiState.on('thinking-status', (thinking: boolean) => {
+      this.isThinking = thinking;
+    });
+
+    aiState.on('streaming-status', (streaming: boolean) => {
+      this.isStreaming = streaming;
     });
   }
 
@@ -1268,16 +1815,22 @@ export class AiPanel extends TailwindElement(css`
 
     switch (event.type) {
       case 'thinking':
-        this.thinkingStartTime = Date.now();
-        aiState.addMessage(sessionId, {
-          id: `think-${Date.now()}`,
-          role: 'thinking',
-          content: event.message,
-          timestamp: Date.now(),
-        });
+        // Record thinking start time for this iteration
+        this._iterationStartTime = Date.now();
         break;
 
       case 'tool_use':
+        // Thinking ended for this iteration - record duration as a message
+        if (this._iterationStartTime) {
+          const duration = (Date.now() - this._iterationStartTime) / 1000;
+          aiState.addMessage(sessionId, {
+            id: `thought-${Date.now()}`,
+            role: 'thinking',
+            content: this.formatDuration(duration),
+            timestamp: Date.now(),
+          });
+          this._iterationStartTime = 0;
+        }
         aiState.addMessage(sessionId, {
           id: `tool-${Date.now()}`,
           role: 'tool_use',
@@ -1308,18 +1861,69 @@ export class AiPanel extends TailwindElement(css`
         break;
       }
 
+      case 'tool_approval_required': {
+        aiState.addMessage(sessionId, {
+          id: `approval-${Date.now()}`,
+          role: 'tool_approval',
+          content: event.preview,
+          timestamp: Date.now(),
+          toolName: event.tool_name,
+          toolArgs: event.arguments,
+        });
+        break;
+      }
+
+      case 'plan_update': {
+        // Find or create plan message
+        const messages = this.getMessages();
+        let planMsg = [...messages].reverse().find(m => m.role === 'plan');
+        if (planMsg) {
+          aiState.updateMessage(sessionId, planMsg.id, {
+            content: JSON.stringify(event.steps),
+          });
+        } else {
+          aiState.addMessage(sessionId, {
+            id: `plan-${Date.now()}`,
+            role: 'plan',
+            content: JSON.stringify(event.steps),
+            timestamp: Date.now(),
+          });
+        }
+        break;
+      }
+
       case 'text_delta':
+        // Thinking ended for this iteration - record duration as a message
+        if (this._iterationStartTime) {
+          const duration = (Date.now() - this._iterationStartTime) / 1000;
+          aiState.addMessage(sessionId, {
+            id: `thought-${Date.now()}`,
+            role: 'thinking',
+            content: this.formatDuration(duration),
+            timestamp: Date.now(),
+          });
+          this._iterationStartTime = 0;
+        }
         if (!this.responseStartTime) {
           this.responseStartTime = Date.now();
+        }
+        // Set streaming state on first token
+        if (!aiState.isStreaming) {
+          aiState.setStreaming(true);
         }
         this.appendToOrCreateAssistant(sessionId, event.content);
         break;
 
       case 'response':
+        console.log('[AI] Response received:', event.content?.substring(0, 50), 'usage:', event.usage);
         this.appendToOrCreateAssistant(sessionId, event.content);
         if (this.responseStartTime) {
           this.lastResponseTime = (Date.now() - this.responseStartTime) / 1000;
           this.responseStartTime = 0;
+        }
+        if (event.usage) {
+          this.lastUsage = event.usage;
+          console.log('[AI] Usage stored:', this.lastUsage);
         }
         aiState.setThinking(false);
         aiState.setStreaming(false);
@@ -1359,6 +1963,18 @@ export class AiPanel extends TailwindElement(css`
     }
   }
 
+  private formatDuration(seconds: number): string {
+    if (seconds < 1) {
+      return `${Math.round(seconds * 1000)}ms`;
+    } else if (seconds < 60) {
+      return `${seconds.toFixed(1)}s`;
+    } else {
+      const mins = Math.floor(seconds / 60);
+      const secs = (seconds % 60).toFixed(0);
+      return `${mins}mn ${secs}s`;
+    }
+  }
+
   private scrollToBottom() {
     requestAnimationFrame(() => {
       if (this.chatScroll) {
@@ -1389,11 +2005,13 @@ export class AiPanel extends TailwindElement(css`
     });
 
     this.inputText = '';
+    this.lastUsage = null;
     aiState.setThinking(true);
 
     const messages = this.getMessages();
+    // Exclude the just-added user message from history (it's already in `message`)
     const history = messages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter((m, i) => (m.role === 'user' || m.role === 'assistant') && i < messages.length - 1)
       .map(m => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content,
@@ -1426,6 +2044,14 @@ export class AiPanel extends TailwindElement(css`
       aiState.setStreaming(false);
     } catch (e) {
       console.error('[AI] Abort failed:', e);
+    }
+  }
+
+  private async handleToolApproval(approved: boolean) {
+    try {
+      await invoke('ai_approve_tool', { approved });
+    } catch (e) {
+      console.error('[AI] Tool approval failed:', e);
     }
   }
 
@@ -1736,25 +2362,32 @@ export class AiPanel extends TailwindElement(css`
             <div>${msg.content}</div>
           </div>`;
 
+      case 'thinking':
+        return html`
+          <div class="ai-msg-thinking completed">
+            <span class="thinking-label">+ Thought: ${msg.content}</span>
+          </div>`;
+
       case 'assistant': {
-        const renderedHtml = md.render(preprocessTodos(msg.content || ''));
+        const content = preprocessTodos(msg.content || '');
+        const renderedHtml = md.render(content);
+        // Apply syntax highlighting to the rendered HTML (only text nodes, not tags)
+        const highlightedHtml = highlightRenderedHtml(renderedHtml);
         const modelName = this.selectedModel || 'Unknown';
         const timeStr = this.lastResponseTime > 0 ? `${this.lastResponseTime.toFixed(1)}s` : '';
-        const tokens = this.sessionStats.tokens;
-        const totalTokens = tokens.input + tokens.output;
-        const tokenStr = totalTokens > 0 ? `${this.formatTokenCount(totalTokens)} tok` : '';
+        const usage = this.lastUsage;
+        const tokenParts: string[] = [];
+        if (usage?.prompt_tokens) tokenParts.push(`${this.formatTokenCount(usage.prompt_tokens)} in`);
+        if (usage?.completion_tokens) tokenParts.push(`${this.formatTokenCount(usage.completion_tokens)} out`);
+        const tokenStr = tokenParts.length > 0 ? tokenParts.join(' · ') : '';
         const costStr = this.sessionStats.cost > 0 ? `$${this.sessionStats.cost.toFixed(4)}` : '';
         return html`
           <div class="ai-msg-assistant">
             <div class="ai-markdown-content">
-              ${unsafeHTML(renderedHtml)}
+              ${unsafeHTML(highlightedHtml)}
             </div>
             <div class="ai-msg-footer">
-              <span class="ai-msg-footer-icon">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-                  <rect x="2" y="2" width="20" height="20" rx="4"/>
-                </svg>
-              </span>
+              <iconify-icon icon="lucide:bot" width="12" style="color: var(--ai-text-dim)"></iconify-icon>
               <span class="ai-msg-footer-model">${modelName}</span>
               ${tokenStr ? html`<span class="ai-msg-footer-separator">·</span><span class="ai-msg-footer-tokens">${tokenStr}</span>` : ''}
               ${costStr ? html`<span class="ai-msg-footer-separator">·</span><span class="ai-msg-footer-cost">${costStr}</span>` : ''}
@@ -1763,33 +2396,14 @@ export class AiPanel extends TailwindElement(css`
           </div>`;
       }
 
-      case 'thinking': {
-        const elapsed = this.thinkingStartTime ? ((Date.now() - this.thinkingStartTime) / 1000).toFixed(1) : '';
-        return html`
-          <div class="ai-msg-thinking">
-            <span class="thinking-label">+ Thought:</span>
-            ${elapsed ? html`<span class="thinking-time">${elapsed}s</span>` : html`<span class="thinking-dots"></span>`}
-          </div>`;
-      }
-
       case 'tool_use': {
         const toolIcon = getToolIcon(msg.toolName || '');
         const toolColor = getToolColor(msg.toolName || '');
-        const argsSummary = getToolArgsSummary(msg.toolName || '', msg.toolArgs);
+        const toolLabel = getToolLabel(msg.toolName || '', msg.toolArgs);
         return html`
-          <div class="ai-tool-block">
-            <div class="ai-tool-header" @click=${() => this.toggleToolDetails(msg.id)}>
-              <span class="ai-tool-arrow">${this.showToolDetails.has(msg.id) ? '▾' : '▸'}</span>
-              <span class="ai-tool-icon running" style="color: ${toolColor}">${unsafeHTML(toolIcon)}</span>
-              <span class="ai-tool-name">${msg.toolName}</span>
-              ${argsSummary ? html`<span class="ai-tool-content">${argsSummary}</span>` : ''}
-              <span class="ai-tool-status running">running</span>
-            </div>
-            ${this.showToolDetails.has(msg.id) && msg.toolArgs ? html`
-              <div class="ai-tool-details">
-                <pre>${formatToolArgs(msg.toolArgs)}</pre>
-              </div>
-            ` : ''}
+          <div class="ai-msg-thinking tool-use-line">
+            <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
+            <span class="thinking-label">${toolLabel}</span>
           </div>`;
       }
 
@@ -1802,6 +2416,126 @@ export class AiPanel extends TailwindElement(css`
         return html`
           <div class="ai-tool-result">
             <code-block code="${resultContent}"></code-block>
+          </div>`;
+      }
+
+      case 'tool_approval': {
+        const toolIcon = getToolIcon(msg.toolName || '');
+        const toolColor = getToolColor(msg.toolName || '');
+
+        // Parse the preview JSON
+        let previewData: any;
+        try {
+          previewData = JSON.parse(msg.content);
+        } catch {
+          previewData = { type: 'text', content: msg.content };
+        }
+
+        const renderDiffPreview = (data: any) => {
+          if (data.type === 'command') {
+            return html`
+              <div class="diff-command">
+                <div class="diff-command-header">
+                  <iconify-icon icon="lucide:terminal" width="14" style="color: var(--ai-warning)"></iconify-icon>
+                  <span>Shell Command</span>
+                </div>
+                <div class="diff-command-content">
+                  <code>${data.command}</code>
+                </div>
+              </div>`;
+          }
+
+          if (data.type === 'diff') {
+            const filePath = data.file_path || 'unknown';
+            const oldLines = data.old_lines || 0;
+            const newLines = data.new_lines || 0;
+            const hunks = data.hunks || [];
+
+            const highlightCode = (code: string, lang?: string): string => {
+              if (!lang || lang === 'text') return code;
+              let h = code;
+              if (lang === 'rust' || lang === 'javascript' || lang === 'typescript') {
+                h = h.replace(/\b(fn|let|mut|const|pub|use|mod|struct|impl|trait|enum|if|else|match|return|while|for|loop|break|continue|async|await|self|super|crate|where|move|ref|type|static|extern|unsafe|true|false|undefined|null|function|import|export|from|class|new|this|yield|typeof|instanceof|in|of)\b/g, '<span class="keyword">$1</span>');
+                h = h.replace(/(&quot;[^&]*&quot;|&#39;[^&]*&#39;)/g, '<span class="string">$1</span>');
+                h = h.replace(/(\/\/.*$)/gm, '<span class="comment">$1</span>');
+                h = h.replace(/\b(\d+\.?\d*)\b/g, '<span class="number">$1</span>');
+                h = h.replace(/\b([a-z_][a-z_0-9]*!)\b/g, '<span class="macro">$1</span>');
+              }
+              return h;
+            };
+
+            return html`
+              <div class="diff-viewer">
+                <div class="diff-header">
+                  <iconify-icon icon="lucide:pencil" width="14" style="color: var(--ai-accent)"></iconify-icon>
+                  <span>Edit ${filePath}</span>
+                  <span class="diff-stats">${oldLines} → ${newLines} lines (${oldLines > 0 ? '-' + oldLines : ''}${oldLines > 0 && newLines > 0 ? ' ' : ''}${newLines > 0 ? '+' + newLines : ''})</span>
+                </div>
+                <div class="diff-content">
+                  ${hunks.map((hunk: any) => {
+                    const lineClass = hunk.type || 'context';
+                    const prefix = hunk.type === 'removed' ? '-' : hunk.type === 'added' ? '+' : ' ';
+                    const lineNum = hunk.old_line || hunk.new_line || '';
+                    const numClass = hunk.type === 'removed' ? 'old' : hunk.type === 'added' ? 'new' : '';
+                    return html`
+                      <div class="diff-line ${lineClass}">
+                        <span class="line-num ${numClass}">${lineNum}</span>
+                        <span class="line-prefix">${prefix}</span>
+                        <span class="line-code">${unsafeHTML(highlightCode(hunk.content, data.language))}</span>
+                      </div>`;
+                  })}
+                </div>
+              </div>`;
+          }
+
+          // Fallback: plain text
+          return html`<pre class="diff-plain">${data.content || msg.content}</pre>`;
+        };
+
+        return html`
+          <div class="ai-tool-approval">
+            <div class="ai-tool-approval-header">
+              <iconify-icon icon="${toolIcon}" width="14" style="color: var(--ai-warning)"></iconify-icon>
+              <span class="ai-tool-name">${msg.toolName}</span>
+              <span class="ai-tool-status pending">requires approval</span>
+            </div>
+            <div class="ai-tool-approval-preview">
+              ${renderDiffPreview(previewData)}
+            </div>
+            <div class="ai-tool-approval-actions">
+              <button class="ai-tool-approval-btn deny" @click=${() => this.handleToolApproval(false)}>
+                Deny
+              </button>
+              <button class="ai-tool-approval-btn approve" @click=${() => this.handleToolApproval(true)}>
+                Allow
+              </button>
+            </div>
+          </div>`;
+      }
+
+      case 'plan': {
+        let steps: Array<{step: number, description: string, status: string}> = [];
+        try {
+          steps = JSON.parse(msg.content);
+        } catch {}
+        return html`
+          <div class="ai-plan">
+            <div class="ai-plan-header">
+              <iconify-icon icon="lucide:list-checks" width="14" style="color: var(--ai-accent)"></iconify-icon>
+              <span>Plan</span>
+            </div>
+            <div class="ai-plan-steps">
+              ${steps.map(s => html`
+                <div class="ai-plan-step ${s.status}">
+                  <iconify-icon icon="${
+                    s.status === 'done' ? 'lucide:check-circle-2' :
+                    s.status === 'in_progress' ? 'lucide:loader-2' :
+                    s.status === 'failed' ? 'lucide:x-circle' : 'lucide:circle-dashed'
+                  }" width="14" class="plan-step-icon"></iconify-icon>
+                  <span class="ai-plan-step-desc">${s.description}</span>
+                </div>
+              `)}
+            </div>
           </div>`;
       }
 
@@ -1842,13 +2576,7 @@ export class AiPanel extends TailwindElement(css`
           </span>
           <div style="flex: 1;"></div>
           <button class="ai-icon-btn" @click=${this.clearSession} title="Clear chat (Ctrl+Shift+X)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"></path>
-              <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
-              <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
+            <iconify-icon icon="lucide:trash-2" width="14"></iconify-icon>
           </button>
         </div>
 
@@ -1879,10 +2607,10 @@ export class AiPanel extends TailwindElement(css`
             ${messages.map(msg => html`
               <div>${this.renderMessage(msg)}</div>
             `)}
-            ${this.isThinking && !this.isStreaming ? html`
+            ${this.isThinking ? html`
               <div class="ai-msg-thinking">
-                <span>+ Thought:</span>
-                <span>Thinking...</span>
+                <span class="thinking-spinner"></span>
+                <span class="thinking-label">Thinking...</span>
               </div>
             ` : ''}
           `}
@@ -1962,15 +2690,11 @@ export class AiPanel extends TailwindElement(css`
                       </div>
                       <div class="ai-prompt-stats">
                         <span class="ai-prompt-stat">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                          </svg>
+                          <iconify-icon icon="lucide:arrow-down-to-line" width="12"></iconify-icon>
                           ${this.formatTokenCount(this.sessionStats.tokens.input)} in
                         </span>
                         <span class="ai-prompt-stat">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                          </svg>
+                          <iconify-icon icon="lucide:arrow-up-from-line" width="12"></iconify-icon>
                           ${this.formatTokenCount(this.sessionStats.tokens.output)} out
                         </span>
                         ${this.sessionStats.cost > 0 ? html`
@@ -1984,9 +2708,19 @@ export class AiPanel extends TailwindElement(css`
                 </div>
     
                 <div class="ai-prompt-hints">
+                  <span class="ai-prompt-hint"><kbd>esc</kbd> interrupt</span>
+                  ${(this.isThinking || this.isStreaming) ? html`
+                    <span class="ai-streaming-indicator">
+                      <span class="ai-loader-segment"></span>
+                      <span class="ai-loader-segment"></span>
+                      <span class="ai-loader-segment"></span>
+                      <span class="ai-loader-segment"></span>
+                      <span class="ai-loader-segment"></span>
+                    </span>
+                  ` : ''}
+                  <span class="ai-prompt-hints-spacer"></span>
                   <span class="ai-prompt-hint"><kbd>/</kbd> commands</span>
                   <span class="ai-prompt-hint"><kbd>⌘</kbd><kbd>↵</kbd> send</span>
-                  <span class="ai-prompt-hint"><kbd>esc</kbd> interrupt</span>
                   <span class="ai-prompt-hint"><kbd>drop</kbd> files</span>
                 </div>
             </div>

@@ -24,7 +24,7 @@ export interface TokenUsage {
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'thinking' | 'error' | 'system';
+  role: 'user' | 'assistant' | 'tool_use' | 'tool_result' | 'tool_approval' | 'plan' | 'thinking' | 'error' | 'system';
   content: string;
   timestamp: number;
   attachments?: AIAttachment[];
