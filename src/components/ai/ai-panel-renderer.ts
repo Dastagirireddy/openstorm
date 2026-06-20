@@ -4,6 +4,7 @@ import { renderMessage } from './ai-message-renderers.js';
 import { ASCII_LOGO, AI_TIPS, formatTokenCount } from './ai-commands.js';
 import '../layout/icon.js';
 import '../layout/code-block.js';
+import '../layout/mermaid-block.js';
 
 export interface PanelRenderState {
   sessions: AISession[];

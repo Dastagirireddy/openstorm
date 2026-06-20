@@ -20,6 +20,7 @@ import {
 } from "./lib/utils/lazy-loader.js";
 import "./components/dialogs/database-connection-picker.js";
 import "./components/layout/code-block.js";
+import "./components/layout/mermaid-block.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/services/theme-service.js";

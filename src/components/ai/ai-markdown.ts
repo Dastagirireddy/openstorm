@@ -18,6 +18,11 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const lang = token.info ? token.info.trim().split(/\s+/)[0] : '';
   const code = token.content;
   
+  // Render mermaid diagrams as interactive components
+  if (lang === 'mermaid') {
+    return `<mermaid-block><script type="text/template">${code}</script></mermaid-block>`;
+  }
+  
   const escapedCode = code.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   
   return `<code-block language="${lang}" code="${escapedCode}"></code-block>`;
@@ -46,12 +51,23 @@ export function highlightKeywords(text: string): string {
 
 export function highlightRenderedHtml(html: string): string {
   const parts = html.split(/(<[^>]+>)/);
+  let insideScript = false;
   
   return parts.map((part, i) => {
-    if (i % 2 === 0) {
-      return highlightKeywords(part);
+    if (i % 2 === 1) {
+      // This is a tag
+      if (part.toLowerCase().startsWith('<script')) {
+        insideScript = true;
+      } else if (part.toLowerCase().startsWith('</script')) {
+        insideScript = false;
+      }
+      return part;
     }
-    return part;
+    // This is text content - skip highlighting inside script tags
+    if (insideScript) {
+      return part;
+    }
+    return highlightKeywords(part);
   }).join('');
 }
 
