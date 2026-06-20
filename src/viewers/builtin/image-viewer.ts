@@ -384,7 +384,7 @@ export class ImageViewer extends TailwindElement() {
       >
         <div
           id="img-wrapper"
-          class="origin-center"
+          class="origin-center w-fit h-fit"
           style="
             transform: translate(${this.offsetX}px, ${this.offsetY}px) scale(${this.scale}) rotate(${this.rotation}deg);
             filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.3));
