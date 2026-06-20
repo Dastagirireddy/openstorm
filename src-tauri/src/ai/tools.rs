@@ -53,13 +53,21 @@ impl ToolRegistry {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
                     name: "read_file".to_string(),
-                    description: "Read the contents of a file at the given path. Returns the full file content as a string.".to_string(),
+                    description: "Read the contents of a file at the given path. Returns file content (truncated to 200 lines by default).".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
                             "path": {
                                 "type": "string",
                                 "description": "Path to the file, relative to the project root"
+                            },
+                            "max_lines": {
+                                "type": "integer",
+                                "description": "Maximum lines to return (default: 200)"
+                            },
+                            "start_line": {
+                                "type": "integer",
+                                "description": "Start reading from this line (1-indexed)"
                             }
                         },
                         "required": ["path"]
@@ -91,13 +99,17 @@ impl ToolRegistry {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
                     name: "list_directory".to_string(),
-                    description: "List files and directories at the given path. Returns names, types, and sizes.".to_string(),
+                    description: "List files and directories at the given path. Returns names, types, and sizes. Limited to 50 entries by default.".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
                             "path": {
                                 "type": "string",
                                 "description": "Directory path relative to the project root. Use '.' for root."
+                            },
+                            "max_results": {
+                                "type": "integer",
+                                "description": "Maximum entries to return (default: 50)"
                             }
                         },
                         "required": ["path"]
@@ -333,7 +345,7 @@ impl ToolRegistry {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
                     name: "print_tree".to_string(),
-                    description: "Print the project directory tree structure. Shows files and folders.".to_string(),
+                    description: "Print the project directory tree structure. Shows files and folders. Default depth: 2, max output: 100 lines.".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
@@ -343,7 +355,7 @@ impl ToolRegistry {
                             },
                             "max_depth": {
                                 "type": "integer",
-                                "description": "Maximum depth to traverse (default: 3)"
+                                "description": "Maximum depth to traverse (default: 2)"
                             },
                             "show_files": {
                                 "type": "boolean",
@@ -370,13 +382,17 @@ impl ToolRegistry {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
                     name: "attach_file".to_string(),
-                    description: "Read and attach a file to the conversation context. Returns the file content with metadata.".to_string(),
+                    description: "Read and attach a file to the conversation context. Returns file content with metadata. Truncated to 300 lines by default.".to_string(),
                     parameters: serde_json::json!({
                         "type": "object",
                         "properties": {
                             "path": {
                                 "type": "string",
                                 "description": "Path to the file to attach, relative to the project root"
+                            },
+                            "max_lines": {
+                                "type": "integer",
+                                "description": "Maximum lines to return (default: 300)"
                             }
                         },
                         "required": ["path"]
@@ -472,10 +488,28 @@ impl ToolRegistry {
 
     async fn read_file(&self, args: &serde_json::Value) -> String {
         let path = args["path"].as_str().unwrap_or("");
+        let max_lines = args["max_lines"].as_u64().unwrap_or(200) as usize;
+        let start_line = args["start_line"].as_u64().map(|n| n as usize).unwrap_or(0);
         let full_path = Path::new(&self.project_path).join(path);
 
         match fs::read_to_string(&full_path).await {
-            Ok(content) => content,
+            Ok(content) => {
+                let total_lines = content.lines().count();
+                let lines: Vec<&str> = content.lines().collect();
+                let start = start_line.saturating_sub(1).min(lines.len());
+                let end = (start + max_lines).min(lines.len());
+                let selected = &lines[start..end];
+                let mut result = selected.join("\n");
+                let returned_lines = end - start;
+                if returned_lines < total_lines {
+                    result.push_str(&format!(
+                        "\n... (showing lines {}-{}/{} total, {}% of file)",
+                        start + 1, end, total_lines,
+                        (returned_lines * 100) / total_lines
+                    ));
+                }
+                result
+            }
             Err(e) => format!("Error reading file: {}", e),
         }
     }
@@ -498,12 +532,18 @@ impl ToolRegistry {
 
     async fn list_directory(&self, args: &serde_json::Value) -> String {
         let path = args["path"].as_str().unwrap_or(".");
+        let max_results = args["max_results"].as_u64().unwrap_or(50) as usize;
         let full_path = Path::new(&self.project_path).join(path);
 
         match fs::read_dir(&full_path).await {
             Ok(mut entries) => {
                 let mut result = Vec::new();
+                let mut total = 0;
                 while let Some(entry) = entries.next_entry().await.unwrap_or(None) {
+                    total += 1;
+                    if result.len() >= max_results {
+                        continue;
+                    }
                     let metadata = entry.metadata().await.ok();
                     let file_type = if metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false) {
                         "dir"
@@ -517,7 +557,14 @@ impl ToolRegistry {
                 if result.is_empty() {
                     "(empty directory)".to_string()
                 } else {
-                    result.join("\n")
+                    let mut output = result.join("\n");
+                    if total > max_results {
+                        output.push_str(&format!(
+                            "\n... (showing {} of {} entries)",
+                            max_results, total
+                        ));
+                    }
+                    output
                 }
             }
             Err(e) => format!("Error listing directory: {}", e),
@@ -528,17 +575,26 @@ impl ToolRegistry {
         let pattern = args["pattern"].as_str().unwrap_or("");
         let file_pattern = args["file_pattern"].as_str().unwrap_or("");
 
+        let exclusions = super::ignore::exclusions_for_project(&self.project_path);
+        let mut exclude_args: Vec<String> = Vec::new();
+        for excl in &exclusions {
+            exclude_args.push(format!("--glob"));
+            exclude_args.push(format!("!{}/", excl));
+        }
+
         // Use ripgrep if available, fallback to find + grep
         let output = if !file_pattern.is_empty() {
-            tokio::process::Command::new("rg")
-                .args(["--no-heading", "-n", pattern, "--glob", &format!("*{}", file_pattern), &self.project_path])
-                .output()
-                .await
+            let mut cmd = tokio::process::Command::new("rg");
+            cmd.args(["--no-heading", "-n", pattern, "--glob", &format!("*{}", file_pattern)]);
+            cmd.args(&exclude_args);
+            cmd.arg(&self.project_path);
+            cmd.output().await
         } else {
-            tokio::process::Command::new("rg")
-                .args(["--no-heading", "-n", pattern, &self.project_path])
-                .output()
-                .await
+            let mut cmd = tokio::process::Command::new("rg");
+            cmd.args(["--no-heading", "-n", pattern]);
+            cmd.args(&exclude_args);
+            cmd.arg(&self.project_path);
+            cmd.output().await
         };
 
         match output {
@@ -1138,7 +1194,7 @@ impl ToolRegistry {
     /// Print project directory tree
     async fn print_tree(&self, args: &serde_json::Value) -> String {
         let path = args["path"].as_str().unwrap_or(".");
-        let max_depth = args["max_depth"].as_u64().unwrap_or(3) as usize;
+        let max_depth = args["max_depth"].as_u64().unwrap_or(2) as usize;
         let show_files = args["show_files"].as_bool().unwrap_or(true);
 
         let root = Path::new(&self.project_path).join(path);
@@ -1150,7 +1206,15 @@ impl ToolRegistry {
 
         self.build_tree(&root, "", max_depth, 0, show_files, &mut output);
 
-        output
+        // Cap output at 100 lines to prevent token overflow
+        let max_lines = 100;
+        let lines: Vec<&str> = output.lines().collect();
+        if lines.len() > max_lines {
+            let truncated: String = lines[..max_lines].join("\n");
+            format!("{}\n... ({} of {} lines shown)", truncated, max_lines, lines.len())
+        } else {
+            output
+        }
     }
 
     /// Recursively build tree string
@@ -1183,15 +1247,15 @@ impl ToolRegistry {
             a.file_name().cmp(&b.file_name())
         });
 
-        // Filter out hidden dirs and common non-essential dirs
-        let skip_dirs = [".git", "node_modules", "target", ".openstorm", "dist", "__pycache__"];
+        // Filter out excluded directories
+        let exclusions = super::ignore::exclusions_for_project(&self.project_path);
 
         for (i, entry) in entries.iter().enumerate() {
             let file_name = entry.file_name().to_string_lossy().to_string();
             let is_dir = entry.path().is_dir();
 
-            // Skip hidden files/dirs and common non-essential dirs
-            if file_name.starts_with('.') || (is_dir && skip_dirs.contains(&file_name.as_str())) {
+            // Skip hidden files/dirs and excluded directories
+            if is_dir && super::ignore::should_skip_dir(&file_name, &exclusions) {
                 continue;
             }
 
@@ -1247,21 +1311,45 @@ impl ToolRegistry {
     /// Attach a file to the conversation context
     async fn attach_file(&self, args: &serde_json::Value) -> String {
         let path = args["path"].as_str().unwrap_or("");
+        let max_lines = args["max_lines"].as_u64().unwrap_or(300) as usize;
         let full_path = Path::new(&self.project_path).join(path);
 
-        match fs::read_to_string(&full_path).await {
-            Ok(content) => {
-                let file_size = fs::metadata(&full_path).await.map(|m| m.len()).unwrap_or(0);
-                let line_count = content.lines().count();
-                format!(
-                    "Attached file: {}\nSize: {} bytes, {} lines\n\n{}",
-                    path,
-                    file_size,
-                    line_count,
-                    content
-                )
+        let file_size = fs::metadata(&full_path).await.map(|m| m.len()).unwrap_or(0);
+        
+        let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        let is_text_file = matches!(
+            ext.to_lowercase().as_str(),
+            "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "rb" | "css" | "html" | "json" | "yaml" | "yml" | "toml" | "md" | "sql" | "txt" | "log" | "xml" | "csv" | "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" | "dockerfile" | "makefile" | "cmake" | "gradle" | "properties" | "ini" | "cfg" | "conf" | "config"
+        );
+
+        if is_text_file {
+            match fs::read_to_string(&full_path).await {
+                Ok(content) => {
+                    let total_lines = content.lines().count();
+                    let lines: Vec<&str> = content.lines().collect();
+                    let end = max_lines.min(lines.len());
+                    let truncated_content = lines[..end].join("\n");
+                    if end < total_lines {
+                        format!(
+                            "Attached file: {}\nSize: {} bytes, {} lines (showing {}/{} lines)\n\n{}",
+                            path, file_size, total_lines, end, total_lines, truncated_content
+                        )
+                    } else {
+                        format!(
+                            "Attached file: {}\nSize: {} bytes, {} lines\n\n{}",
+                            path, file_size, total_lines, truncated_content
+                        )
+                    }
+                }
+                Err(e) => format!("Error attaching file {}: {}", path, e),
             }
-            Err(e) => format!("Error attaching file {}: {}", path, e),
+        } else {
+            format!(
+                "Attached file: {}\nSize: {} bytes\nType: {} (binary file - content not displayed)",
+                path,
+                file_size,
+                ext.to_uppercase()
+            )
         }
     }
 
@@ -1272,23 +1360,47 @@ impl ToolRegistry {
             return "No files specified".to_string();
         }
 
+        let max_lines_per_file = 150; // Tighter limit for multi-file
         let mut results = Vec::new();
         for path in &paths {
             let path_str = path.as_str().unwrap_or("");
             let full_path = Path::new(&self.project_path).join(path_str);
 
-            match fs::read_to_string(&full_path).await {
-                Ok(content) => {
-                    let file_size = fs::metadata(&full_path).await.map(|m| m.len()).unwrap_or(0);
-                    let line_count = content.lines().count();
-                    results.push(format!(
-                        "=== {} ({} bytes, {} lines) ===\n{}",
-                        path_str, file_size, line_count, content
-                    ));
+            let file_size = fs::metadata(&full_path).await.map(|m| m.len()).unwrap_or(0);
+            let ext = full_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            let is_text_file = matches!(
+                ext.to_lowercase().as_str(),
+                "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go" | "java" | "rb" | "css" | "html" | "json" | "yaml" | "yml" | "toml" | "md" | "sql" | "txt" | "log" | "xml" | "csv" | "sh" | "bash" | "zsh" | "fish" | "ps1" | "bat" | "cmd" | "dockerfile" | "makefile" | "cmake" | "gradle" | "properties" | "ini" | "cfg" | "conf" | "config"
+            );
+
+            if is_text_file {
+                match fs::read_to_string(&full_path).await {
+                    Ok(content) => {
+                        let total_lines = content.lines().count();
+                        let lines: Vec<&str> = content.lines().collect();
+                        let end = max_lines_per_file.min(lines.len());
+                        let truncated = lines[..end].join("\n");
+                        if end < total_lines {
+                            results.push(format!(
+                                "=== {} ({} bytes, {} lines, showing {}/{}) ===\n{}",
+                                path_str, file_size, total_lines, end, total_lines, truncated
+                            ));
+                        } else {
+                            results.push(format!(
+                                "=== {} ({} bytes, {} lines) ===\n{}",
+                                path_str, file_size, total_lines, truncated
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        results.push(format!("Error reading {}: {}", path_str, e));
+                    }
                 }
-                Err(e) => {
-                    results.push(format!("Error reading {}: {}", path_str, e));
-                }
+            } else {
+                results.push(format!(
+                    "=== {} ({} bytes) ===\nType: {} (binary file - content not displayed)",
+                    path_str, file_size, ext.to_uppercase()
+                ));
             }
         }
 
@@ -1421,6 +1533,15 @@ impl ToolRegistry {
         }
         
         next_char.is_none()
+    }
+
+    /// Get only the essential tool definitions (reduced set for better model focus)
+    pub fn essential_definitions(&self) -> Vec<ToolDefinition> {
+        let all = self.definitions();
+        let essential = ["read_file", "write_file", "edit_file", "search_code", "run_command", "get_diagnostics"];
+        all.into_iter()
+            .filter(|t| essential.contains(&t.function.name.as_str()))
+            .collect()
     }
 }
 

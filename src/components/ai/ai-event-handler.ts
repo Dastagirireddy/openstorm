@@ -76,13 +76,7 @@ export function handleAgentEvent(
           content: `Used ${event.tool_name} — Done`,
         });
       }
-      ctx.addMessage(sessionId, {
-        id: `tresult-${Date.now()}`,
-        role: 'tool_result',
-        content: event.result,
-        timestamp: Date.now(),
-        toolName: event.tool_name,
-      });
+      // Don't add tool_result message — raw file contents are noise in the chat
       break;
     }
 
@@ -141,6 +135,15 @@ export function handleAgentEvent(
       const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant');
       if (lastAssistant) {
         ctx.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
+      } else if (event.content) {
+        // No assistant message yet (e.g., forced final answer from loop detection)
+        ctx.addMessage(sessionId, {
+          id: `resp-${Date.now()}`,
+          role: 'assistant',
+          content: event.content,
+          timestamp: Date.now(),
+          isStreaming: false,
+        });
       }
       if (state.responseStartTime) {
         state.lastResponseTime = (Date.now() - state.responseStartTime) / 1000;

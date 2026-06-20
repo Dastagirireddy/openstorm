@@ -38,6 +38,24 @@ pub enum ChunkType {
     Other,
 }
 
+impl ChunkType {
+    pub fn chunk_type_to_str(&self) -> &str {
+        match self {
+            ChunkType::Function => "fn",
+            ChunkType::Struct => "struct",
+            ChunkType::Impl => "impl",
+            ChunkType::Trait => "trait",
+            ChunkType::Enum => "enum",
+            ChunkType::Module => "mod",
+            ChunkType::Type => "type",
+            ChunkType::Constant => "const",
+            ChunkType::Comment => "comment",
+            ChunkType::Import => "import",
+            ChunkType::Other => "other",
+        }
+    }
+}
+
 /// Code chunker that splits files into meaningful chunks
 pub struct CodeChunker {
     /// Maximum lines per chunk
@@ -88,7 +106,35 @@ impl CodeChunker {
             ));
         }
 
-        chunks
+        // Post-process: split any chunks that exceed max_lines
+        let mut final_chunks = Vec::new();
+        for chunk in chunks {
+            let chunk_lines = chunk.end_line - chunk.start_line;
+            if chunk_lines <= self.max_lines {
+                final_chunks.push(chunk);
+            } else {
+                // Split oversized chunk into smaller pieces
+                let mut start = chunk.start_line;
+                while start < chunk.end_line {
+                    let end = (start + self.max_lines).min(chunk.end_line);
+                    let line_slice: Vec<&str> = lines[(start as usize)..(end as usize)]
+                        .iter()
+                        .copied()
+                        .collect();
+                    final_chunks.push(self.create_chunk(
+                        file_path,
+                        start + 1,
+                        end,
+                        &line_slice,
+                        chunk.chunk_type.clone(),
+                        chunk.symbol_name.clone(),
+                    ));
+                    start = end;
+                }
+            }
+        }
+
+        final_chunks
     }
 
     /// Chunk Rust code by functions, structs, impls, etc.
@@ -195,22 +241,19 @@ impl CodeChunker {
                         '}' => {
                             brace_depth -= 1;
                             if brace_depth == 0 && in_body {
-                                // End of block
-                                let end_line = (i + 1) as u32;
-                                let start = current_start.unwrap();
-
-                                // Only create chunk if it meets minimum size
-                                if end_line - start >= self.min_lines {
-                                    chunks.push(self.create_chunk(
-                                        file_path,
-                                        start + 1,
-                                        end_line,
-                                        &lines[start as usize..=i],
-                                        current_type.clone(),
-                                        symbol_name.clone(),
-                                    ));
+                                if let Some(start) = current_start {
+                                    let end_line = (i + 1) as u32;
+                                    if end_line - start >= self.min_lines {
+                                        chunks.push(self.create_chunk(
+                                            file_path,
+                                            start + 1,
+                                            end_line,
+                                            &lines[start as usize..=i],
+                                            current_type.clone(),
+                                            symbol_name.clone(),
+                                        ));
+                                    }
                                 }
-
                                 current_start = None;
                                 in_body = false;
                             }
@@ -317,20 +360,19 @@ impl CodeChunker {
                         '}' => {
                             brace_depth -= 1;
                             if brace_depth == 0 && in_body {
-                                let end_line = (i + 1) as u32;
-                                let start = current_start.unwrap();
-
-                                if end_line - start >= self.min_lines {
-                                    chunks.push(self.create_chunk(
-                                        file_path,
-                                        start + 1,
-                                        end_line,
-                                        &lines[start as usize..=i],
-                                        current_type.clone(),
-                                        symbol_name.clone(),
-                                    ));
+                                if let Some(start) = current_start {
+                                    let end_line = (i + 1) as u32;
+                                    if end_line - start >= self.min_lines {
+                                        chunks.push(self.create_chunk(
+                                            file_path,
+                                            start + 1,
+                                            end_line,
+                                            &lines[start as usize..=i],
+                                            current_type.clone(),
+                                            symbol_name.clone(),
+                                        ));
+                                    }
                                 }
-
                                 current_start = None;
                                 in_body = false;
                             }
@@ -376,22 +418,21 @@ impl CodeChunker {
                 || trimmed.starts_with("class ");
 
             // If we're in a block and hit a new definition, close the previous block
-            if is_new_def && current_start.is_some() {
-                let end_line = i as u32;
-                let start = current_start.unwrap();
-
-                if end_line - start >= self.min_lines {
-                    chunks.push(self.create_chunk(
-                        file_path,
-                        start + 1,
-                        end_line,
-                        &lines[start as usize..i],
-                        current_type.clone(),
-                        symbol_name.clone(),
-                    ));
+            if is_new_def {
+                if let Some(start) = current_start {
+                    let end_line = i as u32;
+                    if end_line - start >= self.min_lines {
+                        chunks.push(self.create_chunk(
+                            file_path,
+                            start + 1,
+                            end_line,
+                            &lines[start as usize..i],
+                            current_type.clone(),
+                            symbol_name.clone(),
+                        ));
+                    }
+                    current_start = None;
                 }
-
-                current_start = None;
             }
 
             // Detect function definitions
@@ -420,21 +461,20 @@ impl CodeChunker {
                 let is_dedented = !is_blank && !is_comment && indent < expected_indent;
 
                 if is_dedented {
-                    let end_line = i as u32;
-                    let start = current_start.unwrap();
-
-                    if end_line - start >= self.min_lines {
-                        chunks.push(self.create_chunk(
-                            file_path,
-                            start + 1,
-                            end_line,
-                            &lines[start as usize..i],
-                            current_type.clone(),
-                            symbol_name.clone(),
-                        ));
+                    if let Some(start) = current_start {
+                        let end_line = i as u32;
+                        if end_line - start >= self.min_lines {
+                            chunks.push(self.create_chunk(
+                                file_path,
+                                start + 1,
+                                end_line,
+                                &lines[start as usize..i],
+                                current_type.clone(),
+                                symbol_name.clone(),
+                            ));
+                        }
+                        current_start = None;
                     }
-
-                    current_start = None;
                 }
             }
         }

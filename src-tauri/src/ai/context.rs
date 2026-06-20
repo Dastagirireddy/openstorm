@@ -355,12 +355,21 @@ impl std::fmt::Display for ContextStats {
     }
 }
 
-/// Truncate a string to max_len characters
+/// Truncate a string to max_len bytes at a safe UTF-8 boundary
 fn truncate_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
     } else {
-        format!("{}...", &s[..max_len])
+        // Find last complete char that fits
+        let mut end = 0;
+        for (i, c) in s.char_indices() {
+            let char_end = i + c.len_utf8();
+            if char_end > max_len {
+                break;
+            }
+            end = char_end;
+        }
+        format!("{}...", &s[..end])
     }
 }
 

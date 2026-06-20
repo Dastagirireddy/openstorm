@@ -7,6 +7,10 @@ import { formatTokenCount } from './ai-commands.js';
 import '../layout/code-block.js';
 import '../layout/icon.js';
 
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 interface MessageRenderContext {
   selectedModel: string;
   lastResponseTime: number;
@@ -64,11 +68,33 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
       const toolIcon = getToolIcon(msg.toolName || '');
       const toolColor = getToolColor(msg.toolName || '');
       const toolLabel = getToolLabel(msg.toolName || '', msg.toolArgs);
+
+      // For write/edit operations, show a diff preview
+      let diffPreview = '';
+      if (msg.toolName === 'write_file' || msg.toolName === 'edit_file') {
+        try {
+          const args = JSON.parse(msg.toolArgs || '{}');
+          if (msg.toolName === 'write_file' && args.content) {
+            const lines = args.content.split('\n').slice(0, 20);
+            const preview = lines.join('\n');
+            const truncated = args.content.split('\n').length > 20;
+            diffPreview = `<div class="ai-diff-preview"><code-block code="${escapeAttr(preview)}${truncated ? '\n... (truncated)' : ''}"></code-block></div>`;
+          } else if (msg.toolName === 'edit_file' && args.new_content) {
+            const lines = args.new_content.split('\n').slice(0, 20);
+            const preview = lines.join('\n');
+            const truncated = args.new_content.split('\n').length > 20;
+            const lineInfo = `lines ${args.start_line || '?'}-${args.end_line || '?'}`;
+            diffPreview = `<div class="ai-diff-preview"><div class="ai-diff-label">Replace ${lineInfo}:</div><code-block code="${escapeAttr(preview)}${truncated ? '\n... (truncated)' : ''}"></code-block></div>`;
+          }
+        } catch {}
+      }
+
       return html`
         <div class="ai-msg-thinking tool-use-line">
           <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
           <span class="thinking-label">${toolLabel}</span>
-        </div>`;
+        </div>
+        ${diffPreview ? unsafeHTML(diffPreview) : ''}`;
     }
 
     case 'tool_result': {

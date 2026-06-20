@@ -174,6 +174,26 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
     }, 100);
   }
 
+  updated() {
+    // Sync model select element value with state
+    // Lit's .value binding doesn't reliably keep <select> in sync
+    // when options change after the value is set
+    const selects = this.renderRoot.querySelectorAll('.ai-model-bare');
+    selects.forEach((el) => {
+      const select = el as HTMLSelectElement;
+      // Check if this select contains model options (not provider options)
+      // by checking if any option value matches a model ID
+      const hasModelOptions = Array.from(select.options).some(opt =>
+        this.models.some(m => m.id === opt.value)
+      );
+      if (hasModelOptions && this.selectedModel) {
+        if (select.value !== this.selectedModel) {
+          select.value = this.selectedModel;
+        }
+      }
+    });
+  }
+
   private async switchProvider(providerId: string) {
     if (providerId === this.currentProvider) return;
     this.currentProvider = providerId;

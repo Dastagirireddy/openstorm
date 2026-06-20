@@ -15,6 +15,7 @@ pub mod memory;
 pub mod rag;
 pub mod embedding_store;
 pub mod cost_tracker;
+pub mod ignore;
 
 pub use provider::*;
 pub use ollama::OllamaProvider;

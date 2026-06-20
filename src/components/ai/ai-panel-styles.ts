@@ -524,6 +524,39 @@ export const aiPanelStyles = css`
       line-height: 1.6;
     }
 
+    /* Diff preview for write/edit tools */
+    .ai-diff-preview {
+      margin: 0.25em 0 0.5em 1.5em;
+      border-radius: 4px;
+      overflow: hidden;
+      font-size: 0.85em;
+    }
+    .ai-diff-preview code-block {
+      display: block;
+    }
+    .ai-diff-removed {
+      background: var(--ai-error-bg, rgba(248, 81, 73, 0.1));
+      border-left: 3px solid var(--ai-error, #f85149);
+      padding: 0.25em 0.5em;
+    }
+    .ai-diff-removed code-block {
+      --code-bg: transparent;
+    }
+    .ai-diff-added {
+      background: var(--ai-success-bg, rgba(63, 185, 80, 0.1));
+      border-left: 3px solid var(--ai-success, #3fb950);
+      padding: 0.25em 0.5em;
+    }
+    .ai-diff-added code-block {
+      --code-bg: transparent;
+    }
+    .ai-diff-label {
+      font-size: 0.85em;
+      color: var(--ai-text-dim);
+      margin-bottom: 0.25em;
+      font-style: italic;
+    }
+
     /* Tool approval */
     .ai-tool-approval {
       margin: 0.5em 0 0.75em 1.5em;

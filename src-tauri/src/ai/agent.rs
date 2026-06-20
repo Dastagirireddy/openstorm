@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
+use crate::{log_debug, log_info};
+
 use super::context::ContextManager;
 use super::cost_tracker::{CostTracker, SharedCostTracker, create_shared_cost_tracker};
 use super::embedding_store::EmbeddingStore;
@@ -9,6 +11,29 @@ use super::project_context::ProjectContext;
 use super::provider::*;
 use super::sandbox::Sandbox;
 use super::tools::ToolRegistry;
+
+/// Maximum characters for a single tool result before truncation
+const MAX_TOOL_RESULT_CHARS: usize = 3000;
+
+/// Maximum time to wait for streaming response from LLM (per iteration)
+const STREAM_TIMEOUT_SECS: u64 = 120;
+
+/// Truncate a string to a safe UTF-8 char boundary (won't panic on multi-byte chars)
+fn truncate_to_boundary(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    // Find the last complete char that fits within max_bytes
+    let mut end = 0;
+    for (i, c) in s.char_indices() {
+        let char_end = i + c.len_utf8();
+        if char_end > max_bytes {
+            break;
+        }
+        end = char_end;
+    }
+    &s[..end]
+}
 
 /// Status of a plan step
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
@@ -243,6 +268,32 @@ impl Agent {
         history: Vec<Message>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<(), ProviderError> {
+        // ── Phase 1: Index project for RAG ──────────────────────
+        {
+            let store = self.embedding_store.lock().await;
+            if store.is_empty() {
+                drop(store); // Release lock before indexing
+                log_info!("[RAG] Indexing project for auto-context injection...");
+                let start = std::time::Instant::now();
+                match self.index_project().await {
+                    Ok(chunks) => {
+                        let elapsed = start.elapsed();
+                        let store = self.embedding_store.lock().await;
+                        let stats = store.stats();
+                        log_info!(
+                            "[RAG] Indexed {} chunks from {} files in {:?} ({} unique keywords)",
+                            chunks, stats.total_files, elapsed, stats.total_keywords
+                        );
+                    }
+                    Err(e) => {
+                        log_info!("[RAG] Indexing failed (continuing without RAG): {}", e);
+                    }
+                }
+            } else {
+                log_debug!("[RAG] Store already indexed, skipping");
+            }
+        }
+
         // Initialize context manager with system prompt
         let system_prompt = self.build_system_prompt();
         let mut ctx = ContextManager::new(8192);
@@ -253,13 +304,74 @@ impl Agent {
 
         // Add user message
         ctx.push(Message::User {
-            content: user_message,
+            content: user_message.clone(),
         });
 
-        let tool_defs = self.tools.definitions();
+        // ── Phase 1: Auto-context injection via RAG ────────────
+        {
+            let store = self.embedding_store.lock().await;
+            if !store.is_empty() {
+                let results = store.search(&user_message, 12);
+                if !results.is_empty() {
+                    let mut context_block = String::from(
+                        "## Relevant Code Context (auto-retrieved by RAG)\n\
+                         These code sections are relevant to the user's request. \
+                         Use them as reference — do NOT re-read these files with read_file.\n\n"
+                    );
+                    for result in results.iter() {
+                        let chunk = &result.chunk;
+                        let preview: String = chunk.content.lines().take(15).collect::<Vec<_>>().join("\n");
+                        let truncated = if chunk.content.lines().count() > 15 {
+                            format!("{}\n// ... ({} more lines)", preview, chunk.content.lines().count() - 15)
+                        } else {
+                            preview
+                        };
+                        context_block.push_str(&format!(
+                            "### {}:{}-{} ({}, score: {:.1})\n```{}\n{}\n```\n\n",
+                            chunk.file_path,
+                            chunk.start_line,
+                            chunk.end_line,
+                            chunk.chunk_type.chunk_type_to_str(),
+                            result.score,
+                            chunk.file_path.rsplit('.').next().unwrap_or(""),
+                            truncated,
+                        ));
+                    }
+                    let rag_tokens = (context_block.len() / 4) as u64;
+                    log_info!(
+                        "[RAG] Injecting {} chunks (~{} tokens) into context for: \"{}\"",
+                        results.len(), rag_tokens,
+                        truncate_to_boundary(&user_message, 60)
+                    );
+                    // Log each chunk for debugging
+                    for (i, result) in results.iter().enumerate() {
+                        let chunk = &result.chunk;
+                        log_debug!(
+                            "[RAG]   chunk {}: {}:{}-{} (score: {:.1}, {} chars)",
+                            i + 1, chunk.file_path, chunk.start_line, chunk.end_line,
+                            result.score, chunk.content.len()
+                        );
+                    }
+                    // Inject as a system message right after the system prompt
+                    ctx.push(Message::System { content: context_block });
+                } else {
+                    log_debug!("[RAG] No relevant chunks found for: \"{}\"",
+                        truncate_to_boundary(&user_message, 60));
+                }
+            }
+        }
+
+        let tool_defs = self.tools.essential_definitions();
         let mut total_tool_calls = 0u32;
         let mut consecutive_failures = 0u32;
         const MAX_CONSECUTIVE_FAILURES: u32 = 3;
+
+        // Tool loop detection: track last N tool calls (name, key_arg)
+        let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
+        const MAX_REPEATED_TOOLS: usize = 3;
+        let mut consecutive_no_text = 0u32;
+        const MAX_NO_TEXT_ITERATIONS: u32 = 2;
+        const MAX_TOOL_LOOP_WARNINGS: u32 = 2;
 
         for iteration in 0..self.max_iterations {
             // Send context status update
@@ -283,7 +395,7 @@ impl Agent {
                 tools: Some(tool_defs.clone()),
                 stream: Some(true),  // Enable streaming
                 temperature: Some(0.7),
-                max_tokens: Some(4096),
+                max_tokens: Some(2048),
             };
 
             // Clone request for fallback in case streaming fails
@@ -307,49 +419,66 @@ impl Agent {
                 }
             };
 
-            // Collect streaming response
-            let mut full_content = String::new();
-            let mut tool_calls: Vec<ToolCall> = Vec::new();
-            let mut usage: Option<Usage> = None;
+            // Collect streaming response with timeout
+            let stream_result = tokio::time::timeout(
+                std::time::Duration::from_secs(STREAM_TIMEOUT_SECS),
+                async {
+                    let mut full_content = String::new();
+                    let mut tool_calls: Vec<ToolCall> = Vec::new();
+                    let mut usage: Option<Usage> = None;
 
-            while let Some(chunk) = stream.recv().await {
-                // Send text deltas to frontend for real-time display
-                if let Some(text) = &chunk.choices.first().and_then(|c| c.delta.content.as_ref()) {
-                    full_content.push_str(text);
-                    let _ = tx.send(AgentEvent::TextDelta { content: text.to_string() }).await;
-                }
+                    while let Some(chunk) = stream.recv().await {
+                        // Send text deltas to frontend for real-time display
+                        if let Some(text) = &chunk.choices.first().and_then(|c| c.delta.content.as_ref()) {
+                            full_content.push_str(text);
+                            let _ = tx.send(AgentEvent::TextDelta { content: text.to_string() }).await;
+                        }
 
-                // Collect tool calls
-                if let Some(delta) = chunk.choices.first().and_then(|c| c.delta.tool_calls.as_ref()) {
-                    for tc_delta in delta {
-                        let idx = tc_delta.index as usize;
-                        while tool_calls.len() <= idx {
-                            tool_calls.push(ToolCall {
-                                id: String::new(),
-                                call_type: "function".to_string(),
-                                function: FunctionCall {
-                                    name: String::new(),
-                                    arguments: String::new(),
-                                },
-                            });
+                        // Collect tool calls
+                        if let Some(delta) = chunk.choices.first().and_then(|c| c.delta.tool_calls.as_ref()) {
+                            for tc_delta in delta {
+                                let idx = tc_delta.index as usize;
+                                while tool_calls.len() <= idx {
+                                    tool_calls.push(ToolCall {
+                                        id: String::new(),
+                                        call_type: "function".to_string(),
+                                        function: FunctionCall {
+                                            name: String::new(),
+                                            arguments: String::new(),
+                                        },
+                                    });
+                                }
+                                if let Some(id) = &tc_delta.id {
+                                    tool_calls[idx].id = id.clone();
+                                }
+                                if let Some(name) = &tc_delta.function.as_ref().and_then(|f| f.name.as_ref()) {
+                                    tool_calls[idx].function.name.push_str(name);
+                                }
+                                if let Some(args) = &tc_delta.function.as_ref().and_then(|f| f.arguments.as_ref()) {
+                                    tool_calls[idx].function.arguments.push_str(args);
+                                }
+                            }
                         }
-                        if let Some(id) = &tc_delta.id {
-                            tool_calls[idx].id = id.clone();
-                        }
-                        if let Some(name) = &tc_delta.function.as_ref().and_then(|f| f.name.as_ref()) {
-                            tool_calls[idx].function.name.push_str(name);
-                        }
-                        if let Some(args) = &tc_delta.function.as_ref().and_then(|f| f.arguments.as_ref()) {
-                            tool_calls[idx].function.arguments.push_str(args);
+
+                        // Capture usage from final chunk
+                        if chunk.choices.first().and_then(|c| c.finish_reason.as_ref()).is_some() {
+                            // Usage might be in the final chunk for some providers
                         }
                     }
-                }
 
-                // Capture usage from final chunk
-                if chunk.choices.first().and_then(|c| c.finish_reason.as_ref()).is_some() {
-                    // Usage might be in the final chunk for some providers
+                    (full_content, tool_calls, usage)
                 }
-            }
+            ).await;
+
+            let (full_content, tool_calls, usage) = match stream_result {
+                Ok(result) => result,
+                Err(_) => {
+                    log_info!("[Agent] Stream timed out after {}s, falling back to non-streaming", STREAM_TIMEOUT_SECS);
+                    let response = self.provider.chat_completion(fallback_request).await?;
+                    self.handle_response(response, &mut ctx, &mut total_tool_calls, &mut consecutive_failures, tx).await?;
+                    continue;
+                }
+            };
 
             // Record cost if usage is available
             if let Some(ref usage) = usage {
@@ -382,6 +511,73 @@ impl Agent {
 
             // Handle tool calls
             if !tool_calls.is_empty() {
+                // Track tool calls for loop detection (tool name + key arg)
+                let primary = tool_calls.first().map(|c| {
+                    let key = match c.function.name.as_str() {
+                        "read_file" | "write_file" | "edit_file" => {
+                            // Track by file path
+                            serde_json::from_str::<serde_json::Value>(&c.function.arguments)
+                                .ok()
+                                .and_then(|a| a["path"].as_str().map(|s| s.to_string()))
+                                .unwrap_or_default()
+                        }
+                        "search_code" => {
+                            // Track by search pattern
+                            serde_json::from_str::<serde_json::Value>(&c.function.arguments)
+                                .ok()
+                                .and_then(|a| a["pattern"].as_str().map(|s| s.to_string()))
+                                .unwrap_or_default()
+                        }
+                        _ => String::new(),
+                    };
+                    (c.function.name.clone(), key)
+                }).unwrap_or_default();
+
+                recent_tool_calls.push(primary.clone());
+                if recent_tool_calls.len() > MAX_REPEATED_TOOLS {
+                    recent_tool_calls.remove(0);
+                }
+                log_debug!("[Agent] Tool loop check: recent={:?}", recent_tool_calls);
+
+                // A "loop" = same tool + same arg called 3x in a row
+                // (e.g., read_file("main.rs") 3x, or search_code("while") 3x)
+                let same_tool_loop = recent_tool_calls.len() == MAX_REPEATED_TOOLS
+                    && recent_tool_calls.iter().all(|t| t.0 == primary.0 && t.1 == primary.1 && !t.1.is_empty());
+
+                if same_tool_loop {
+                    log_info!("[Agent] Tool loop detected: {}({}) called {} times. Forcing final answer.", primary.0, primary.1, MAX_REPEATED_TOOLS);
+                    let _ = tx.send(AgentEvent::Response {
+                        content: format!(
+                            "I've gathered information through multiple tool calls. \
+                             Here's what I found based on the results. \
+                             Please ask a follow-up if you need more detail."
+                        ),
+                        tool_calls_made: total_tool_calls,
+                        usage,
+                    }).await;
+                    return Ok(());
+                }
+
+                // No-text detector: if model produces only tool calls with no text for N iterations
+                if full_content.trim().is_empty() {
+                    consecutive_no_text += 1;
+                } else {
+                    consecutive_no_text = 0;
+                }
+                if consecutive_no_text >= MAX_NO_TEXT_ITERATIONS {
+                    log_info!("[Agent] No text output for {} iterations. Forcing final answer.", consecutive_no_text);
+                    let _ = tx.send(AgentEvent::Response {
+                        content: format!(
+                            "I've completed the requested changes through multiple tool calls. \
+                             Here's a summary of what was done. \
+                             Please ask if you need any modifications."
+                        ),
+                        tool_calls_made: total_tool_calls,
+                        usage,
+                    }).await;
+                    return Ok(());
+                }
+
                 // Add assistant message to context
                 ctx.push(Message::Assistant {
                     content: Some(full_content),
@@ -524,6 +720,7 @@ impl Agent {
                         }
                     }
 
+                    // Send full result to frontend for display
                     let _ = tx
                         .send(AgentEvent::ToolResult {
                             tool_name: call.function.name.clone(),
@@ -540,10 +737,29 @@ impl Agent {
                         }
                     }
 
-                    // Add tool result to context
+                    // ── Universal truncation: cap tool result for context ──
+                    let context_result = if result.len() > MAX_TOOL_RESULT_CHARS {
+                        // Find safe char boundary (don't slice inside multi-byte UTF-8)
+                        let safe_end = result
+                            .char_indices()
+                            .map(|(i, _)| i)
+                            .take_while(|&i| i <= MAX_TOOL_RESULT_CHARS)
+                            .last()
+                            .unwrap_or(0);
+                        let truncated = result[..safe_end].to_string();
+                        log_debug!(
+                            "[TokenDiet] Truncated {} output: {} -> {} chars",
+                            call.function.name, result.len(), safe_end
+                        );
+                        format!("{}\n... (truncated, {} total chars)", truncated, result.len())
+                    } else {
+                        result
+                    };
+
+                    // Add truncated tool result to context
                     ctx.push(Message::Tool {
                         tool_call_id: call.id.clone(),
-                        content: result,
+                        content: context_result,
                     });
                 }
             } else {
@@ -769,7 +985,7 @@ impl Agent {
         let permissions_section = self.permissions.to_prompt_section();
 
         format!(
-            r#"You are an AI coding assistant embedded in the OpenStorm IDE.
+            r##"You are an AI coding assistant embedded in the OpenStorm IDE.
 You have access to tools that let you read, write, and search files in the user's project.
 
 {project_section}
@@ -790,18 +1006,88 @@ You can:
 - Check LSP diagnostics (errors/warnings)
 - View and create git commits
 
+## CRITICAL: How to Respond
+
+1. **Read the user's request carefully**
+2. **Use tools ONLY if needed** — read_file, edit_file, write_file, search_code
+3. **After each tool call, decide**: Do I have enough information? If YES, stop calling tools and write your response
+4. **You MUST produce a text response** — do not end with only tool calls
+5. **Your response should explain what you did** or answer the user's question
+
+Example flow:
+- User: "Add factorial function"
+- You: call write_file (write the code), then respond "Done. I added the factorial function to utils.rs and updated main.rs to use it."
+
+Do NOT: call read_file → call search_code → call read_file → call edit_file → ... (infinite tools, no answer)
+
+## RAG Auto-Context
+
+CRITICAL: Relevant code is automatically injected into your context BEFORE each turn.
+When you see "Relevant Code Context" in the messages, that IS your answer. Use it directly.
+- DO NOT call search_code or read_file if the answer is in the auto-context
+- DO NOT call any tools for explanation questions — just answer from the auto-context
+- Only call tools for WRITE tasks (write_file, edit_file) or if the auto-context is empty
+
+## When to Use Tools vs Just Answer
+
+Classify the user's request FIRST:
+
+**EXPLANATION questions** (no tools needed):
+- "How does X work?" / "What does X do?" / "Explain X"
+- "Why is X written this way?"
+→ Answer directly from RAG context. Do NOT call any tools.
+
+**CODE WRITING tasks** (write directly, don't re-read):
+- "Add function X" / "Create file Y" / "Implement Z"
+→ The RAG context already has the existing code. Use it to understand the structure, then call write_file/edit_file directly. Do NOT re-read files first.
+
+**COMPLEX tasks** (may need exploration):
+- "Refactor X across multiple files" / "Fix bug in X"
+→ Read ONE file if needed for context, then execute. Do NOT read the same file multiple times.
+
+## Response Style
+
+- Be CONCISE. Answer in 1-3 paragraphs unless the user asks for detail.
+- Don't repeat information already in the auto-context.
+
+## RULE: After calling tools, YOU MUST RESPOND WITH TEXT
+
+This is the most important rule. You have two choices after calling a tool:
+
+1. **Call another tool** (only if you truly need more information)
+2. **Respond with text** (explain what you did, answer the question, etc.)
+
+NEVER end a conversation with only tool calls. You MUST produce a text response.
+
+Example correct flow:
+- User: "Add factorial function"
+- You: call write_file("src/utils.rs", "...fact function...")
+- You: respond "Done. I added the factorial function to utils.rs and updated main.rs to use it."
+
+Example WRONG flow (DO NOT DO THIS):
+- User: "Add factorial function"
+- You: call read_file("src/utils.rs")
+- You: call read_file("src/main.rs")
+- You: call search_code("fact")
+- You: call edit_file(...)
+- You: call edit_file(...)
+- You: [no text response, loop continues]
+
+STOP after 2-3 tool calls maximum. Then RESPOND WITH TEXT.
+- Don't read files you already have in context.
+
 ## Decision Framework
 
-1. **Understand first**: Before making changes, read relevant files and understand the context
+1. **Check RAG context first**: The auto-context already has relevant code — use it
 2. **Plan before acting**: For complex tasks, output a numbered plan
-3. **Minimize changes**: Make the smallest change that solves the problem
-4. **Verify your work**: After making changes, check for errors
-5. **Explain your reasoning**: Tell the user what you're doing and why
+3. **Write code directly**: Use write_file/edit_file with the code from RAG context
+4. **Verify once**: After writing, run get_diagnostics or cargo check ONCE
+5. **Explain your changes**: Tell the user what you did and why
 
 ## Planning
 
 - For complex tasks, output a numbered plan before executing tools
-- Use this format: "Plan:\n1. First step\n2. Second step\n..."
+- Use this format: Plan: 1. First step 2. Second step ...
 - Keep plans to 3-7 steps
 - Each step should be a clear, actionable task
 - Execute one step at a time using tools
@@ -818,7 +1104,7 @@ You can:
 - Don't modify files outside the project directory
 - Don't run destructive commands without confirmation
 - Don't expose secrets or credentials
-- Don't commit without user approval"#
+- Don't commit without user approval"##
         )
     }
 

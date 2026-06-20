@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
 
-use super::rag::{CodeChunk, CodeChunker, ChunkType};
+use super::ignore::{exclusions_for_project, should_skip_dir};
+use super::rag::{CodeChunk, CodeChunker};
 
 /// RAG usage metrics
 #[derive(Debug, Clone, Default)]
@@ -128,6 +128,7 @@ impl EmbeddingStore {
     pub async fn index_directory(&mut self, dir: &str) -> Result<usize, std::io::Error> {
         let mut total_chunks = 0;
         let mut stack = vec![std::path::PathBuf::from(dir)];
+        let exclusions = exclusions_for_project(dir);
 
         while let Some(current_dir) = stack.pop() {
             let mut entries = match tokio::fs::read_dir(&current_dir).await {
@@ -143,9 +144,8 @@ impl EmbeddingStore {
                 };
 
                 if metadata.is_dir() {
-                    // Skip hidden directories and target directories
                     let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
-                    if dir_name.starts_with('.') || dir_name == "node_modules" || dir_name == "target" {
+                    if should_skip_dir(&dir_name, &exclusions) {
                         continue;
                     }
                     stack.push(path);
@@ -174,9 +174,18 @@ impl EmbeddingStore {
 
     /// Search for relevant chunks using BM25 scoring
     pub fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
+        // Stop words to ignore in queries
+        const STOP_WORDS: &[&str] = &[
+            "how", "what", "why", "when", "where", "which", "does", "do",
+            "is", "are", "was", "were", "the", "a", "an", "in", "on", "at",
+            "to", "for", "of", "with", "by", "from", "it", "this", "that",
+            "and", "or", "but", "not", "can", "will", "should", "would",
+            "could", "may", "might", "must", "shall", "works", "work",
+        ];
+
         let query_keywords: Vec<String> = query
             .split(|c: char| !c.is_alphanumeric() && c != '_')
-            .filter(|w| w.len() > 1)
+            .filter(|w| w.len() > 1 && !STOP_WORDS.contains(&w.to_lowercase().as_str()))
             .map(|w| w.to_lowercase())
             .collect();
 
@@ -184,22 +193,16 @@ impl EmbeddingStore {
             return Vec::new();
         }
 
-        // Calculate BM25 scores for each chunk
-        let mut scores: Vec<(usize, f64)> = Vec::new();
-        let mut seen_chunks = std::collections::HashSet::new();
+        // Accumulate scores per chunk (don't skip duplicates)
+        let mut chunk_scores: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
 
         for keyword in &query_keywords {
-            // Check inverted index for exact matches
+            // Check inverted index for exact matches (BM25)
             if let Some(indices) = self.inverted_index.get(keyword) {
                 let df = *self.doc_freq.get(keyword).unwrap_or(&1) as f64;
                 let idf = ((self.total_docs as f64 - df + 0.5) / (df + 0.5) + 1.0).ln();
 
                 for &chunk_idx in indices {
-                    if seen_chunks.contains(&chunk_idx) {
-                        continue;
-                    }
-                    seen_chunks.insert(chunk_idx);
-
                     let chunk = &self.chunks[chunk_idx];
                     let tf = chunk.keywords.iter().filter(|k| k.to_lowercase() == *keyword).count() as f64;
                     let doc_len = chunk.keywords.len() as f64;
@@ -209,57 +212,65 @@ impl EmbeddingStore {
                     let b = 0.75;
                     let score = idf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b + b * doc_len / self.avg_doc_len));
 
-                    scores.push((chunk_idx, score));
+                    *chunk_scores.entry(chunk_idx).or_insert(0.0) += score;
                 }
             }
 
-            // Also check for partial matches in keywords
+            // Partial matches in keywords (lower weight)
             for (idx, chunk) in self.chunks.iter().enumerate() {
-                if seen_chunks.contains(&idx) {
-                    continue;
-                }
                 for chunk_keyword in &chunk.keywords {
                     if chunk_keyword.to_lowercase().contains(keyword) || keyword.contains(&chunk_keyword.to_lowercase()) {
-                        seen_chunks.insert(idx);
-                        scores.push((idx, 5.0)); // Partial match score
+                        *chunk_scores.entry(idx).or_insert(0.0) += 1.0;
                         break;
                     }
                 }
             }
         }
 
-        // Also check for exact symbol name matches
+        // Bonus: exact symbol name matches
         for (idx, chunk) in self.chunks.iter().enumerate() {
             if let Some(ref name) = chunk.symbol_name {
                 let name_lower = name.to_lowercase();
                 for keyword in &query_keywords {
                     if name_lower.contains(keyword) || keyword.contains(&name_lower) {
-                        if let Some(existing) = scores.iter_mut().find(|(i, _)| *i == idx) {
-                            existing.1 += 10.0; // Bonus for symbol match
-                        } else {
-                            scores.push((idx, 10.0));
-                        }
+                        *chunk_scores.entry(idx).or_insert(0.0) += 10.0;
+                        break;
                     }
                 }
             }
         }
 
-        // Also check content for keyword matches
+        // Bonus: content keyword matches
         for (idx, chunk) in self.chunks.iter().enumerate() {
-            if seen_chunks.contains(&idx) {
-                continue;
-            }
             let content_lower = chunk.content.to_lowercase();
             for keyword in &query_keywords {
                 if content_lower.contains(keyword) {
-                    seen_chunks.insert(idx);
-                    scores.push((idx, 3.0)); // Content match score
+                    *chunk_scores.entry(idx).or_insert(0.0) += 2.0;
                     break;
                 }
             }
         }
 
+        // Bonus: file path relevance — if query keywords appear in the file path
+        for (idx, chunk) in self.chunks.iter().enumerate() {
+            let path_lower = chunk.file_path.to_lowercase();
+            let path_matches = query_keywords.iter().filter(|kw| path_lower.contains(kw.as_str())).count();
+            if path_matches > 0 {
+                *chunk_scores.entry(idx).or_insert(0.0) += (path_matches as f64) * 5.0;
+            }
+        }
+
+        // Bonus: multi-keyword overlap — chunks matching 2+ keywords get a boost
+        for (idx, chunk) in self.chunks.iter().enumerate() {
+            let chunk_text = format!("{} {}", chunk.file_path.to_lowercase(), chunk.content.to_lowercase());
+            let matches = query_keywords.iter().filter(|kw| chunk_text.contains(kw.as_str())).count();
+            if matches >= 2 {
+                *chunk_scores.entry(idx).or_insert(0.0) += (matches as f64) * 3.0;
+            }
+        }
+
         // Sort by score descending
+        let mut scores: Vec<(usize, f64)> = chunk_scores.into_iter().collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
         // Return top results
@@ -327,6 +338,11 @@ impl EmbeddingStore {
     /// Get RAG usage metrics
     pub fn metrics(&self) -> &RagMetrics {
         &self.metrics
+    }
+
+    /// Check if the store has been indexed
+    pub fn is_empty(&self) -> bool {
+        self.chunks.is_empty()
     }
 
     /// Clear the store
