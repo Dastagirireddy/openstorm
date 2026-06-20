@@ -158,6 +158,8 @@ openstorm/
 - [x] Git integration (status, diff, commit)
 - [x] Theme engine (dark/light)
 - [x] Activity bar and status bar
+- [x] LSP integration (client, protocol, commands)
+- [x] DAP debugger (installer, adapter management)
 
 ### AI Agent ✅
 - [x] Multi-provider LLM support (Ollama, OpenAI, Anthropic, LM Studio)
@@ -170,9 +172,6 @@ openstorm/
 
 ### Planned
 - [ ] LanceDB vector search for RAG
-- [ ] Tree-sitter syntax highlighting
-- [ ] LSP integration
-- [ ] DAP debugger
 - [ ] Dynamic tool selection (reduce tool count)
 - [ ] Git blame integration
 - [ ] Performance profiling
