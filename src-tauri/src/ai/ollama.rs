@@ -242,7 +242,7 @@ impl LlmProvider for OllamaProvider {
         // Set options for better text generation
         body["options"] = serde_json::json!({
             "temperature": 0.7,
-            "num_predict": 1024
+            "num_predict": 4096
         });
 
         if let Some(tools) = &request.tools {
@@ -398,7 +398,7 @@ impl LlmProvider for OllamaProvider {
         // Set options for better text generation
         body["options"] = serde_json::json!({
             "temperature": 0.7,
-            "num_predict": 1024
+            "num_predict": 4096
         });
 
         if let Some(tools) = &request.tools {
