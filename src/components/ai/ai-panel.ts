@@ -403,6 +403,18 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
   private async handleToolApproval(approved: boolean) {
     try {
       await invoke('ai_approve_tool', { approved });
+      if (this.activeSessionId) {
+        const messages = this.getMessages();
+        const pending = [...messages].reverse().find(
+          m => m.role === 'tool_approval' && !m.decision
+        );
+        if (pending) {
+          aiState.updateMessage(this.activeSessionId, pending.id, {
+            decision: approved ? 'approved' : 'denied',
+          });
+          this.sessions = [...aiState.sessions];
+        }
+      }
     } catch (e) {
       console.error('[AI] Tool approval failed:', e);
     }

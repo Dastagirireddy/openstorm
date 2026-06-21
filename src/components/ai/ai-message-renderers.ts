@@ -225,6 +225,17 @@ function renderToolApproval(
     return html`<pre class="diff-plain">${data.content || msg.content}</pre>`;
   };
 
+  const isDecided = !!msg.decision;
+
+  if (isDecided) {
+    return html`
+      <div class="ai-msg-thinking tool-use-line">
+        <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
+        <span class="thinking-label">${msg.toolName}</span>
+        <span class="ai-tool-status ${msg.decision === 'approved' ? 'success' : 'error'}" style="margin-left: 0.5em">${msg.decision}</span>
+      </div>`;
+  }
+
   return html`
     <div class="ai-tool-approval">
       <div class="ai-tool-approval-header">

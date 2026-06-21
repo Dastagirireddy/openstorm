@@ -32,6 +32,7 @@ export interface ChatMessage {
   attachments?: AIAttachment[];
   toolName?: string;
   toolArgs?: string;
+  decision?: 'approved' | 'denied';
   isStreaming?: boolean;
   tokens?: TokenUsage;
   cost?: number;
