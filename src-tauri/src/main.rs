@@ -602,6 +602,10 @@ fn main() {
             ai::commands::ai_approve_tool,
             ai::commands::ai_search_files,
             ai::commands::ai_read_file,
+
+            // === AI Sub-agents ===
+            ai::commands::ai_get_orchestrator_status,
+            ai::commands::ai_abort_subagent,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

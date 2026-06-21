@@ -5,6 +5,7 @@ use tokio::sync::{mpsc, Mutex};
 use super::agent::{Agent, AgentEvent};
 use super::lmstudio::LmStudioProvider;
 use super::ollama::OllamaProvider;
+use super::orchestrator::Orchestrator;
 use super::provider::{LlmProvider, Message, ModelInfo, ProviderInfo};
 use crate::config::AiProviderConfig;
 
@@ -16,6 +17,8 @@ pub struct AiState {
     abort_tx: Mutex<Option<mpsc::Sender<()>>>,
     /// Channel to send tool approval responses
     approval_tx: Mutex<Option<mpsc::Sender<bool>>>,
+    /// Orchestrator for sub-agent management
+    orchestrator: Mutex<Option<Arc<Orchestrator>>>,
 }
 
 impl AiState {
@@ -24,6 +27,7 @@ impl AiState {
             active_agent: Mutex::new(None),
             abort_tx: Mutex::new(None),
             approval_tx: Mutex::new(None),
+            orchestrator: Mutex::new(None),
         }
     }
 }
@@ -161,8 +165,32 @@ pub async fn ai_chat(
         .filter_map(|v| serde_json::from_value(v).ok())
         .collect();
 
-    // Create agent
-    let agent = Arc::new(Agent::new(provider, model, project_path));
+    // Create event channel for orchestrator
+    let (orch_event_tx, mut orch_event_rx) = mpsc::channel::<AgentEvent>(64);
+
+    // Initialize orchestrator if not already present
+    let orchestrator = {
+        let mut orch = state.orchestrator.lock().await;
+        if orch.is_none() {
+            let new_orch = Arc::new(Orchestrator::new(
+                provider.clone(),
+                model.clone(),
+                project_path.clone(),
+                orch_event_tx.clone(),
+            ));
+            *orch = Some(new_orch);
+        }
+        orch.as_ref().unwrap().clone()
+    };
+
+    // Create agent with orchestrator support
+    let agent = Arc::new(Agent::with_orchestrator(
+        provider,
+        model,
+        project_path,
+        super::permissions::PermissionProfile::Smart,
+        orchestrator,
+    ));
 
     // Store active agent
     {
@@ -190,9 +218,11 @@ pub async fn ai_chat(
     let mut final_response = String::new();
     let mut _aborted = false;
 
+    let mut agent_finished = false;
+
     loop {
         tokio::select! {
-            event = rx.recv() => {
+            event = rx.recv(), if !agent_finished => {
                 match event {
                     Some(event) => {
                         // Emit event to frontend
@@ -208,10 +238,23 @@ pub async fn ai_chat(
                             _ => {}
                         }
                     }
-                    None => break, // Channel closed, agent finished
+                    None => {
+                        agent_finished = true;
+                    }
                 }
             }
-            _ = abort_rx.recv() => {
+            orch_event = orch_event_rx.recv() => {
+                // Forward orchestrator events to frontend
+                if let Some(event) = orch_event {
+                    let _ = app.emit("ai-agent-event", &event);
+                } else {
+                    // Orchestrator channel closed
+                    if agent_finished {
+                        break;
+                    }
+                }
+            }
+            _ = abort_rx.recv(), if !agent_finished => {
                 // Abort requested
                 _aborted = true;
                 break;
@@ -255,6 +298,38 @@ pub async fn ai_approve_tool(state: State<'_, AiState>, approved: bool) -> Resul
         Ok(())
     } else {
         Err("No pending tool approval".to_string())
+    }
+}
+
+// ── Sub-agent management ─────────────────────────────────────────
+
+#[tauri::command]
+pub async fn ai_get_orchestrator_status(state: State<'_, AiState>) -> Result<serde_json::Value, String> {
+    let orch = state.orchestrator.lock().await;
+    match orch.as_ref() {
+        Some(orchestrator) => {
+            let pending = orchestrator.pending_count().await;
+            let active = orchestrator.active_count().await;
+            Ok(serde_json::json!({
+                "initialized": true,
+                "pending_tasks": pending,
+                "active_agents": active,
+            }))
+        }
+        None => Ok(serde_json::json!({
+            "initialized": false,
+            "pending_tasks": 0,
+            "active_agents": 0,
+        })),
+    }
+}
+
+#[tauri::command]
+pub async fn ai_abort_subagent(state: State<'_, AiState>, task_id: String) -> Result<(), String> {
+    let orch = state.orchestrator.lock().await;
+    match orch.as_ref() {
+        Some(orchestrator) => orchestrator.abort_task(&task_id).await,
+        None => Err("Orchestrator not initialized".to_string()),
     }
 }
 

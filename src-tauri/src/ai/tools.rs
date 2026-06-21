@@ -13,6 +13,8 @@ pub struct ToolRegistry {
     pub sandbox: Option<super::sandbox::Sandbox>,
     /// Embedding store for RAG search (optional)
     pub embedding_store: Option<Arc<Mutex<EmbeddingStore>>>,
+    /// Orchestrator for sub-agent spawning (optional)
+    pub orchestrator: Option<Arc<super::orchestrator::Orchestrator>>,
 }
 
 impl ToolRegistry {
@@ -21,6 +23,7 @@ impl ToolRegistry {
             project_path,
             sandbox: None,
             embedding_store: None,
+            orchestrator: None,
         }
     }
 
@@ -30,6 +33,7 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: None,
+            orchestrator: None,
         }
     }
 
@@ -43,6 +47,22 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
+            orchestrator: None,
+        }
+    }
+
+    /// Create a new tool registry with orchestrator for sub-agents
+    pub fn with_orchestrator(
+        project_path: String,
+        sandbox: super::sandbox::Sandbox,
+        embedding_store: Arc<Mutex<EmbeddingStore>>,
+        orchestrator: Arc<super::orchestrator::Orchestrator>,
+    ) -> Self {
+        Self {
+            project_path,
+            sandbox: Some(sandbox),
+            embedding_store: Some(embedding_store),
+            orchestrator: Some(orchestrator),
         }
     }
 
@@ -438,6 +458,68 @@ impl ToolRegistry {
                     }),
                 },
             },
+            // SUB-AGENT TOOLS
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "spawn_agent".to_string(),
+                    description: "Spawn a sub-agent to handle a complex task. The sub-agent runs independently with its own context. Use for research, exploration, or parallel tasks. Returns the sub-agent's task ID.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "task": {
+                                "type": "string",
+                                "description": "Description of the task for the sub-agent to perform"
+                            },
+                            "strategy": {
+                                "type": "string",
+                                "enum": ["simple", "explore", "refactor"],
+                                "description": "Execution strategy: 'simple' for direct tasks, 'explore' for read-only research, 'refactor' for multi-file changes"
+                            }
+                        },
+                        "required": ["task"]
+                    }),
+                },
+            },
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "run_subagent".to_string(),
+                    description: "Run a sub-agent synchronously and wait for its result. Use for tasks that need to complete before continuing. Returns the sub-agent's output.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "task": {
+                                "type": "string",
+                                "description": "Description of the task for the sub-agent to perform"
+                            },
+                            "strategy": {
+                                "type": "string",
+                                "enum": ["simple", "explore", "refactor"],
+                                "description": "Execution strategy: 'simple' for direct tasks, 'explore' for read-only research, 'refactor' for multi-file changes"
+                            }
+                        },
+                        "required": ["task"]
+                    }),
+                },
+            },
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "get_subagent_status".to_string(),
+                    description: "Get the status and result of a sub-agent task. Use to check if a spawned sub-agent has completed.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "task_id": {
+                                "type": "string",
+                                "description": "The task ID returned by spawn_agent"
+                            }
+                        },
+                        "required": ["task_id"]
+                    }),
+                },
+            },
         ]
     }
 
@@ -468,6 +550,9 @@ impl ToolRegistry {
             "attach_file" => self.attach_file(&args).await,
             "attach_multiple_files" => self.attach_multiple_files(&args).await,
             "search_files" => self.search_files(&args).await,
+            "spawn_agent" => self.spawn_agent(&args).await,
+            "run_subagent" => self.run_subagent(&args).await,
+            "get_subagent_status" => self.get_subagent_status(&args).await,
             _ => {
                 let available = vec![
                     "read_file", "write_file", "edit_file", "list_directory",
@@ -475,7 +560,7 @@ impl ToolRegistry {
                     "run_command", "run_tests", "get_diagnostics",
                     "git_status", "git_diff", "git_commit", "semantic_search",
                     "print_tree", "rag_metrics", "attach_file", "attach_multiple_files",
-                    "search_files",
+                    "search_files", "spawn_agent", "run_subagent", "get_subagent_status",
                 ];
                 format!(
                     "Unknown tool '{}'. Available tools: {}. Use one of these tools instead.",
@@ -1538,10 +1623,91 @@ impl ToolRegistry {
     /// Get only the essential tool definitions (reduced set for better model focus)
     pub fn essential_definitions(&self) -> Vec<ToolDefinition> {
         let all = self.definitions();
-        let essential = ["read_file", "write_file", "edit_file", "search_code", "run_command", "get_diagnostics"];
+        let essential = [
+            "read_file", "write_file", "edit_file", "search_code",
+            "run_command", "get_diagnostics",
+            "spawn_agent", "run_subagent", "get_subagent_status",
+        ];
         all.into_iter()
             .filter(|t| essential.contains(&t.function.name.as_str()))
             .collect()
+    }
+
+    // ── SUB-AGENT TOOL IMPLEMENTATIONS ──────────────────────────
+
+    /// Spawn a sub-agent to handle a task asynchronously
+    async fn spawn_agent(&self, args: &serde_json::Value) -> String {
+        let task = args["task"].as_str().unwrap_or("");
+        let strategy = args["strategy"].as_str().unwrap_or("simple");
+
+        let orchestrator = match &self.orchestrator {
+            Some(o) => o,
+            None => return "Sub-agent spawning not available (orchestrator not initialized)".to_string(),
+        };
+
+        let task_id = orchestrator.submit_request(task.to_string()).await;
+
+        // Spawn a background task to process this immediately
+        let orch = orchestrator.clone();
+        tokio::spawn(async move {
+            let _ = orch.process_next().await;
+        });
+
+        format!(
+            "Sub-agent spawned with task ID: {}. The sub-agent is running in the background.",
+            task_id
+        )
+    }
+
+    /// Run a sub-agent synchronously and wait for its result
+    async fn run_subagent(&self, args: &serde_json::Value) -> String {
+        let task = args["task"].as_str().unwrap_or("");
+        let strategy = args["strategy"].as_str().unwrap_or("simple");
+
+        let orchestrator = match &self.orchestrator {
+            Some(o) => o,
+            None => return "Sub-agent spawning not available (orchestrator not initialized)".to_string(),
+        };
+
+        // Submit and process immediately
+        let task_id = orchestrator.submit_request(task.to_string()).await;
+
+        match orchestrator.process_next().await {
+            Ok(result) => {
+                format!(
+                    "Sub-agent completed (task: {}):\n{}\n\nTool calls made: {}",
+                    result.task_id, result.output, result.tool_calls_made
+                )
+            }
+            Err(e) => format!("Sub-agent failed: {}", e),
+        }
+    }
+
+    /// Get the status of a sub-agent task
+    async fn get_subagent_status(&self, args: &serde_json::Value) -> String {
+        let task_id = args["task_id"].as_str().unwrap_or("");
+
+        let orchestrator = match &self.orchestrator {
+            Some(o) => o,
+            None => return "Sub-agent status not available (orchestrator not initialized)".to_string(),
+        };
+
+        match orchestrator.get_result(task_id).await {
+            Some(result) => {
+                format!(
+                    "Task {} completed:\nSuccess: {}\nOutput: {}\nTool calls: {}",
+                    result.task_id, result.success, result.output, result.tool_calls_made
+                )
+            }
+            None => {
+                let pending = orchestrator.pending_count().await;
+                let active = orchestrator.active_count().await;
+                format!(
+                    "Task {} not yet completed.\nPending tasks: {}\nActive agents: {}",
+                    task_id, pending, active
+                )
+            }
+        }
     }
 }
 

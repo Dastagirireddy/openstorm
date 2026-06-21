@@ -218,6 +218,44 @@ impl Agent {
         }
     }
 
+    /// Create an agent with orchestrator for sub-agent support
+    pub fn with_orchestrator(
+        provider: Arc<dyn LlmProvider>,
+        model: String,
+        project_path: String,
+        profile: PermissionProfile,
+        orchestrator: Arc<super::orchestrator::Orchestrator>,
+    ) -> Self {
+        let project_context = ProjectContext::detect(&project_path);
+        let (approval_tx, approval_rx) = mpsc::channel(1);
+        let sandbox = Sandbox::new();
+        let permissions = PermissionSystem::new(profile);
+        let embedding_store = Arc::new(Mutex::new(EmbeddingStore::new()));
+        let tools = ToolRegistry::with_orchestrator(
+            project_path.clone(),
+            sandbox.clone(),
+            embedding_store.clone(),
+            orchestrator,
+        );
+        let cost_tracker = create_shared_cost_tracker();
+
+        Self {
+            provider,
+            model,
+            tools,
+            max_iterations: 15,
+            project_context,
+            approval_rx: Mutex::new(Some(approval_rx)),
+            approval_tx: Mutex::new(Some(approval_tx)),
+            plan_steps: Mutex::new(Vec::new()),
+            context_manager: Mutex::new(ContextManager::new(8192)),
+            permissions,
+            sandbox,
+            embedding_store,
+            cost_tracker,
+        }
+    }
+
     /// Index the project directory for RAG
     pub async fn index_project(&self) -> Result<usize, std::io::Error> {
         let mut store = self.embedding_store.lock().await;
@@ -559,7 +597,11 @@ impl Agent {
                 }
 
                 // No-text detector: if model produces only tool calls with no text for N iterations
-                if full_content.trim().is_empty() {
+                // Exclude spawn_agent/subagent calls - those are legitimate parallel work
+                let is_spawning = tool_calls.iter().any(|c| {
+                    matches!(c.function.name.as_str(), "spawn_agent" | "run_subagent" | "get_subagent_status")
+                });
+                if full_content.trim().is_empty() && !is_spawning {
                     consecutive_no_text += 1;
                 } else {
                     consecutive_no_text = 0;
@@ -1005,6 +1047,25 @@ You can:
 - Execute tests (auto-detects framework)
 - Check LSP diagnostics (errors/warnings)
 - View and create git commits
+- **Spawn sub-agents** for parallel work (use spawn_agent or run_subagent)
+
+## Sub-Agents
+
+You have access to sub-agent tools for parallel execution:
+- `spawn_agent`: Spawn a sub-agent to work on a task asynchronously. Returns a task ID.
+- `run_subagent`: Run a sub-agent synchronously and wait for its result.
+- `get_subagent_status`: Check if a spawned sub-agent has completed.
+
+**When to use sub-agents (ONLY these cases):**
+- User EXPLICITLY says "spawn agents" or "use sub-agents" or "parallel"
+- User provides a numbered list of separate tasks to run in parallel
+- NEVER use sub-agents for single commands or simple tasks - handle them directly
+
+**Example (ONLY use when user explicitly requests parallel agents):**
+User: "Spawn 3 sub-agents to: 1) Search for TODOs, 2) Find unused imports, 3) Check for secrets"
+You: Call spawn_agent three times with each task, then report the task IDs.
+
+**For simple tasks like "run cargo test" or "create a file", handle directly with run_command, write_file, etc.**
 
 ## CRITICAL: How to Respond
 

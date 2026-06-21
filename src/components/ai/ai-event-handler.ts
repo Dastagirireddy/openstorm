@@ -17,6 +17,11 @@ export interface AgentEvent {
   hunks?: any[];
   language?: string;
   command?: string;
+  // Sub-agent events
+  task_id?: string;
+  description?: string;
+  success?: boolean;
+  tool_calls_made?: number;
 }
 
 export interface EventHandlerContext {
@@ -43,6 +48,15 @@ export function handleAgentEvent(
   switch (event.type) {
     case 'thinking':
       state._iterationStartTime = Date.now();
+      // Show sub-agent status messages in UI
+      if (event.message && (event.message.includes('Sub-agent') || event.message.includes('sub-agent'))) {
+        ctx.addMessage(sessionId, {
+          id: `subagent-${Date.now()}`,
+          role: 'thinking',
+          content: event.message,
+          timestamp: Date.now(),
+        });
+      }
       break;
 
     case 'tool_use':
@@ -131,19 +145,30 @@ export function handleAgentEvent(
       break;
 
     case 'response': {
-      const msgs = ctx.getMessages();
-      const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant');
-      if (lastAssistant) {
-        ctx.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
-      } else if (event.content) {
-        // No assistant message yet (e.g., forced final answer from loop detection)
+      // Sub-agent completion - add as a new message
+      if (event.content && (event.content.includes('Sub-agent completed') || event.content.includes('Sub-agent failed'))) {
         ctx.addMessage(sessionId, {
-          id: `resp-${Date.now()}`,
+          id: `subagent-result-${Date.now()}`,
           role: 'assistant',
           content: event.content,
           timestamp: Date.now(),
           isStreaming: false,
         });
+      } else {
+        // Regular response - update existing or create new
+        const msgs = ctx.getMessages();
+        const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant');
+        if (lastAssistant) {
+          ctx.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
+        } else if (event.content) {
+          ctx.addMessage(sessionId, {
+            id: `resp-${Date.now()}`,
+            role: 'assistant',
+            content: event.content,
+            timestamp: Date.now(),
+            isStreaming: false,
+          });
+        }
       }
       if (state.responseStartTime) {
         state.lastResponseTime = (Date.now() - state.responseStartTime) / 1000;
@@ -167,6 +192,24 @@ export function handleAgentEvent(
       });
       aiState.setThinking(false);
       aiState.setStreaming(false);
+      break;
+
+    case 'sub_task_spawned':
+      ctx.addMessage(sessionId, {
+        id: `subtask-${Date.now()}`,
+        role: 'thinking',
+        content: `Sub-agent spawned: ${event.description || 'Unknown task'}`,
+        timestamp: Date.now(),
+      });
+      break;
+
+    case 'sub_task_completed':
+      ctx.addMessage(sessionId, {
+        id: `subtask-done-${Date.now()}`,
+        role: 'thinking',
+        content: `Sub-agent completed: ${event.description || 'Task finished'}`,
+        timestamp: Date.now(),
+      });
       break;
   }
 }
