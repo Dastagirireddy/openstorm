@@ -19,6 +19,8 @@ import { scopeLines } from './scope-lines';
 import { tooltipHighlight } from './tooltip-highlight';
 import { history, historyKeymap, defaultKeymap, undo, redo } from '@codemirror/commands';
 import { closeBrackets } from '@codemirror/autocomplete';
+import { search, searchKeymap } from '@codemirror/search';
+import { createSearchPanel, searchPanelTheme, toggleReplaceMode } from './search-panel.js';
 import { customFoldGutter } from '../utils';
 import { getSyntaxHighlighting } from './editor-syntax.js';
 import { breakpointGutter, breakpointField, debugLineHighlight, inlineValueField, inlineValueDecorations } from './editor-breakpoints.js';
@@ -52,6 +54,9 @@ export function getCommonExtensions(
     bracketMatching(),
     closeBrackets(),
     indentOnInput(),
+    // Search panel (Cmd+F / Cmd+R) — IntelliJ-style custom panel
+    search({ top: true, createPanel: createSearchPanel }),
+    searchPanelTheme,
     // Scope lines based on syntax tree structure
     ...scopeLines(),
     // Syntax highlighting for code blocks in tooltips
@@ -93,6 +98,9 @@ export function getCommonExtensions(
       },
       ...historyKeymap,
       ...defaultKeymap,
+      // Override Mod-r to open search with replace visible
+      { key: 'Mod-r', run: (view) => { toggleReplaceMode(view); return true; } },
+      ...searchKeymap,
     ]),
     // Word wrap from settings
     ...(settingsStore.get('wordWrap') ? [EditorView.lineWrapping] : []),
