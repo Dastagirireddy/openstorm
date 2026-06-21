@@ -11,6 +11,7 @@ export class AIStateManager {
   ollamaConnected: boolean = false;
   isThinking: boolean = false;
   isStreaming: boolean = false;
+  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {
     this.loadFromStorage();
@@ -43,14 +44,21 @@ export class AIStateManager {
   }
 
   private saveToStorage(): void {
-    try {
-      localStorage.setItem('ai-sessions', JSON.stringify(this.sessions));
-      if (this.activeSessionId) {
-        localStorage.setItem('ai-active-session', this.activeSessionId);
-      }
-    } catch (e) {
-      console.error('[AI State] Failed to save to storage:', e);
+    // Debounce saves during streaming to prevent UI freezing
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
     }
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null;
+      try {
+        localStorage.setItem('ai-sessions', JSON.stringify(this.sessions));
+        if (this.activeSessionId) {
+          localStorage.setItem('ai-active-session', this.activeSessionId);
+        }
+      } catch (e) {
+        console.error('[AI State] Failed to save to storage:', e);
+      }
+    }, this.isStreaming ? 500 : 0);
   }
 
   private emit(event: string, data?: any): void {
