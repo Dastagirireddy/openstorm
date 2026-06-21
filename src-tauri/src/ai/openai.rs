@@ -458,6 +458,7 @@ impl LlmProvider for OpenAiProvider {
                                             .and_then(|c| c["finish_reason"].as_str())
                                             .map(|s| s.to_string()),
                                     }],
+                                    usage: None,
                                 };
 
                                 if tx.send(chunk).await.is_err() {

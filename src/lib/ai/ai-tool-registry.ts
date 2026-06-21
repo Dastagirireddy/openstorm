@@ -75,6 +75,14 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
     color: 'var(--ai-text-muted)',
     category: 'info',
   },
+  // Network operations
+  webfetch: {
+    name: 'webfetch',
+    description: 'Fetch content from a URL',
+    icon: 'lucide:globe',
+    color: 'var(--ai-accent)',
+    category: 'info',
+  },
 };
 
 /**
@@ -157,6 +165,8 @@ export function getToolLabel(toolName: string, args: string | undefined): string
         return `Listing directory ${parsed.path || '.'}`;
       case 'git_status':
         return 'Checking git status';
+      case 'webfetch':
+        return `Fetching ${parsed.url || ''}`;
       default:
         return toolName;
     }
@@ -186,6 +196,8 @@ export function getToolArgsSummary(toolName: string, args: string | undefined): 
         return parsed.pattern || parsed.query || '';
       case 'list_dir':
         return parsed.path || '.';
+      case 'webfetch':
+        return parsed.url || '';
       default:
         return Object.keys(parsed).slice(0, 2).join(', ');
     }

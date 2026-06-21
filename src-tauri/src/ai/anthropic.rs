@@ -468,6 +468,7 @@ impl LlmProvider for AnthropicProvider {
                                                 },
                                                 finish_reason: None,
                                             }],
+                                            usage: None,
                                         };
 
                                         if tx.send(chunk).await.is_err() {
@@ -510,6 +511,7 @@ impl LlmProvider for AnthropicProvider {
                                                         },
                                                         finish_reason: None,
                                                     }],
+                                                    usage: None,
                                                 };
                                                 if tx.send(chunk).await.is_err() {
                                                     return;
@@ -548,8 +550,9 @@ impl LlmProvider for AnthropicProvider {
                                                         }]),
                                                     },
                                                     finish_reason: None,
-                                                }],
-                                            };
+                                                    }],
+                                                    usage: None,
+                                                };
                                             if tx.send(chunk).await.is_err() {
                                                 return;
                                             }
@@ -574,6 +577,7 @@ impl LlmProvider for AnthropicProvider {
                                                 },
                                                 finish_reason: stop_reason,
                                             }],
+                                            usage: None,
                                         };
                                         if tx.send(chunk).await.is_err() {
                                             return;

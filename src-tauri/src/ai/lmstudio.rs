@@ -345,6 +345,7 @@ impl LlmProvider for LmStudioProvider {
                                             .and_then(|c| c["finish_reason"].as_str())
                                             .map(|s| s.to_string()),
                                     }],
+                                    usage: None,
                                 };
 
                                 if tx.send(chunk).await.is_err() {

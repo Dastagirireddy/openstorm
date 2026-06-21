@@ -34,10 +34,7 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
     }
 
     case 'thinking':
-      return html`
-        <div class="ai-msg-thinking completed">
-          <span class="thinking-label">+ Thought: ${msg.content}</span>
-        </div>`;
+      return html``;
 
     case 'assistant': {
       const renderedHtml = renderMarkdown(msg.content || '');

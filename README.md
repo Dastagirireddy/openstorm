@@ -7,10 +7,12 @@ A high-performance AI-powered IDE built with Tauri, Rust, and Lit.js. Features a
 ### AI Agent
 - **Multi-Provider LLM Support**: Ollama (local), OpenAI, Anthropic, LM Studio
 - **RAG (Retrieval-Augmented Generation)**: BM25 keyword search with auto-context injection
-- **Tool Calling**: Read/write/edit files, search code, run commands, check diagnostics
+- **Tool Calling**: Read/write/edit files, search code, run commands, check diagnostics, fetch URLs
+- **Web Fetch**: Native HTTP client for fetching URLs (docs, APIs, error pages) without shell commands
 - **Thinking Model Support**: Captures reasoning tokens from thinking models (e.g., DeepSeek)
 - **Mermaid Diagrams**: Renders mermaid diagrams from LLM responses
 - **Token Diet**: Smart truncation, dynamic tool selection, and context optimization
+- **Permission System**: Configurable allow/ask/deny rules per tool (see `opencode.json`)
 
 ### Core Editor
 - **Multiple Buffers**: Tabbed interface for opening multiple files
@@ -130,6 +132,7 @@ openstorm/
 │           ├── rag.rs            # Code chunking, indexing
 │           ├── tools.rs          # Tool definitions & execution
 │           └── ignore.rs         # Project-type detection, exclusions
+├── opencode.json                # AI permission rules (allow/ask/deny per tool)
 ├── package.json
 ├── Cargo.toml
 ├── vite.config.ts
@@ -165,7 +168,7 @@ openstorm/
 - [x] Multi-provider LLM support (Ollama, OpenAI, Anthropic, LM Studio)
 - [x] RAG with BM25 keyword search
 - [x] Auto-context injection
-- [x] Tool calling (read, write, edit, search, run)
+- [x] Tool calling (read, write, edit, search, run, webfetch)
 - [x] Thinking model support (DeepSeek, etc.)
 - [x] Mermaid diagram rendering
 - [x] Token usage tracking

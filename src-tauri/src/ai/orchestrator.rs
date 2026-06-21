@@ -607,6 +607,7 @@ mod tests {
                         },
                         finish_reason: Some("stop".to_string()),
                     }],
+                    usage: None,
                 }).await;
             });
             Ok(rx)

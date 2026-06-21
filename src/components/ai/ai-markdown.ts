@@ -35,7 +35,7 @@ export function highlightKeywords(text: string): string {
   const filePaths = /\b([a-zA-Z0-9_\-\.\/]+\.(rs|ts|js|tsx|jsx|py|go|java|cpp|c|h|json|toml|yaml|yml|md|txt))\b/g;
   const functions = /\b([a-z_][a-z_0-9]*)\s*\(/g;
   const types = /\b([A-Z][a-zA-Z0-9_]*)\b/g;
-  const comments = /(\/\/.*$|\/\*[\s\S]*?\*\/)/gm;
+  const comments = /(\/\/(?![a-zA-Z]|$).*$|\/\*[\s\S]*?\*\/)/gm;
   
   let result = text;
   result = result.replace(comments, '<span class="ai-hl-comment">$1</span>');

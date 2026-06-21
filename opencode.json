@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "permission": {
+    "webfetch": "allow",
+    "read_file": "allow",
+    "list_directory": "allow",
+    "search_code": "allow",
+    "search_files": "allow",
+    "find_references": "allow",
+    "get_definition": "allow",
+    "git_status": "allow",
+    "git_diff": "allow",
+    "print_tree": "allow",
+    "rag_metrics": "allow",
+    "semantic_search": "allow",
+    "get_diagnostics": "allow",
+    "bash": "ask",
+    "edit": "ask",
+    "task": "ask",
+    "skill": "ask"
+  }
+}

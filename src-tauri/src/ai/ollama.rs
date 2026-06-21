@@ -469,10 +469,10 @@ impl LlmProvider for OllamaProvider {
                                 let content = val["message"]["content"].as_str().unwrap_or("");
                                 let thinking = val["message"]["thinking"].as_str().unwrap_or("");
 
+                                // Only stream actual content, not thinking/reasoning.
+                                // Thinking is internal model reasoning and should not be shown to users.
                                 let effective_content = if !content.is_empty() {
                                     content
-                                } else if !thinking.is_empty() {
-                                    thinking
                                 } else {
                                     ""
                                 };
@@ -527,6 +527,13 @@ impl LlmProvider for OllamaProvider {
                                             None
                                         },
                                     }],
+                                    usage: val.get("usage").and_then(|u| {
+                                        Some(Usage {
+                                            prompt_tokens: u["prompt_tokens"].as_u64()? as u32,
+                                            completion_tokens: u["completion_tokens"].as_u64()? as u32,
+                                            total_tokens: u["total_tokens"].as_u64().unwrap_or(0) as u32,
+                                        })
+                                    }),
                                 };
 
                                 if tx.send(chunk).await.is_err() {

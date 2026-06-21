@@ -499,8 +499,8 @@ impl Agent {
                         }
 
                         // Capture usage from final chunk
-                        if chunk.choices.first().and_then(|c| c.finish_reason.as_ref()).is_some() {
-                            // Usage might be in the final chunk for some providers
+                        if let Some(u) = &chunk.usage {
+                            usage = Some(u.clone());
                         }
                     }
 

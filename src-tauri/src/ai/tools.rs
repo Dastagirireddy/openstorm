@@ -458,6 +458,28 @@ impl ToolRegistry {
                     }),
                 },
             },
+            // NETWORK TOOLS
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "webfetch".to_string(),
+                    description: "Fetch content from a URL. Returns the response body as text. Use for reading docs, API responses, error pages, etc.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "url": {
+                                "type": "string",
+                                "description": "The URL to fetch"
+                            },
+                            "max_bytes": {
+                                "type": "integer",
+                                "description": "Maximum bytes to return (default: 50000). Content beyond this is truncated."
+                            }
+                        },
+                        "required": ["url"]
+                    }),
+                },
+            },
             // SUB-AGENT TOOLS
             ToolDefinition {
                 tool_type: "function".to_string(),
@@ -550,6 +572,7 @@ impl ToolRegistry {
             "attach_file" => self.attach_file(&args).await,
             "attach_multiple_files" => self.attach_multiple_files(&args).await,
             "search_files" => self.search_files(&args).await,
+            "webfetch" => self.webfetch(&args).await,
             "spawn_agent" => self.spawn_agent(&args).await,
             "run_subagent" => self.run_subagent(&args).await,
             "get_subagent_status" => self.get_subagent_status(&args).await,
@@ -560,7 +583,8 @@ impl ToolRegistry {
                     "run_command", "run_tests", "get_diagnostics",
                     "git_status", "git_diff", "git_commit", "semantic_search",
                     "print_tree", "rag_metrics", "attach_file", "attach_multiple_files",
-                    "search_files", "spawn_agent", "run_subagent", "get_subagent_status",
+                    "search_files", "webfetch", "spawn_agent", "run_subagent",
+                    "get_subagent_status",
                 ];
                 format!(
                     "Unknown tool '{}'. Available tools: {}. Use one of these tools instead.",
@@ -1492,6 +1516,81 @@ impl ToolRegistry {
         results.join("\n\n")
     }
 
+    /// Fetch content from a URL
+    async fn webfetch(&self, args: &serde_json::Value) -> String {
+        let url = args["url"].as_str().unwrap_or("");
+        let max_bytes = args["max_bytes"].as_u64().unwrap_or(50000) as usize;
+
+        if url.is_empty() {
+            return "Error: no URL provided".to_string();
+        }
+
+        // Validate URL scheme
+        if !url.starts_with("http://") && !url.starts_with("https://") {
+            return format!("Error: unsupported URL scheme '{}'. Only http:// and https:// are supported.", 
+                url.split(':').next().unwrap_or(""));
+        }
+
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::limited(5))
+            .build();
+
+        let client = match client {
+            Ok(c) => c,
+            Err(e) => return format!("Error creating HTTP client: {}", e),
+        };
+
+        let response = client.get(url).send().await;
+
+        match response {
+            Ok(resp) => {
+                let status = resp.status();
+                let content_type = resp.headers()
+                    .get("content-type")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("unknown")
+                    .to_string();
+
+                if !status.is_success() {
+                    return format!("HTTP {} {}\nContent-Type: {}", status.as_u16(), status.canonical_reason().unwrap_or("Unknown"), content_type);
+                }
+
+                let body = resp.bytes().await;
+                match body {
+                    Ok(bytes) => {
+                        let total_size = bytes.len();
+                        let body_str = String::from_utf8_lossy(&bytes);
+                        
+                        let truncated = if body_str.len() > max_bytes {
+                            &body_str[..max_bytes]
+                        } else {
+                            &body_str
+                        };
+
+                        let mut result = format!("URL: {}\nStatus: {} {}\nContent-Type: {}\nSize: {} bytes{}\n\n{}",
+                            url,
+                            status.as_u16(),
+                            status.canonical_reason().unwrap_or(""),
+                            content_type,
+                            total_size,
+                            if total_size > max_bytes { " (truncated)" } else { "" },
+                            truncated
+                        );
+
+                        if total_size > max_bytes {
+                            result.push_str(&format!("\n\n... (truncated at {} of {} bytes)", max_bytes, total_size));
+                        }
+
+                        result
+                    }
+                    Err(e) => format!("Error reading response body: {}", e),
+                }
+            }
+            Err(e) => format!("Error fetching URL: {}", e),
+        }
+    }
+
     /// Search for files by name pattern
     async fn search_files(&self, args: &serde_json::Value) -> String {
         let query = args["query"].as_str().unwrap_or("");
@@ -1625,7 +1724,7 @@ impl ToolRegistry {
         let all = self.definitions();
         let essential = [
             "read_file", "write_file", "edit_file", "search_code",
-            "run_command", "get_diagnostics",
+            "run_command", "get_diagnostics", "webfetch",
             "spawn_agent", "run_subagent", "get_subagent_status",
         ];
         all.into_iter()
