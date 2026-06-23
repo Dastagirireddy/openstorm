@@ -13,6 +13,7 @@ import { handleAgentEvent, type AgentEvent } from './ai-event-handler.js';
 import { AI_COMMANDS, AI_TIPS, handleCommand, formatTokenCount } from './ai-commands.js';
 import { parseFileMentions, readMentionedFiles, buildContextMessage, searchFiles } from './ai-file-utils.js';
 import { renderPanel, type PanelRenderState, type PanelRenderActions } from './ai-panel-renderer.js';
+import { getToolLabel } from '../../lib/ai/ai-tool-registry.js';
 import {
   handleInput as handleInputAction,
   handleKeyDown as handleKeyDownAction,
@@ -50,6 +51,7 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
   @state() private fileSuggestions: string[] = [];
   @state() private fileFilter = '';
   @state() private selectedFileIndex = 0;
+  @state() private pendingApproval: { toolName: string; preview: string; toolArgs: string } | null = null;
   private searchFilesDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private searchFilesRequestId = 0;
   private _iterationStartTime: number = 0;
@@ -270,6 +272,7 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
       scrollToBottom: () => this.scrollToBottom(),
       updateSessionStats: () => this.updateSessionStats(),
       formatDuration: (s) => this.formatDuration(s),
+      setPendingApproval: (approval) => this.setPendingApproval(approval),
     }, {
       _iterationStartTime: this._iterationStartTime,
       responseStartTime: this.responseStartTime,
@@ -401,23 +404,32 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
   }
 
   private async handleToolApproval(approved: boolean) {
+    const approval = this.pendingApproval;
     try {
       await invoke('ai_approve_tool', { approved });
-      if (this.activeSessionId) {
-        const messages = this.getMessages();
-        const pending = [...messages].reverse().find(
-          m => m.role === 'tool_approval' && !m.decision
-        );
-        if (pending) {
-          aiState.updateMessage(this.activeSessionId, pending.id, {
-            decision: approved ? 'approved' : 'denied',
-          });
-          this.sessions = [...aiState.sessions];
-        }
+      // Add a compact approved/denied line in the chat
+      if (this.activeSessionId && approval) {
+        const toolLabel = getToolLabel(approval.toolName, approval.toolArgs);
+        aiState.addMessage(this.activeSessionId, {
+          id: `approval-decision-${Date.now()}`,
+          role: 'tool_use',
+          content: approved ? `Approved ${toolLabel}` : `Denied ${toolLabel}`,
+          timestamp: Date.now(),
+          toolName: approval.toolName,
+          toolArgs: approval.toolArgs,
+          decision: approved ? 'approved' : 'denied',
+        });
+        this.sessions = [...aiState.sessions];
       }
+      // Clear the pending approval modal
+      this.pendingApproval = null;
     } catch (e) {
       console.error('[AI] Tool approval failed:', e);
     }
+  }
+
+  private setPendingApproval(approval: { toolName: string; preview: string; toolArgs: string } | null) {
+    this.pendingApproval = approval;
   }
 
   private handleKeyDown(e: KeyboardEvent) {
@@ -618,6 +630,7 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
         sessionStats: this.sessionStats,
         lastResponseTime: this.lastResponseTime,
         lastUsage: this.lastUsage,
+        pendingApproval: this.pendingApproval,
       },
       {
         clearSession: () => this.clearSession(),

@@ -23,6 +23,11 @@ export interface AgentEvent {
   description?: string;
   success?: boolean;
   tool_calls_made?: number;
+  // Tool output streaming
+  output_type?: string;
+  data?: string;
+  // Tool input required
+  prompt?: string;
 }
 
 export interface EventHandlerContext {
@@ -33,6 +38,7 @@ export interface EventHandlerContext {
   scrollToBottom: () => void;
   updateSessionStats: () => void;
   formatDuration: (seconds: number) => string;
+  setPendingApproval: (approval: { toolName: string; preview: string; toolArgs: string } | null) => void;
 }
 
 export function handleAgentEvent(
@@ -91,20 +97,66 @@ export function handleAgentEvent(
       if (lastToolUse) {
         ctx.updateMessage(sessionId, lastToolUse.id, {
           content: `Used ${event.tool_name} — Done`,
+          toolCompleted: true,
         });
       }
       // Don't add tool_result message — raw file contents are noise in the chat
       break;
     }
 
-    case 'tool_approval_required': {
+    case 'tool_output': {
+      // Find the most recent tool_use message for this tool_name
+      const messages = ctx.getMessages();
+      const toolMsg = [...messages].reverse().find(
+        m => m.role === 'tool_use' && m.toolName === event.tool_name && !m.content.includes('Done')
+      );
+      if (toolMsg) {
+        const existingOutput = toolMsg.streamingOutput || '';
+        const newData = event.data || '';
+        // Handle carriage return for progress updates (overwrite last line)
+        let updatedOutput: string;
+        if (newData.includes('\r') || (existingOutput.includes('\n') && newData === '')) {
+          // Progress update: replace the last line or append
+          const lines = existingOutput.split('\n');
+          const cleanData = newData.replace(/\r/g, '').trim();
+          if (lines.length > 0 && lines[lines.length - 1] !== '') {
+            lines[lines.length - 1] = cleanData;
+          } else {
+            lines.push(cleanData);
+          }
+          updatedOutput = lines.join('\n');
+        } else {
+          updatedOutput = existingOutput + newData + '\n';
+        }
+        ctx.updateMessage(sessionId, toolMsg.id, {
+          streamingOutput: updatedOutput,
+          streamingOutputType: event.output_type || 'stdout',
+        });
+      }
+      ctx.scrollToBottom();
+      break;
+    }
+
+    case 'tool_input_required': {
+      // Show a prompt for interactive input (sudo, password, etc.)
       ctx.addMessage(sessionId, {
-        id: `approval-${Date.now()}`,
+        id: `input-req-${Date.now()}`,
         role: 'tool_approval',
-        content: event.preview,
+        content: event.prompt || 'Input required',
         timestamp: Date.now(),
         toolName: event.tool_name,
-        toolArgs: event.arguments,
+        toolArgs: JSON.stringify({ type: 'input_required', prompt: event.prompt }),
+      });
+      ctx.scrollToBottom();
+      break;
+    }
+
+    case 'tool_approval_required': {
+      // Show as a bottom modal instead of inline chat message
+      ctx.setPendingApproval({
+        toolName: event.tool_name || '',
+        preview: event.preview || '',
+        toolArgs: event.arguments || '',
       });
       break;
     }

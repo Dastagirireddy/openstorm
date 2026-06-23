@@ -2,6 +2,7 @@ import { html } from 'lit';
 import type { ChatMessage, ModelInfo, ProviderInfo, AISession } from '../../lib/types/ai-types.js';
 import { renderMessage } from './ai-message-renderers.js';
 import { ASCII_LOGO, AI_TIPS, formatTokenCount } from './ai-commands.js';
+import { getToolLabel } from '../../lib/ai/ai-tool-registry.js';
 import '../layout/icon.js';
 import '../layout/code-block.js';
 import '../layout/mermaid-block.js';
@@ -29,6 +30,7 @@ export interface PanelRenderState {
   sessionStats: { tokens: { input: number; output: number }; cost: number };
   lastResponseTime: number;
   lastUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+  pendingApproval: { toolName: string; preview: string; toolArgs: string } | null;
 }
 
 export interface PanelRenderActions {
@@ -127,6 +129,27 @@ export function renderPanel(
               ` : ''}
             `}
           </div>
+
+          <!-- Tool Approval Modal (bottom overlay) -->
+          ${s.pendingApproval ? html`
+            <div class="ai-approval-modal">
+              <div class="ai-approval-modal-header">
+                <iconify-icon icon="lucide:shield-alert" width="16" style="color: var(--ai-warning, #f59e0b);"></iconify-icon>
+                <span class="ai-approval-modal-title">${getToolLabel(s.pendingApproval.toolName, s.pendingApproval.toolArgs)} requires approval</span>
+              </div>
+              <div class="ai-approval-modal-preview">
+                ${renderApprovalPreview(s.pendingApproval.preview, s.pendingApproval.toolName)}
+              </div>
+              <div class="ai-approval-modal-actions">
+                <button class="ai-approval-btn deny" @click=${() => a.handleToolApproval(false)}>
+                  Deny
+                </button>
+                <button class="ai-approval-btn approve" @click=${() => a.handleToolApproval(true)}>
+                  Allow
+                </button>
+              </div>
+            </div>
+          ` : ''}
 
           <!-- Input area -->
           <div class="ai-input-area">
@@ -261,4 +284,52 @@ export function renderPanel(
       </div>
     </div>
   `;
+}
+
+function renderApprovalPreview(preview: string, toolName: string) {
+  let data: any;
+  try {
+    data = JSON.parse(preview);
+  } catch {
+    data = { type: 'text', content: preview };
+  }
+
+  if (data.type === 'command') {
+    return html`
+      <div class="approval-preview-command">
+        <code>${data.command}</code>
+      </div>`;
+  }
+
+  if (data.type === 'diff') {
+    const filePath = data.file_path || 'unknown';
+    const oldLines = data.old_lines || 0;
+    const newLines = data.new_lines || 0;
+    const hunks = data.hunks || [];
+    return html`
+      <div class="approval-preview-diff">
+        <div class="approval-diff-header">
+          <span>Edit ${filePath}</span>
+          <span class="approval-diff-stats">${oldLines} → ${newLines} lines</span>
+        </div>
+        <div class="approval-diff-content">
+          ${hunks.slice(0, 10).map((hunk: any) => {
+            const prefix = hunk.type === 'removed' ? '-' : hunk.type === 'added' ? '+' : ' ';
+            const lineClass = hunk.type || 'context';
+            return html`<div class="approval-diff-line ${lineClass}"><span class="approval-diff-prefix">${prefix}</span>${hunk.content}</div>`;
+          })}
+          ${hunks.length > 10 ? html`<div class="approval-diff-more">... ${hunks.length - 10} more lines</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  if (data.type === 'edit') {
+    return html`
+      <div class="approval-preview-edit">
+        <span>Edit ${data.file_path || 'file'}</span>
+        <span class="approval-diff-stats">lines ${data.start_line || '?'}-${data.end_line || '?'}</span>
+      </div>`;
+  }
+
+  return html`<div class="approval-preview-text">${data.content || preview}</div>`;
 }

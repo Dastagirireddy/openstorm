@@ -45,7 +45,7 @@ export const aiPanelStyles = css`
       font-size: 0.9em;
       font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
       border: 1px solid var(--ai-code-border);
-      color: #e06c75;
+      color: #ffa657;
     }
     /* Syntax highlighting colors - Vibrant VS Code Dark+ style */
     .ai-hl-keyword {
@@ -68,7 +68,7 @@ export const aiPanelStyles = css`
       text-underline-offset: 2px;
     }
     .ai-hl-type {
-      color: #4ec9b0;
+      color: #79c0ff;
     }
     .ai-hl-variable {
       color: #9cdcfe;
@@ -92,7 +92,7 @@ export const aiPanelStyles = css`
     }
     .ai-markdown-content ul li::before {
       content: '•';
-      color: #58a6ff;
+      color: #ffa657;
       font-weight: bold;
       position: absolute;
       left: 0;
@@ -103,7 +103,7 @@ export const aiPanelStyles = css`
     }
     .ai-markdown-content ol li::before {
       content: counter(list-counter) '.';
-      color: #58a6ff;
+      color: #79c0ff;
       font-weight: 600;
       position: absolute;
       left: 0;
@@ -115,11 +115,11 @@ export const aiPanelStyles = css`
     /* Nested lists */
     .ai-markdown-content ul ul li::before {
       content: '◦';
-      color: #7ee787;
+      color: #d2a8ff;
     }
     .ai-markdown-content ul ul ul li::before {
       content: '▪';
-      color: #d2a8ff;
+      color: #7ee787;
     }
     /* Tables */
     .ai-markdown-content table {
@@ -147,10 +147,10 @@ export const aiPanelStyles = css`
     }
     /* Blockquotes */
     .ai-markdown-content blockquote {
-      border-left: 3px solid var(--ai-accent);
+      border-left: 3px solid #d2a8ff;
       margin: 0.75em 0;
       padding: 0.5em 1em;
-      background: color-mix(in srgb, var(--ai-accent) 5%, transparent);
+      background: color-mix(in srgb, #d2a8ff 5%, transparent);
       color: var(--ai-text-dim);
       border-radius: 0 4px 4px 0;
     }
@@ -187,7 +187,15 @@ export const aiPanelStyles = css`
     }
     .ai-markdown-content h4 { 
       font-size: 1.05em; 
+      color: #ffa657;
+    }
+    .ai-markdown-content h5 { 
+      font-size: 1em; 
       color: #79c0ff;
+    }
+    .ai-markdown-content h6 { 
+      font-size: 0.95em; 
+      color: #d2a8ff;
     }
     /* Horizontal rules */
     .ai-markdown-content hr {
@@ -197,11 +205,12 @@ export const aiPanelStyles = css`
     }
     /* Links */
     .ai-markdown-content a {
-      color: var(--ai-accent);
+      color: #79c0ff;
       text-decoration: none;
     }
     .ai-markdown-content a:hover {
       text-decoration: underline;
+      color: #a5d6ff;
     }
     /* Strong/Emphasis */
     .ai-markdown-content strong {
@@ -688,9 +697,9 @@ export const aiPanelStyles = css`
     .line-code .string { color: #a5d6ff; }
     .line-code .comment { color: #8b949e; font-style: italic; }
     .line-code .function { color: #d2a8ff; }
-    .line-code .type { color: #79c0ff; }
-    .line-code .number { color: #79c0ff; }
-    .line-code .macro { color: #d2a8ff; }
+    .line-code .type { color: #7ee787; }
+    .line-code .number { color: #ffa657; }
+    .line-code .macro { color: #79c0ff; }
     .line-code .punctuation { color: #c9d1d9; }
     .line-code .operator { color: #ff7b72; }
 
@@ -1479,5 +1488,128 @@ export const aiPanelStyles = css`
     }
     .ai-todo-content.pending {
       color: var(--ai-text-muted);
+    }
+
+    /* ── Tool Approval Modal ────────────────────────────── */
+    .ai-approval-modal {
+      border-top: 2px solid var(--ai-warning, #f59e0b);
+      background: var(--ai-panel-background, rgba(0,0,0,0.3));
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ai-approval-modal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .ai-approval-modal-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--ai-text);
+    }
+    .ai-approval-modal-preview {
+      background: var(--ai-code-background, #0d1117);
+      border: 1px solid var(--ai-panel-border, rgba(255,255,255,0.08));
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-size: 12px;
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .ai-approval-modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .ai-approval-btn {
+      padding: 6px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid var(--ai-panel-border, rgba(255,255,255,0.1));
+      transition: all 0.15s;
+    }
+    .ai-approval-btn.deny {
+      background: transparent;
+      color: var(--ai-text-dim, #888);
+    }
+    .ai-approval-btn.deny:hover {
+      background: rgba(255,255,255,0.05);
+      color: var(--ai-text);
+    }
+    .ai-approval-btn.approve {
+      background: var(--ai-success, #22c55e);
+      color: white;
+      border-color: var(--ai-success, #22c55e);
+    }
+    .ai-approval-btn.approve:hover {
+      opacity: 0.9;
+    }
+    .approval-preview-command {
+      font-family: 'SF Mono', 'Monaco', monospace;
+      font-size: 12px;
+      color: var(--ai-text);
+    }
+    .approval-preview-command code {
+      background: rgba(255,255,255,0.05);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .approval-preview-diff {
+      font-size: 11px;
+    }
+    .approval-diff-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+      color: var(--ai-text);
+      font-weight: 500;
+    }
+    .approval-diff-stats {
+      color: var(--ai-text-dim, #888);
+      font-weight: normal;
+    }
+    .approval-diff-content {
+      font-family: 'SF Mono', 'Monaco', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+    }
+    .approval-diff-line {
+      white-space: pre;
+      padding: 0 4px;
+    }
+    .approval-diff-line.added {
+      color: var(--ai-success, #3fb950);
+      background: rgba(63, 185, 80, 0.1);
+    }
+    .approval-diff-line.removed {
+      color: var(--ai-error, #f87171);
+      background: rgba(248, 113, 113, 0.1);
+    }
+    .approval-diff-line.context {
+      color: var(--ai-text-dim, #888);
+    }
+    .approval-diff-prefix {
+      display: inline-block;
+      width: 12px;
+      color: var(--ai-text-dim, #666);
+    }
+    .approval-diff-more {
+      color: var(--ai-text-dim, #888);
+      padding: 4px;
+      text-align: center;
+    }
+    .approval-preview-edit {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--ai-text);
+    }
+    .approval-preview-text {
+      color: var(--ai-text-dim, #888);
     }
 `;

@@ -170,6 +170,21 @@ pub enum AgentEvent {
         completion_tokens: u32,
         cost: f64,
     },
+
+    /// Streaming tool output (partial, during execution)
+    #[serde(rename = "tool_output")]
+    ToolOutput {
+        tool_name: String,
+        output_type: String,
+        data: String,
+    },
+
+    /// Tool needs interactive input (e.g., sudo password)
+    #[serde(rename = "tool_input_required")]
+    ToolInputRequired {
+        tool_name: String,
+        prompt: String,
+    },
 }
 
 /// The agent orchestrates the LLM tool-calling loop
@@ -393,6 +408,9 @@ impl Agent {
         history: Vec<Message>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<(), ProviderError> {
+        // Set the event sender on tools so they can stream output to the frontend
+        self.tools.set_event_sender(tx.clone()).await;
+
         // Create session log
         let mut session_log = AiSessionLog::start(&user_message, &self.model, &self.tools.project_path);
 

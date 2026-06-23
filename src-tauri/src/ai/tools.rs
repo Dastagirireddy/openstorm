@@ -6,6 +6,7 @@ use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
+use super::agent::AgentEvent;
 use super::embedding_store::EmbeddingStore;
 use super::mcp::McpManager;
 use super::provider::{FunctionDefinition, ToolDefinition};
@@ -124,6 +125,8 @@ pub struct ToolRegistry {
     pub mcp_manager: Option<Arc<Mutex<McpManager>>>,
     /// Process manager for background processes
     pub process_manager: Arc<Mutex<ProcessManager>>,
+    /// Event sender for streaming tool output to the frontend
+    pub event_tx: Arc<Mutex<Option<tokio::sync::mpsc::Sender<AgentEvent>>>>,
 }
 
 impl ToolRegistry {
@@ -135,6 +138,7 @@ impl ToolRegistry {
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -147,6 +151,7 @@ impl ToolRegistry {
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -163,6 +168,7 @@ impl ToolRegistry {
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -180,6 +186,7 @@ impl ToolRegistry {
             orchestrator: Some(orchestrator),
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -198,6 +205,25 @@ impl ToolRegistry {
             orchestrator: Some(orchestrator),
             mcp_manager: Some(mcp_manager),
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Set the event sender for streaming tool output to the frontend
+    pub async fn set_event_sender(&self, sender: tokio::sync::mpsc::Sender<AgentEvent>) {
+        let mut tx = self.event_tx.lock().await;
+        *tx = Some(sender);
+    }
+
+    /// Helper to emit a tool output event if a sender is available
+    pub async fn emit_tool_output(&self, tool_name: &str, output_type: &str, data: &str) {
+        let tx = self.event_tx.lock().await;
+        if let Some(sender) = tx.as_ref() {
+            let _ = sender.send(AgentEvent::ToolOutput {
+                tool_name: tool_name.to_string(),
+                output_type: output_type.to_string(),
+                data: data.to_string(),
+            }).await;
         }
     }
 
@@ -1013,38 +1039,86 @@ impl ToolRegistry {
     async fn run_command(&self, args: &serde_json::Value) -> String {
         let command = args["command"].as_str().unwrap_or("");
 
-        let output = tokio::process::Command::new("sh")
+        let mut child = match tokio::process::Command::new("sh")
             .args(["-c", command])
             .current_dir(&self.project_path)
-            .output()
-            .await;
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(e) => return format!("Failed to execute command: {}", e),
+        };
 
-        match output {
-            Ok(out) => {
-                let stdout = String::from_utf8_lossy(&out.stdout);
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                let mut result = String::new();
-                if !stdout.is_empty() {
-                    result.push_str(&stdout);
-                }
-                if !stderr.is_empty() {
-                    if !result.is_empty() {
-                        result.push_str("\n--- stderr ---\n");
+        let stdout = child.stdout.take().unwrap();
+        let stderr = child.stderr.take().unwrap();
+
+        let mut stdout_lines = BufReader::new(stdout).lines();
+        let mut stderr_lines = BufReader::new(stderr).lines();
+
+        let mut stdout_buf = String::new();
+        let mut stderr_buf = String::new();
+
+        // Read stdout and stderr concurrently, streaming each line to the frontend
+        loop {
+            tokio::select! {
+                line = stdout_lines.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            // Handle carriage returns for progress tracking
+                            let output_type = if line.contains('\r') { "progress" } else { "stdout" };
+                            self.emit_tool_output("run_command", output_type, &line).await;
+                            stdout_buf.push_str(&line);
+                            stdout_buf.push('\n');
+                        }
+                        Ok(None) => break, // EOF
+                        Err(e) => {
+                            self.emit_tool_output("run_command", "stderr", &format!("stdout read error: {}", e)).await;
+                            break;
+                        }
                     }
-                    result.push_str(&stderr);
                 }
-                if result.is_empty() {
-                    "(command produced no output)".to_string()
-                } else {
-                    // Truncate long output
-                    if result.len() > 4000 {
-                        result.truncate(4000);
-                        result.push_str("\n... (truncated)");
+                line = stderr_lines.next_line() => {
+                    match line {
+                        Ok(Some(line)) => {
+                            let output_type = if line.contains('\r') { "progress" } else { "stderr" };
+                            self.emit_tool_output("run_command", output_type, &line).await;
+                            stderr_buf.push_str(&line);
+                            stderr_buf.push('\n');
+                        }
+                        Ok(None) => break, // EOF
+                        Err(e) => {
+                            self.emit_tool_output("run_command", "stderr", &format!("stderr read error: {}", e)).await;
+                            break;
+                        }
                     }
-                    result
-                }
+                    }
             }
-            Err(e) => format!("Failed to execute command: {}", e),
+        }
+
+        // Wait for process to complete
+        let _ = child.wait().await;
+
+        // Build final result
+        let mut result = String::new();
+        if !stdout_buf.is_empty() {
+            result.push_str(&stdout_buf);
+        }
+        if !stderr_buf.is_empty() {
+            if !result.is_empty() {
+                result.push_str("\n--- stderr ---\n");
+            }
+            result.push_str(&stderr_buf);
+        }
+        if result.is_empty() {
+            "(command produced no output)".to_string()
+        } else {
+            // Truncate long output for the AI context
+            if result.len() > 4000 {
+                result.truncate(4000);
+                result.push_str("\n... (truncated)");
+            }
+            result
         }
     }
 

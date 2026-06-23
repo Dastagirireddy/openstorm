@@ -2,10 +2,11 @@ import { html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import type { ChatMessage } from '../../lib/types/ai-types.js';
 import { getToolIcon, getToolColor, getToolLabel } from '../../lib/ai/ai-tool-registry.js';
-import { renderMarkdown, highlightDiffCode } from './ai-markdown.js';
+import { renderMarkdown } from './ai-markdown.js';
 import { formatTokenCount } from './ai-commands.js';
 import '../layout/code-block.js';
 import '../layout/icon.js';
+import './tool-output-widget.js';
 
 function escapeAttr(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -65,6 +66,23 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
       const toolIcon = getToolIcon(msg.toolName || '');
       const toolColor = getToolColor(msg.toolName || '');
       const toolLabel = getToolLabel(msg.toolName || '', msg.toolArgs);
+      const isCompleted = msg.content.includes('Done') || msg.toolCompleted;
+      const hasStreamingOutput = !!msg.streamingOutput;
+      const hasDecision = !!msg.decision;
+
+      // Compact approved/denied display (from bottom modal decision)
+      if (hasDecision) {
+        const isApproved = msg.decision === 'approved';
+        return html`
+          <div class="ai-msg-thinking tool-use-line">
+            <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
+            <span class="thinking-label">${toolLabel}</span>
+            <span class="ai-tool-status ${isApproved ? 'success' : 'error'}"
+                  style="margin-left: 0.5em; color: ${isApproved ? 'var(--ai-success, #22c55e)' : 'var(--ai-error, #ef4444)'}">
+              ${isApproved ? 'Approved' : 'Denied'}
+            </span>
+          </div>`;
+      }
 
       // For write/edit operations, show a diff preview
       let diffPreview = '';
@@ -90,7 +108,20 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
         <div class="ai-msg-thinking tool-use-line">
           <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
           <span class="thinking-label">${toolLabel}</span>
+          ${isCompleted
+            ? html`<span class="ai-tool-status success" style="margin-left: 0.5em; color: var(--ai-success, #22c55e);">Done</span>`
+            : hasStreamingOutput
+              ? html`<span class="ai-tool-status running" style="margin-left: 0.5em; color: var(--ai-warning, #f59e0b);">Running</span>`
+              : html`<span class="ai-tool-status pending" style="margin-left: 0.5em; color: var(--ai-text-dim, #888);">...</span>`
+          }
         </div>
+        ${hasStreamingOutput ? html`
+          <tool-output-widget
+            .output=${msg.streamingOutput || ''}
+            .outputType=${msg.streamingOutputType || 'stdout'}
+            .completed=${isCompleted}>
+          </tool-output-widget>
+        ` : ''}
         ${diffPreview ? unsafeHTML(diffPreview) : ''}`;
     }
 
@@ -104,20 +135,6 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
         <div class="ai-tool-result">
           <code-block code="${resultContent}"></code-block>
         </div>`;
-    }
-
-    case 'tool_approval': {
-      const toolIcon = getToolIcon(msg.toolName || '');
-      const toolColor = getToolColor(msg.toolName || '');
-
-      let previewData: any;
-      try {
-        previewData = JSON.parse(msg.content);
-      } catch {
-        previewData = { type: 'text', content: msg.content };
-      }
-
-      return renderToolApproval(msg, previewData, toolIcon, toolColor, ctx.handleToolApproval);
     }
 
     case 'error': {
@@ -140,90 +157,4 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
     default:
       return html``;
   }
-}
-
-function renderToolApproval(
-  msg: ChatMessage,
-  previewData: any,
-  toolIcon: string,
-  toolColor: string,
-  handleToolApproval: (approved: boolean) => void
-) {
-  const renderDiffPreview = (data: any) => {
-    if (data.type === 'command') {
-      return html`
-        <div class="diff-command">
-          <div class="diff-command-header">
-            <iconify-icon icon="lucide:terminal" width="14" style="color: var(--ai-warning)"></iconify-icon>
-            <span>Shell Command</span>
-          </div>
-          <div class="diff-command-content">
-            <code>${data.command}</code>
-          </div>
-        </div>`;
-    }
-
-    if (data.type === 'diff') {
-      const filePath = data.file_path || 'unknown';
-      const oldLines = data.old_lines || 0;
-      const newLines = data.new_lines || 0;
-      const hunks = data.hunks || [];
-
-      return html`
-        <div class="diff-viewer">
-          <div class="diff-header">
-            <iconify-icon icon="lucide:pencil" width="14" style="color: var(--ai-accent)"></iconify-icon>
-            <span>Edit ${filePath}</span>
-            <span class="diff-stats">${oldLines} → ${newLines} lines (${oldLines > 0 ? '-' + oldLines : ''}${oldLines > 0 && newLines > 0 ? ' ' : ''}${newLines > 0 ? '+' + newLines : ''})</span>
-          </div>
-          <div class="diff-content">
-            ${hunks.map((hunk: any) => {
-              const lineClass = hunk.type || 'context';
-              const prefix = hunk.type === 'removed' ? '-' : hunk.type === 'added' ? '+' : ' ';
-              const lineNum = hunk.old_line || hunk.new_line || '';
-              const numClass = hunk.type === 'removed' ? 'old' : hunk.type === 'added' ? 'new' : '';
-              return html`
-                <div class="diff-line ${lineClass}">
-                  <span class="line-num ${numClass}">${lineNum}</span>
-                  <span class="line-prefix">${prefix}</span>
-                  <span class="line-code">${unsafeHTML(highlightDiffCode(hunk.content, data.language))}</span>
-                </div>`;
-            })}
-          </div>
-        </div>`;
-    }
-
-    return html`<pre class="diff-plain">${data.content || msg.content}</pre>`;
-  };
-
-  const isDecided = !!msg.decision;
-
-  if (isDecided) {
-    return html`
-      <div class="ai-msg-thinking tool-use-line">
-        <iconify-icon icon="${toolIcon}" width="14" style="color: ${toolColor}"></iconify-icon>
-        <span class="thinking-label">${msg.toolName}</span>
-        <span class="ai-tool-status ${msg.decision === 'approved' ? 'success' : 'error'}" style="margin-left: 0.5em">${msg.decision}</span>
-      </div>`;
-  }
-
-  return html`
-    <div class="ai-tool-approval">
-      <div class="ai-tool-approval-header">
-        <iconify-icon icon="${toolIcon}" width="14" style="color: var(--ai-warning)"></iconify-icon>
-        <span class="ai-tool-name">${msg.toolName}</span>
-        <span class="ai-tool-status pending">requires approval</span>
-      </div>
-      <div class="ai-tool-approval-preview">
-        ${renderDiffPreview(previewData)}
-      </div>
-      <div class="ai-tool-approval-actions">
-        <button class="ai-tool-approval-btn deny" @click=${() => handleToolApproval(false)}>
-          Deny
-        </button>
-        <button class="ai-tool-approval-btn approve" @click=${() => handleToolApproval(true)}>
-          Allow
-        </button>
-      </div>
-    </div>`;
 }

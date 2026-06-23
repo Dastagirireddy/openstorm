@@ -38,6 +38,10 @@ export interface ChatMessage {
   cost?: number;
   model?: string;
   duration?: number;
+  // Streaming tool output (for run_command etc.)
+  streamingOutput?: string;
+  streamingOutputType?: string;
+  toolCompleted?: boolean;
 }
 
 export interface ModelInfo {
