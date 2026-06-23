@@ -10,6 +10,7 @@ export interface AgentEvent {
   message?: string;
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   steps?: Array<{step: number, description: string, status: string}>;
+  todos?: Array<{id: string, content: string, status: string, priority: string}>;
   preview?: string;
   file_path?: string;
   old_lines?: number;
@@ -60,6 +61,8 @@ export function handleAgentEvent(
       break;
 
     case 'tool_use':
+      // Suppress internal tools from chat display
+      if (event.tool_name === 'todo_write') break;
       if (state._iterationStartTime) {
         const duration = (Date.now() - state._iterationStartTime) / 1000;
         ctx.addMessage(sessionId, {
@@ -106,24 +109,6 @@ export function handleAgentEvent(
       break;
     }
 
-    case 'plan_update': {
-      const messages = ctx.getMessages();
-      let planMsg = [...messages].reverse().find(m => m.role === 'plan');
-      if (planMsg) {
-        ctx.updateMessage(sessionId, planMsg.id, {
-          content: JSON.stringify(event.steps),
-        });
-      } else {
-        ctx.addMessage(sessionId, {
-          id: `plan-${Date.now()}`,
-          role: 'plan',
-          content: JSON.stringify(event.steps),
-          timestamp: Date.now(),
-        });
-      }
-      break;
-    }
-
     case 'text_delta':
       if (state._iterationStartTime) {
         const duration = (Date.now() - state._iterationStartTime) / 1000;
@@ -159,7 +144,22 @@ export function handleAgentEvent(
         const msgs = ctx.getMessages();
         const lastAssistant = [...msgs].reverse().find(m => m.role === 'assistant');
         if (lastAssistant) {
-          ctx.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
+          // Clean up: if the message is todo_write JSON or plan+todo_write JSON, remove it
+          const content = lastAssistant.content || '';
+          const trimmed = content.trim();
+          const hasTodosObject = trimmed.includes('"todos"') && trimmed.includes('"id"');
+          const isJustJson = trimmed.startsWith('{') && hasTodosObject;
+          // Check for plan text + todo_write JSON pattern
+          const hasPlanText = /^\d+\.\s/.test(trimmed) || trimmed.includes('TODOs');
+          const hasJsonBlock = trimmed.includes('```json') || trimmed.includes('{\n');
+          const isPlanWithTodos = hasPlanText && hasTodosObject;
+          
+          if (isJustJson || isPlanWithTodos) {
+            // Remove the entire message - it's just tool output the model made as text
+            ctx.updateMessage(sessionId, lastAssistant.id, { content: '', isStreaming: false });
+          } else {
+            ctx.updateMessage(sessionId, lastAssistant.id, { isStreaming: false });
+          }
         } else if (event.content) {
           ctx.addMessage(sessionId, {
             id: `resp-${Date.now()}`,
@@ -210,6 +210,11 @@ export function handleAgentEvent(
         content: `Sub-agent completed: ${event.description || 'Task finished'}`,
         timestamp: Date.now(),
       });
+      break;
+
+    case 'todo_update':
+      console.log('[AI] TodoUpdate received:', event.todos);
+      aiState.setTodos(event.todos || []);
       break;
   }
 }

@@ -606,6 +606,13 @@ fn main() {
             // === AI Sub-agents ===
             ai::commands::ai_get_orchestrator_status,
             ai::commands::ai_abort_subagent,
+
+            // === MCP (Model Context Protocol) ===
+            ai::commands::ai_mcp_list_servers,
+            ai::commands::ai_mcp_add_server,
+            ai::commands::ai_mcp_remove_server,
+            ai::commands::ai_mcp_test_server,
+            ai::commands::ai_mcp_list_tools,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -4,6 +4,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::agent::{Agent, AgentEvent};
 use super::lmstudio::LmStudioProvider;
+use super::mcp::{McpManager, McpServerConfig, McpServerStatus};
 use super::ollama::OllamaProvider;
 use super::orchestrator::Orchestrator;
 use super::provider::{LlmProvider, Message, ModelInfo, ProviderInfo};
@@ -19,16 +20,25 @@ pub struct AiState {
     approval_tx: Mutex<Option<mpsc::Sender<bool>>>,
     /// Orchestrator for sub-agent management
     orchestrator: Mutex<Option<Arc<Orchestrator>>>,
+    /// MCP manager for external tool servers
+    mcp_manager: Arc<Mutex<McpManager>>,
 }
 
 impl AiState {
     pub fn new() -> Self {
+        let mut mcp_manager = McpManager::new();
+        mcp_manager.load_configs();
         Self {
             active_agent: Mutex::new(None),
             abort_tx: Mutex::new(None),
             approval_tx: Mutex::new(None),
             orchestrator: Mutex::new(None),
+            mcp_manager: Arc::new(Mutex::new(mcp_manager)),
         }
+    }
+
+    pub fn mcp_manager(&self) -> Arc<Mutex<McpManager>> {
+        self.mcp_manager.clone()
     }
 }
 
@@ -183,13 +193,15 @@ pub async fn ai_chat(
         orch.as_ref().unwrap().clone()
     };
 
-    // Create agent with orchestrator support
-    let agent = Arc::new(Agent::with_orchestrator(
+    // Create agent with orchestrator and MCP support
+    let mcp_manager = state.mcp_manager();
+    let agent = Arc::new(Agent::with_mcp(
         provider,
         model,
         project_path,
         super::permissions::PermissionProfile::Smart,
         orchestrator,
+        mcp_manager,
     ));
 
     // Store active agent
@@ -371,4 +383,57 @@ pub async fn ai_read_file(project_path: String, path: String, max_lines: Option<
     } else {
         Ok(content)
     }
+}
+
+// ── MCP (Model Context Protocol) ──────────────────────────────────
+
+#[tauri::command]
+pub async fn ai_mcp_list_servers(state: State<'_, AiState>) -> Result<Vec<McpServerStatus>, String> {
+    let manager = state.mcp_manager.lock().await;
+    Ok(manager.list_servers())
+}
+
+#[tauri::command]
+pub async fn ai_mcp_add_server(
+    state: State<'_, AiState>,
+    config: McpServerConfig,
+) -> Result<McpServerStatus, String> {
+    let mut manager = state.mcp_manager.lock().await;
+    manager.connect(config.clone()).await?;
+    let status = manager.list_servers()
+        .into_iter()
+        .find(|s| s.name == config.name)
+        .unwrap_or(McpServerStatus {
+            name: config.name,
+            connected: false,
+            tool_count: 0,
+            error: Some("Server not found after connect".to_string()),
+        });
+    Ok(status)
+}
+
+#[tauri::command]
+pub async fn ai_mcp_remove_server(
+    state: State<'_, AiState>,
+    name: String,
+) -> Result<(), String> {
+    let mut manager = state.mcp_manager.lock().await;
+    manager.remove_server(&name).await
+}
+
+#[tauri::command]
+pub async fn ai_mcp_test_server(config: McpServerConfig) -> Result<Vec<String>, String> {
+    McpManager::test_server(&config).await
+}
+
+#[tauri::command]
+pub async fn ai_mcp_list_tools(state: State<'_, AiState>) -> Result<Vec<super::mcp::McpCachedToolInfo>, String> {
+    let manager = state.mcp_manager.lock().await;
+    let tools = manager.list_tools();
+    Ok(tools.into_iter().map(|t| super::mcp::McpCachedToolInfo {
+        server_name: t.server_name,
+        original_name: t.original_name,
+        namespaced_name: t.definition.function.name,
+        description: t.definition.function.description,
+    }).collect())
 }

@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getGitBranch } from "./lib/git/git-status.js";
 import { TailwindElement } from "./tailwind-element.js";
 import { dispatch } from "./lib/types/events.js";
+import { loadMcpTools } from "./lib/ai/ai-tool-registry.js";
 import {
   loadTerminalPane,
   loadSearchOverlay,
@@ -76,6 +77,7 @@ import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/overlays/settings-panel.js";
 import "./components/ai/ai-panel.js";
+import "./components/ai/ai-todo-panel.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
@@ -142,6 +144,8 @@ export class OpenStormApp extends TailwindElement() {
     document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
     // Pre-load app console panel on startup
     loadAppConsolePanel();
+    // Load MCP tools on startup
+    loadMcpTools();
     // Check for updates on startup (non-blocking)
     this.checkUpdatesOnStartup();
   }
@@ -1430,7 +1434,7 @@ export class OpenStormApp extends TailwindElement() {
             <!-- Content Area -->
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
               <!-- Normal view: Explorer + Content (editor/terminal/openstorm) -->
-              <div class="flex flex-1 overflow-hidden">
+              <div class="flex flex-1 overflow-hidden h-full">
                 ${showExplorer || showDatabase ? html`
                   <resizable-container
                     direction="horizontal"

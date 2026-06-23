@@ -208,6 +208,13 @@ export class AIStateManager {
     this.isStreaming = streaming;
     this.emit('streaming-status', streaming);
   }
+
+  todos: Array<{id: string, content: string, status: string, priority: string}> = [];
+
+  setTodos(todos: Array<{id: string, content: string, status: string, priority: string}>): void {
+    this.todos = todos;
+    this.emit('todos-updated', todos);
+  }
 }
 
 export const aiState = AIStateManager.getInstance();

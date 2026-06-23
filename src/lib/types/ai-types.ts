@@ -82,3 +82,27 @@ export type AISessionEvent =
   | { type: 'session_renamed'; sessionId: string; name: string }
   | { type: 'message_added'; sessionId: string; message: ChatMessage }
   | { type: 'message_updated'; sessionId: string; messageId: string; updates: Partial<ChatMessage> };
+
+// ── MCP Types ──────────────────────────────────────────────
+
+export interface McpServerConfig {
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  enabled: boolean;
+}
+
+export interface McpServerStatus {
+  name: string;
+  connected: boolean;
+  tool_count: number;
+  error: string | null;
+}
+
+export interface McpToolInfo {
+  server_name: string;
+  original_name: string;
+  namespaced_name: string;
+  description: string;
+}

@@ -51,6 +51,7 @@ thiserror = "2.0"      # Error handling
 dashmap = "6"          # Concurrent HashMap for connection pools
 futures = "0.3"        # Async utilities
 async-trait = "0.1"    # Async trait support for dyn compatibility
+rmcp = { version = "0.16", features = ["client", "transport-child-process"] }
 
 # Database drivers
 sqlx = { version = "0.8", features = ["runtime-tokio", "postgres", "mysql", "sqlite", "chrono", "uuid"] }

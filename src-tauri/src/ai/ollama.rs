@@ -3,90 +3,9 @@ use futures::StreamExt;
 use reqwest::Client;
 use tokio::sync::mpsc;
 
-use crate::{log_debug, log_info};
 use super::provider::*;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-
-/// Rough token estimate: ~4 chars per token for English text
-fn estimate_tokens(s: &str) -> usize {
-    s.len() / 4
-}
-
-/// Truncate a string to a safe UTF-8 char boundary
-fn truncate_to_boundary(s: &str, max_bytes: usize) -> &str {
-    if s.len() <= max_bytes {
-        return s;
-    }
-    let mut end = 0;
-    for (i, c) in s.char_indices() {
-        let char_end = i + c.len_utf8();
-        if char_end > max_bytes {
-            break;
-        }
-        end = char_end;
-    }
-    &s[..end]
-}
-
-/// Log a summary of an outgoing LLM request
-fn log_request(model: &str, messages: &[serde_json::Value], tools: Option<&Vec<ToolDefinition>>) {
-    let msg_count = messages.len();
-    let tool_count = tools.as_ref().map_or(0, |t| t.len());
-    let total_chars: usize = messages.iter()
-        .map(|m| m["content"].as_str().map_or(0, |s| s.len()))
-        .sum();
-    let tool_desc_chars: usize = tools.as_ref().map_or(0, |t| t.iter()
-        .map(|td| td.function.description.len() + td.function.parameters.to_string().len())
-        .sum());
-    let est_tokens = estimate_tokens(&"x".repeat(total_chars + tool_desc_chars));
-    log_info!(
-        "[Ollama] Request: model={}, msgs={}, tools={}, ~{}k chars (~{} tokens)",
-        model, msg_count, tool_count,
-        (total_chars + tool_desc_chars) / 1000, est_tokens
-    );
-    // Log each message role + content preview
-    for (i, msg) in messages.iter().enumerate() {
-        let role = msg["role"].as_str().unwrap_or("?");
-        let content = msg["content"].as_str().unwrap_or("");
-        let preview = truncate_to_boundary(content, 120);
-        let tool_calls = msg["tool_calls"].as_array().map_or(0, |a| a.len());
-        log_debug!(
-            "[Ollama]   msg[{}] role={} chars={} tools={} preview=\"{}\"",
-            i, role, content.len(), tool_calls, preview
-        );
-    }
-    // Log tool names
-    if let Some(tools) = tools {
-        let names: Vec<&str> = tools.iter().map(|t| t.function.name.as_str()).collect();
-        log_debug!("[Ollama]   tools: {:?}", names);
-    }
-}
-
-/// Log a summary of a non-streaming LLM response
-fn log_response(body: &serde_json::Value) {
-    let content = body["message"]["content"].as_str().unwrap_or("");
-    let tool_calls = body["message"]["tool_calls"].as_array();
-    let finish = body["done_reason"].as_str().unwrap_or("?");
-    let prompt_tokens = body["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
-    let completion_tokens = body["usage"]["completion_tokens"].as_u64().unwrap_or(0);
-    log_info!(
-        "[Ollama] Response: content={}chars, tools={}, finish={}, prompt={}tok, completion={}tok",
-        content.len(), tool_calls.map_or(0, |a| a.len()), finish, prompt_tokens, completion_tokens
-    );
-    if !content.is_empty() {
-        let preview = truncate_to_boundary(content, 200);
-        log_debug!("[Ollama]   content: \"{}\"", preview);
-    }
-    if let Some(calls) = tool_calls {
-        for (i, call) in calls.iter().enumerate() {
-            let name = call["function"]["name"].as_str().unwrap_or("?");
-            let args = call["function"]["arguments"].to_string();
-            let args_preview = truncate_to_boundary(&args, 150);
-            log_debug!("[Ollama]   tool_call[{}]: {}({})", i, name, args_preview);
-        }
-    }
-}
 
 pub struct OllamaProvider {
     client: Client,
@@ -262,8 +181,6 @@ impl LlmProvider for OllamaProvider {
             body["tools"] = serde_json::json!(ollama_tools);
         }
 
-        log_request(&request.model, &ollama_messages, request.tools.as_ref());
-
         let resp = self
             .client
             .post(format!("{}/api/chat", self.base_url))
@@ -281,8 +198,6 @@ impl LlmProvider for OllamaProvider {
         }
 
         let body: serde_json::Value = resp.json().await?;
-
-        log_response(&body);
 
         let message = &body["message"];
         // This is a thinking model: use "thinking" as fallback for content
@@ -418,8 +333,6 @@ impl LlmProvider for OllamaProvider {
             body["tools"] = serde_json::json!(ollama_tools);
         }
 
-        log_request(&request.model, &ollama_messages, request.tools.as_ref());
-
         let resp = self
             .client
             .post(format!("{}/api/chat", self.base_url))
@@ -469,8 +382,8 @@ impl LlmProvider for OllamaProvider {
                                 let content = val["message"]["content"].as_str().unwrap_or("");
                                 let thinking = val["message"]["thinking"].as_str().unwrap_or("");
 
-                                // Only stream actual content, not thinking/reasoning.
-                                // Thinking is internal model reasoning and should not be shown to users.
+                                // For thinking models: content is empty during streaming, only populated at the end.
+                                // Do NOT use thinking as content — thinking is internal reasoning, not for display.
                                 let effective_content = if !content.is_empty() {
                                     content
                                 } else {
@@ -522,7 +435,11 @@ impl LlmProvider for OllamaProvider {
                                             tool_calls,
                                         },
                                         finish_reason: if val["done"].as_bool() == Some(true) {
-                                            Some("stop".to_string())
+                                            if val["message"]["tool_calls"].as_array().map(|a| !a.is_empty()).unwrap_or(false) {
+                                                Some("tool_calls".to_string())
+                                            } else {
+                                                Some("stop".to_string())
+                                            }
                                         } else {
                                             None
                                         },

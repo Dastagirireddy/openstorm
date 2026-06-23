@@ -120,32 +120,6 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
       return renderToolApproval(msg, previewData, toolIcon, toolColor, ctx.handleToolApproval);
     }
 
-    case 'plan': {
-      let steps: Array<{step: number, description: string, status: string}> = [];
-      try {
-        steps = JSON.parse(msg.content);
-      } catch {}
-      return html`
-        <div class="ai-plan">
-          <div class="ai-plan-header">
-            <iconify-icon icon="lucide:list-checks" width="14" style="color: var(--ai-accent)"></iconify-icon>
-            <span>Plan</span>
-          </div>
-          <div class="ai-plan-steps">
-            ${steps.map(s => html`
-              <div class="ai-plan-step ${s.status}">
-                <iconify-icon icon="${
-                  s.status === 'done' ? 'lucide:check-circle-2' :
-                  s.status === 'in_progress' ? 'lucide:loader-2' :
-                  s.status === 'failed' ? 'lucide:x-circle' : 'lucide:circle-dashed'
-                }" width="14" class="plan-step-icon"></iconify-icon>
-                <span class="ai-plan-step-desc">${s.description}</span>
-              </div>
-            `)}
-          </div>
-        </div>`;
-    }
-
     case 'error': {
       let errorMsg = msg.content;
       return html`

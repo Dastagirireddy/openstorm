@@ -1,10 +1,115 @@
 use std::path::Path;
+use std::process::Stdio;
 use std::sync::Arc;
 use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
 use super::embedding_store::EmbeddingStore;
+use super::mcp::McpManager;
 use super::provider::{FunctionDefinition, ToolDefinition};
+
+/// Manages background processes spawned by the agent
+pub struct ProcessManager {
+    processes: std::collections::HashMap<u32, ManagedProcess>,
+}
+
+struct ManagedProcess {
+    child: Child,
+    command: String,
+    stdout_log: Vec<String>,
+    stderr_log: Vec<String>,
+}
+
+impl ProcessManager {
+    pub fn new() -> Self {
+        Self {
+            processes: std::collections::HashMap::new(),
+        }
+    }
+
+    pub fn spawn(&mut self, command: &str, cwd: &str) -> Result<u32, String> {
+        let child = Command::new("sh")
+            .args(["-c", command])
+            .current_dir(cwd)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("Failed to start process: {}", e))?;
+
+        let pid = child.id().unwrap_or(0);
+        self.processes.insert(pid, ManagedProcess {
+            child,
+            command: command.to_string(),
+            stdout_log: Vec::new(),
+            stderr_log: Vec::new(),
+        });
+        Ok(pid)
+    }
+
+    pub async fn read_output(&mut self, pid: u32) -> Result<(String, String, bool), String> {
+        let proc = self.processes.get_mut(&pid).ok_or_else(|| format!("Process {} not found", pid))?;
+
+        // Read available stdout with timeout (non-blocking)
+        if let Some(ref mut stdout) = proc.child.stdout {
+            let mut buf = [0u8; 4096];
+            loop {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(100),
+                    tokio::io::AsyncReadExt::read(stdout, &mut buf)
+                ).await {
+                    Ok(Ok(0)) => break, // EOF
+                    Ok(Ok(n)) => {
+                        let chunk = String::from_utf8_lossy(&buf[..n]);
+                        for line in chunk.lines() {
+                            proc.stdout_log.push(line.to_string());
+                        }
+                    }
+                    _ => break, // timeout or error
+                }
+            }
+        }
+
+        // Read available stderr with timeout (non-blocking)
+        if let Some(ref mut stderr) = proc.child.stderr {
+            let mut buf = [0u8; 4096];
+            loop {
+                match tokio::time::timeout(
+                    std::time::Duration::from_millis(100),
+                    tokio::io::AsyncReadExt::read(stderr, &mut buf)
+                ).await {
+                    Ok(Ok(0)) => break, // EOF
+                    Ok(Ok(n)) => {
+                        let chunk = String::from_utf8_lossy(&buf[..n]);
+                        for line in chunk.lines() {
+                            proc.stderr_log.push(line.to_string());
+                        }
+                    }
+                    _ => break, // timeout or error
+                }
+            }
+        }
+
+        let is_running = proc.child.try_wait().ok().flatten().is_none();
+        let stdout = proc.stdout_log.join("\n");
+        let stderr = proc.stderr_log.join("\n");
+        Ok((stdout, stderr, is_running))
+    }
+
+    pub async fn stop(&mut self, pid: u32) -> Result<String, String> {
+        let mut proc = self.processes.remove(&pid).ok_or_else(|| format!("Process {} not found", pid))?;
+        proc.child.kill().await.map_err(|e| format!("Failed to kill process: {}", e))?;
+        Ok(format!("Process {} ({}) stopped", pid, proc.command))
+    }
+
+    pub fn list(&mut self) -> Vec<(u32, String, bool)> {
+        self.processes.iter_mut().map(|(pid, p)| {
+            let is_running = p.child.try_wait().ok().flatten().is_none();
+            (*pid, p.command.clone(), is_running)
+        }).collect()
+    }
+}
 
 /// Registry of tools available to the AI agent
 pub struct ToolRegistry {
@@ -15,6 +120,10 @@ pub struct ToolRegistry {
     pub embedding_store: Option<Arc<Mutex<EmbeddingStore>>>,
     /// Orchestrator for sub-agent spawning (optional)
     pub orchestrator: Option<Arc<super::orchestrator::Orchestrator>>,
+    /// MCP manager for external tool servers (optional)
+    pub mcp_manager: Option<Arc<Mutex<McpManager>>>,
+    /// Process manager for background processes
+    pub process_manager: Arc<Mutex<ProcessManager>>,
 }
 
 impl ToolRegistry {
@@ -24,6 +133,8 @@ impl ToolRegistry {
             sandbox: None,
             embedding_store: None,
             orchestrator: None,
+            mcp_manager: None,
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 
@@ -34,6 +145,8 @@ impl ToolRegistry {
             sandbox: Some(sandbox),
             embedding_store: None,
             orchestrator: None,
+            mcp_manager: None,
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 
@@ -48,6 +161,8 @@ impl ToolRegistry {
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
             orchestrator: None,
+            mcp_manager: None,
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 
@@ -63,12 +178,32 @@ impl ToolRegistry {
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
             orchestrator: Some(orchestrator),
+            mcp_manager: None,
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+        }
+    }
+
+    /// Create a new tool registry with MCP manager for external tools
+    pub fn with_mcp(
+        project_path: String,
+        sandbox: super::sandbox::Sandbox,
+        embedding_store: Arc<Mutex<EmbeddingStore>>,
+        orchestrator: Arc<super::orchestrator::Orchestrator>,
+        mcp_manager: Arc<Mutex<McpManager>>,
+    ) -> Self {
+        Self {
+            project_path,
+            sandbox: Some(sandbox),
+            embedding_store: Some(embedding_store),
+            orchestrator: Some(orchestrator),
+            mcp_manager: Some(mcp_manager),
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 
     /// Get all available tool definitions (OpenAI function-calling format)
     pub fn definitions(&self) -> Vec<ToolDefinition> {
-        vec![
+        let mut tools = vec![
             ToolDefinition {
                 tool_type: "function".to_string(),
                 function: FunctionDefinition {
@@ -542,7 +677,128 @@ impl ToolRegistry {
                     }),
                 },
             },
-        ]
+            // BACKGROUND PROCESS TOOLS
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "run_background".to_string(),
+                    description: "Start a long-running process in the background (servers, watchers, etc.). Returns PID immediately. Use for commands that don't exit quickly.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "command": {
+                                "type": "string",
+                                "description": "The shell command to run in background"
+                            }
+                        },
+                        "required": ["command"]
+                    }),
+                },
+            },
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "read_process_output".to_string(),
+                    description: "Read stdout/stderr from a background process. Returns logs and whether the process is still running.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "pid": {
+                                "type": "integer",
+                                "description": "The PID of the background process"
+                            }
+                        },
+                        "required": ["pid"]
+                    }),
+                },
+            },
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "stop_process".to_string(),
+                    description: "Stop a background process by PID.".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "pid": {
+                                "type": "integer",
+                                "description": "The PID of the process to stop"
+                            }
+                        },
+                        "required": ["pid"]
+                    }),
+                },
+            },
+            // TODO TOOL
+            ToolDefinition {
+                tool_type: "function".to_string(),
+                function: FunctionDefinition {
+                    name: "todo_write".to_string(),
+                    description: "Create or update TODO items for tracking task progress. Call this after outputting a plan, and update status as you complete each step.\n\n\
+                        **Partial updates allowed:** You can update just the status without resending content.\n\n\
+                        **Examples:**\n\
+                        - Create new: `{\"todos\": [{\"id\": \"step_1\", \"content\": \"Start server\", \"status\": \"pending\"}]}`\n\
+                        - Update status only: `{\"todos\": [{\"id\": \"step_1\", \"status\": \"in_progress\"}]}`\n\
+                        - Mark complete: `{\"todos\": [{\"id\": \"step_1\", \"status\": \"completed\"}]}`".to_string(),
+                    parameters: serde_json::json!({
+                        "type": "object",
+                        "properties": {
+                            "todos": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {
+                                            "type": "string",
+                                            "description": "Unique identifier for the todo item"
+                                        },
+                                        "content": {
+                                            "type": "string",
+                                            "description": "Description of the task (only required when creating new items)"
+                                        },
+                                        "status": {
+                                            "type": "string",
+                                            "enum": ["pending", "in_progress", "completed"],
+                                            "description": "Current status of the task"
+                                        },
+                                        "priority": {
+                                            "type": "string",
+                                            "enum": ["low", "medium", "high"],
+                                            "description": "Priority level"
+                                        }
+                                    },
+                                    "required": ["id", "status"]
+                                },
+                                "description": "Array of TODO items to create or update"
+                            }
+                        },
+                        "required": ["todos"]
+                    }),
+                },
+            },
+        ];
+
+        // Append MCP tools from connected servers (synchronous snapshot)
+        // MCP tools are accessed via the async mcp_manager at execution time
+        // Here we just include their definitions so the LLM knows they exist.
+        // The actual tool list is built dynamically in definitions_with_mcp().
+        tools
+    }
+
+    /// Get all tool definitions including MCP tools from connected servers.
+    /// This is async because MCP tool discovery requires locking the manager.
+    pub async fn definitions_with_mcp(&self) -> Vec<ToolDefinition> {
+        let mut tools = self.definitions();
+
+        if let Some(ref mcp_manager) = self.mcp_manager {
+            let manager = mcp_manager.lock().await;
+            let mcp_tools = manager.list_tools();
+            for mcp_tool in mcp_tools {
+                tools.push(mcp_tool.definition);
+            }
+        }
+
+        tools
     }
 
     /// Execute a tool call and return the result
@@ -576,6 +832,11 @@ impl ToolRegistry {
             "spawn_agent" => self.spawn_agent(&args).await,
             "run_subagent" => self.run_subagent(&args).await,
             "get_subagent_status" => self.get_subagent_status(&args).await,
+            "run_background" => self.run_background(&args).await,
+            "read_process_output" => self.read_process_output(&args).await,
+            "stop_process" => self.stop_process(&args).await,
+            "todo_write" => self.todo_write(&args).await,
+            name if name.starts_with("mcp__") => self.execute_mcp_tool(name, arguments).await,
             _ => {
                 let available = vec![
                     "read_file", "write_file", "edit_file", "list_directory",
@@ -584,7 +845,8 @@ impl ToolRegistry {
                     "git_status", "git_diff", "git_commit", "semantic_search",
                     "print_tree", "rag_metrics", "attach_file", "attach_multiple_files",
                     "search_files", "webfetch", "spawn_agent", "run_subagent",
-                    "get_subagent_status",
+                    "get_subagent_status", "run_background", "read_process_output",
+                    "stop_process",
                 ];
                 format!(
                     "Unknown tool '{}'. Available tools: {}. Use one of these tools instead.",
@@ -783,6 +1045,116 @@ impl ToolRegistry {
                 }
             }
             Err(e) => format!("Failed to execute command: {}", e),
+        }
+    }
+
+    async fn run_background(&self, args: &serde_json::Value) -> String {
+        let command = args["command"].as_str().unwrap_or("");
+        if command.is_empty() {
+            return "Error: command is required".to_string();
+        }
+
+        let mut pm = self.process_manager.lock().await;
+        match pm.spawn(command, &self.project_path) {
+            Ok(pid) => format!("Process started in background with PID: {}", pid),
+            Err(e) => format!("Failed to start background process: {}", e),
+        }
+    }
+
+    async fn read_process_output(&self, args: &serde_json::Value) -> String {
+        // Try to parse pid as u64 first, then try string extraction
+        let pid = if let Some(p) = args["pid"].as_u64() {
+            p as u32
+        } else if let Some(s) = args["pid"].as_str() {
+            // Try to extract numeric part from string (e.g., "514514?" -> 514514)
+            let numeric_part: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+            match numeric_part.parse::<u32>() {
+                Ok(p) => p,
+                Err(_) => return format!("Error: invalid pid '{}'. Must be a number.", s),
+            }
+        } else {
+            return "Error: pid is required and must be a number".to_string();
+        };
+
+        let mut pm = self.process_manager.lock().await;
+        match pm.read_output(pid).await {
+            Ok((stdout, stderr, is_running)) => {
+                let mut result = String::new();
+                if !stdout.is_empty() {
+                    result.push_str(&stdout);
+                }
+                if !stderr.is_empty() {
+                    if !result.is_empty() {
+                        result.push_str("\n--- stderr ---\n");
+                    }
+                    result.push_str(&stderr);
+                }
+                if result.is_empty() {
+                    result = "(no output yet)".to_string();
+                }
+                if result.len() > 4000 {
+                    result.truncate(4000);
+                    result.push_str("\n... (truncated)");
+                }
+                result.push_str(&format!("\n[Process {} is {}]", pid, if is_running { "running" } else { "stopped" }));
+                result
+            }
+            Err(e) => format!("Error reading process output: {}", e),
+        }
+    }
+
+    async fn stop_process(&self, args: &serde_json::Value) -> String {
+        // Try to parse pid as u64 first, then try string extraction
+        let pid = if let Some(p) = args["pid"].as_u64() {
+            p as u32
+        } else if let Some(s) = args["pid"].as_str() {
+            // Try to extract numeric part from string (e.g., "514514?" -> 514514)
+            let numeric_part: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+            match numeric_part.parse::<u32>() {
+                Ok(p) => p,
+                Err(_) => return format!("Error: invalid pid '{}'. Must be a number.", s),
+            }
+        } else {
+            return "Error: pid is required and must be a number".to_string();
+        };
+
+        let mut pm = self.process_manager.lock().await;
+        match pm.stop(pid).await {
+            Ok(msg) => msg,
+            Err(e) => format!("Error stopping process: {}", e),
+        }
+    }
+
+    async fn todo_write(&self, args: &serde_json::Value) -> String {
+        let todos = match args["todos"].as_array() {
+            Some(t) => t,
+            None => return "Error: todos array is required".to_string(),
+        };
+
+        let mut result = Vec::new();
+        for todo in todos {
+            let id = todo["id"].as_str().unwrap_or("");
+            let content = todo["content"].as_str().unwrap_or("");
+            let status = todo["status"].as_str().unwrap_or("pending");
+            let priority = todo["priority"].as_str().unwrap_or("medium");
+
+            // Only require id and status (content is optional for partial updates)
+            if id.is_empty() {
+                continue;
+            }
+
+            // For status-only updates, show just the status change
+            if content.is_empty() {
+                result.push(format!("[{}] {} (status only)", status, id));
+            } else {
+                result.push(format!("[{}] {} ({})", status, content, priority));
+            }
+        }
+
+        if result.is_empty() {
+            "No valid TODO items provided".to_string()
+        } else {
+            format!("Updated {} TODO items:\n{}", result.len(), result.join("\n"))
         }
     }
 
@@ -1720,15 +2092,39 @@ impl ToolRegistry {
     }
 
     /// Get only the essential tool definitions (reduced set for better model focus)
+    /// Also includes all MCP tools since they are user-configured and important
     pub fn essential_definitions(&self) -> Vec<ToolDefinition> {
         let all = self.definitions();
         let essential = [
             "read_file", "write_file", "edit_file", "search_code",
             "run_command", "get_diagnostics", "webfetch",
             "spawn_agent", "run_subagent", "get_subagent_status",
+            "run_background", "read_process_output", "stop_process",
+            "todo_write",
         ];
         all.into_iter()
-            .filter(|t| essential.contains(&t.function.name.as_str()))
+            .filter(|t| {
+                essential.contains(&t.function.name.as_str())
+                    || t.function.name.starts_with("mcp__")
+            })
+            .collect()
+    }
+
+    /// Get essential tool definitions including MCP tools (async version)
+    pub async fn essential_definitions_with_mcp(&self) -> Vec<ToolDefinition> {
+        let all = self.definitions_with_mcp().await;
+        let essential = [
+            "read_file", "write_file", "edit_file", "search_code",
+            "run_command", "get_diagnostics", "webfetch",
+            "spawn_agent", "run_subagent", "get_subagent_status",
+            "run_background", "read_process_output", "stop_process",
+            "todo_write",
+        ];
+        all.into_iter()
+            .filter(|t| {
+                essential.contains(&t.function.name.as_str())
+                    || t.function.name.starts_with("mcp__")
+            })
             .collect()
     }
 
@@ -1806,6 +2202,20 @@ impl ToolRegistry {
                     task_id, pending, active
                 )
             }
+        }
+    }
+
+    /// Execute a tool call on an MCP server
+    async fn execute_mcp_tool(&self, name: &str, arguments: &str) -> String {
+        let mcp_manager = match &self.mcp_manager {
+            Some(m) => m,
+            None => return format!("MCP not available (manager not initialized). Tool '{}'.", name),
+        };
+
+        let manager = mcp_manager.lock().await;
+        match manager.call_tool(name, arguments).await {
+            Ok(result) => result,
+            Err(e) => format!("MCP tool '{}' failed: {}", name, e),
         }
     }
 }

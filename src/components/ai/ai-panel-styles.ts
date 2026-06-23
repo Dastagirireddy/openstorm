@@ -758,57 +758,6 @@ export const aiPanelStyles = css`
       border-color: #79b8ff;
     }
 
-    /* Plan */
-    .ai-plan {
-      margin: 0.5em 0 0.75em 1.5em;
-      border: 1px solid var(--ai-accent, #58a6ff);
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .ai-plan-header {
-      display: flex;
-      align-items: center;
-      gap: 0.5em;
-      padding: 0.5em 0.75em;
-      background: rgba(88, 166, 255, 0.1);
-      border-bottom: 1px solid var(--ai-accent, #58a6ff);
-      font-weight: 500;
-      color: var(--ai-accent, #58a6ff);
-    }
-    .ai-plan-steps {
-      padding: 0.5em 0;
-    }
-    .ai-plan-step {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5em;
-      padding: 0.35em 0.75em;
-      font-size: 13px;
-    }
-    .ai-plan-step-icon {
-      flex-shrink: 0;
-      width: 16px;
-      text-align: center;
-    }
-    .ai-plan-step.pending .ai-plan-step-icon {
-      color: var(--ai-text-dim, #6e7681);
-    }
-    .ai-plan-step.in_progress .ai-plan-step-icon {
-      color: var(--ai-accent, #58a6ff);
-    }
-    .ai-plan-step.done .ai-plan-step-icon {
-      color: var(--ai-success, #3fb950);
-    }
-    .ai-plan-step.failed .ai-plan-step-icon {
-      color: var(--ai-error, #f85149);
-    }
-    .ai-plan-step-desc {
-      color: var(--ai-text);
-    }
-    .ai-plan-step.done .ai-plan-step-desc {
-      color: var(--ai-text-dim, #6e7681);
-    }
-
     /* L2: Error block - indented, readable */
     .ai-error-block {
       margin: 0.5em 0 0.5em 1.5em;
@@ -1305,7 +1254,7 @@ export const aiPanelStyles = css`
       border-radius: 3px;
     }
 
-    /* L1: Thinking - indented under user, clean text */
+    /* L1: Thinking - clean text */
     .ai-msg-thinking {
       display: flex;
       align-items: center;
@@ -1321,6 +1270,18 @@ export const aiPanelStyles = css`
     }
     .ai-msg-thinking .thinking-label {
       font-weight: 500;
+    }
+
+    /* Floating thinking indicator - subtle */
+    .ai-floating-thinking {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 0.3em 0.6em;
+      margin-bottom: 0.5em;
+      color: var(--ai-thinking-color);
+      font-size: 12px;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
     }
     .ai-msg-thinking.completed {
       color: var(--ai-text-muted);

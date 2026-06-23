@@ -17,6 +17,8 @@ pub mod embedding_store;
 pub mod cost_tracker;
 pub mod ignore;
 pub mod orchestrator;
+pub mod mcp;
+pub mod session_log;
 
 pub use provider::*;
 pub use ollama::OllamaProvider;
@@ -35,3 +37,4 @@ pub use rag::CodeChunker;
 pub use embedding_store::EmbeddingStore;
 pub use cost_tracker::{CostTracker, SharedCostTracker, create_shared_cost_tracker};
 pub use orchestrator::Orchestrator;
+pub use mcp::{McpManager, McpServerConfig, McpServerStatus, McpCachedToolInfo};

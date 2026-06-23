@@ -147,6 +147,37 @@ impl ContextManager {
         }
     }
 
+    /// Update the progress context message (the last system message we injected)
+    /// This is used to update the LLM on planning state without re-injecting everything
+    pub fn update_progress_context(&mut self, new_progress: String) {
+        // Find and replace the last System message in working set (which is our progress context)
+        // The progress context is always the last System message we added
+        let mut last_system_idx = None;
+        for (i, msg) in self.working_set.iter().enumerate() {
+            if matches!(msg, Message::System { .. }) {
+                last_system_idx = Some(i);
+            }
+        }
+
+        if let Some(idx) = last_system_idx {
+            // Remove old progress tokens
+            let old_msg = &self.working_set[idx];
+            let old_tokens = self.encoder.count_message(old_msg);
+            self.working_tokens = self.working_tokens.saturating_sub(old_tokens);
+
+            // Replace with new progress context
+            self.working_set[idx] = Message::System { content: new_progress };
+
+            // Add new tokens
+            let new_msg = &self.working_set[idx];
+            let new_tokens = self.encoder.count_message(new_msg);
+            self.working_tokens += new_tokens;
+        } else {
+            // No existing progress context, just push it
+            self.push(Message::System { content: new_progress });
+        }
+    }
+
     /// Trim working set until within budget by evicting oldest messages
     fn trim_to_budget(&mut self) {
         let budget = self.available_tokens();

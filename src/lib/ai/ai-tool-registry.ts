@@ -7,13 +7,20 @@
  * This file is ONLY for frontend rendering purposes.
  */
 
+import { invoke } from '@tauri-apps/api/core';
+import type { McpToolInfo } from '../types/ai-types.js';
+
 export interface ToolDefinition {
   name: string;
   description: string;
   icon: string;
   color: string;
-  category: 'file' | 'search' | 'execute' | 'info';
+  category: 'file' | 'search' | 'execute' | 'info' | 'mcp';
 }
+
+// Dynamic MCP tools cache
+let mcpToolsCache: Record<string, ToolDefinition> = {};
+let mcpToolsLoaded = false;
 
 /**
  * Registry of available AI tools
@@ -89,42 +96,82 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
  * Get tool definition by name
  */
 export function getToolDefinition(toolName: string): ToolDefinition | undefined {
-  return TOOL_REGISTRY[toolName];
+  return TOOL_REGISTRY[toolName] || mcpToolsCache[toolName];
+}
+
+/**
+ * Load MCP tools from backend and cache them
+ */
+export async function loadMcpTools(): Promise<void> {
+  try {
+    const tools = await invoke<McpToolInfo[]>('ai_mcp_list_tools');
+    mcpToolsCache = {};
+    for (const tool of tools) {
+      mcpToolsCache[tool.namespaced_name] = {
+        name: tool.namespaced_name,
+        description: tool.description,
+        icon: 'lucide:server',
+        color: 'var(--ai-accent)',
+        category: 'mcp',
+      };
+    }
+    mcpToolsLoaded = true;
+  } catch (e) {
+    console.error('[ToolRegistry] Failed to load MCP tools:', e);
+    mcpToolsCache = {};
+    mcpToolsLoaded = true;
+  }
+}
+
+/**
+ * Check if MCP tools have been loaded
+ */
+export function areMcpToolsLoaded(): boolean {
+  return mcpToolsLoaded;
+}
+
+/**
+ * Get all MCP tool definitions
+ */
+export function getMcpTools(): Record<string, ToolDefinition> {
+  return { ...mcpToolsCache };
 }
 
 /**
  * Get tool icon name by name
  */
 export function getToolIcon(toolName: string): string {
-  return TOOL_REGISTRY[toolName]?.icon || 'lucide:circle';
+  return TOOL_REGISTRY[toolName]?.icon || mcpToolsCache[toolName]?.icon || 'lucide:circle';
 }
 
 /**
  * Get tool color by name
  */
 export function getToolColor(toolName: string): string {
-  return TOOL_REGISTRY[toolName]?.color || 'var(--ai-text-muted)';
+  return TOOL_REGISTRY[toolName]?.color || mcpToolsCache[toolName]?.color || 'var(--ai-text-muted)';
 }
 
 /**
  * Get tools by category
  */
 export function getToolsByCategory(category: ToolDefinition['category']): ToolDefinition[] {
-  return Object.values(TOOL_REGISTRY).filter(tool => tool.category === category);
+  const builtin = Object.values(TOOL_REGISTRY).filter(tool => tool.category === category);
+  const mcp = Object.values(mcpToolsCache).filter(tool => tool.category === category);
+  return [...builtin, ...mcp];
 }
 
 /**
- * Get all tool names
+ * Get all tool names (including MCP tools)
  */
 export function getAllToolNames(): string[] {
-  return Object.keys(TOOL_REGISTRY);
+  return [...Object.keys(TOOL_REGISTRY), ...Object.keys(mcpToolsCache)];
 }
 
 /**
- * Check if a tool name is valid
+ * Check if a tool name is valid (including MCP tools)
  */
 export function isValidTool(toolName: string): boolean {
-  return toolName in TOOL_REGISTRY;
+  return toolName in TOOL_REGISTRY || toolName in mcpToolsCache;
 }
 
 /**
@@ -168,6 +215,13 @@ export function getToolLabel(toolName: string, args: string | undefined): string
       case 'webfetch':
         return `Fetching ${parsed.url || ''}`;
       default:
+        // Handle MCP tools
+        if (toolName.startsWith('mcp__')) {
+          const parts = toolName.split('__');
+          if (parts.length === 3) {
+            return `MCP [${parts[1]}]: ${parts[2]}`;
+          }
+        }
         return toolName;
     }
   } catch {
@@ -199,6 +253,13 @@ export function getToolArgsSummary(toolName: string, args: string | undefined): 
       case 'webfetch':
         return parsed.url || '';
       default:
+        // Handle MCP tools
+        if (toolName.startsWith('mcp__')) {
+          const keys = Object.keys(parsed);
+          if (keys.length === 0) return '';
+          if (keys.length === 1) return `${keys[0]}: ${JSON.stringify(parsed[keys[0]]).slice(0, 30)}`;
+          return keys.slice(0, 2).join(', ');
+        }
         return Object.keys(parsed).slice(0, 2).join(', ');
     }
   } catch {

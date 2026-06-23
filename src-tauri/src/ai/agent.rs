@@ -1,15 +1,14 @@
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-use crate::{log_debug, log_info};
-
 use super::context::ContextManager;
-use super::cost_tracker::{CostTracker, SharedCostTracker, create_shared_cost_tracker};
+use super::cost_tracker::{SharedCostTracker, create_shared_cost_tracker};
 use super::embedding_store::EmbeddingStore;
 use super::permissions::{PermissionProfile, PermissionResult, PermissionSystem};
 use super::project_context::ProjectContext;
 use super::provider::*;
 use super::sandbox::Sandbox;
+use super::session_log::AiSessionLog;
 use super::tools::ToolRegistry;
 
 /// Maximum characters for a single tool result before truncation
@@ -37,15 +36,11 @@ fn truncate_to_boundary(s: &str, max_bytes: usize) -> &str {
 
 /// Status of a plan step
 #[derive(Debug, Clone, serde::Serialize, PartialEq)]
-#[serde(tag = "status")]
+#[serde(rename_all = "snake_case")]
 pub enum PlanStepStatus {
-    #[serde(rename = "pending")]
     Pending,
-    #[serde(rename = "in_progress")]
     InProgress,
-    #[serde(rename = "done")]
     Done,
-    #[serde(rename = "failed")]
     Failed,
 }
 
@@ -55,6 +50,53 @@ pub struct PlanStep {
     pub step: u32,
     pub description: String,
     pub status: PlanStepStatus,
+}
+
+/// Status of a TODO item
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TodoStatus {
+    Pending,
+    InProgress,
+    Completed,
+    Failed,
+}
+
+/// Priority of a TODO item
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum TodoPriority {
+    Low,
+    Medium,
+    High,
+}
+
+/// A single TODO item for tracking progress
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct TodoItem {
+    pub id: String,
+    pub content: String,
+    pub status: TodoStatus,
+    pub priority: TodoPriority,
+}
+
+impl TodoItem {
+    pub fn status_str(&self) -> &str {
+        match self.status {
+            TodoStatus::Pending => "pending",
+            TodoStatus::InProgress => "in_progress",
+            TodoStatus::Completed => "completed",
+            TodoStatus::Failed => "failed",
+        }
+    }
+
+    pub fn priority_str(&self) -> &str {
+        match self.priority {
+            TodoPriority::Low => "low",
+            TodoPriority::Medium => "medium",
+            TodoPriority::High => "high",
+        }
+    }
 }
 
 /// Events emitted during agent execution
@@ -68,6 +110,10 @@ pub enum AgentEvent {
     /// Plan steps updated
     #[serde(rename = "plan_update")]
     PlanUpdate { steps: Vec<PlanStep> },
+
+    /// TODO items updated
+    #[serde(rename = "todo_update")]
+    TodoUpdate { todos: Vec<TodoItem> },
 
     /// A tool is being executed
     #[serde(rename = "tool_use")]
@@ -131,7 +177,6 @@ pub struct Agent {
     provider: Arc<dyn LlmProvider>,
     model: String,
     tools: ToolRegistry,
-    max_iterations: u32,
     project_context: ProjectContext,
     /// Channel to receive approval responses from the frontend
     approval_rx: Mutex<Option<mpsc::Receiver<bool>>>,
@@ -149,6 +194,8 @@ pub struct Agent {
     embedding_store: Arc<Mutex<EmbeddingStore>>,
     /// Cost tracker for LLM API usage
     cost_tracker: SharedCostTracker,
+    /// TODO items for tracking progress
+    todo_items: Mutex<Vec<TodoItem>>,
 }
 
 impl Agent {
@@ -169,7 +216,6 @@ impl Agent {
             provider,
             model,
             tools,
-            max_iterations: 15, // Increased from 10
             project_context,
             approval_rx: Mutex::new(Some(approval_rx)),
             approval_tx: Mutex::new(Some(approval_tx)),
@@ -179,6 +225,7 @@ impl Agent {
             sandbox,
             embedding_store,
             cost_tracker,
+            todo_items: Mutex::new(Vec::new()),
         }
     }
 
@@ -205,7 +252,6 @@ impl Agent {
             provider,
             model,
             tools,
-            max_iterations: 15,
             project_context,
             approval_rx: Mutex::new(Some(approval_rx)),
             approval_tx: Mutex::new(Some(approval_tx)),
@@ -215,6 +261,7 @@ impl Agent {
             sandbox,
             embedding_store,
             cost_tracker,
+            todo_items: Mutex::new(Vec::new()),
         }
     }
 
@@ -243,7 +290,6 @@ impl Agent {
             provider,
             model,
             tools,
-            max_iterations: 15,
             project_context,
             approval_rx: Mutex::new(Some(approval_rx)),
             approval_tx: Mutex::new(Some(approval_tx)),
@@ -253,6 +299,47 @@ impl Agent {
             sandbox,
             embedding_store,
             cost_tracker,
+            todo_items: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Create an agent with orchestrator and MCP support
+    pub fn with_mcp(
+        provider: Arc<dyn LlmProvider>,
+        model: String,
+        project_path: String,
+        profile: PermissionProfile,
+        orchestrator: Arc<super::orchestrator::Orchestrator>,
+        mcp_manager: Arc<tokio::sync::Mutex<super::mcp::McpManager>>,
+    ) -> Self {
+        let project_context = ProjectContext::detect(&project_path);
+        let (approval_tx, approval_rx) = mpsc::channel(1);
+        let sandbox = Sandbox::new();
+        let permissions = PermissionSystem::new(profile);
+        let embedding_store = Arc::new(Mutex::new(EmbeddingStore::new()));
+        let tools = ToolRegistry::with_mcp(
+            project_path.clone(),
+            sandbox.clone(),
+            embedding_store.clone(),
+            orchestrator,
+            mcp_manager,
+        );
+        let cost_tracker = create_shared_cost_tracker();
+
+        Self {
+            provider,
+            model,
+            tools,
+            project_context,
+            approval_rx: Mutex::new(Some(approval_rx)),
+            approval_tx: Mutex::new(Some(approval_tx)),
+            plan_steps: Mutex::new(Vec::new()),
+            context_manager: Mutex::new(ContextManager::new(8192)),
+            permissions,
+            sandbox,
+            embedding_store,
+            cost_tracker,
+            todo_items: Mutex::new(Vec::new()),
         }
     }
 
@@ -306,29 +393,34 @@ impl Agent {
         history: Vec<Message>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<(), ProviderError> {
+        // Create session log
+        let mut session_log = AiSessionLog::start(&user_message, &self.model, &self.tools.project_path);
+
         // ── Phase 1: Index project for RAG ──────────────────────
         {
             let store = self.embedding_store.lock().await;
             if store.is_empty() {
                 drop(store); // Release lock before indexing
-                log_info!("[RAG] Indexing project for auto-context injection...");
+                session_log.log_flow("Indexing project for auto-context injection...");
                 let start = std::time::Instant::now();
                 match self.index_project().await {
                     Ok(chunks) => {
                         let elapsed = start.elapsed();
                         let store = self.embedding_store.lock().await;
                         let stats = store.stats();
-                        log_info!(
-                            "[RAG] Indexed {} chunks from {} files in {:?} ({} unique keywords)",
-                            chunks, stats.total_files, elapsed, stats.total_keywords
+                        session_log.log_rag_index(
+                            chunks,
+                            stats.total_files,
+                            elapsed.as_secs_f64() * 1000.0,
+                            stats.total_keywords,
                         );
                     }
                     Err(e) => {
-                        log_info!("[RAG] Indexing failed (continuing without RAG): {}", e);
+                        session_log.log_error(&format!("RAG indexing failed: {}", e));
                     }
                 }
             } else {
-                log_debug!("[RAG] Store already indexed, skipping");
+                session_log.log_flow("RAG store already indexed, skipping");
             }
         }
 
@@ -356,6 +448,7 @@ impl Agent {
                          These code sections are relevant to the user's request. \
                          Use them as reference — do NOT re-read these files with read_file.\n\n"
                     );
+                    let mut chunk_details = Vec::new();
                     for result in results.iter() {
                         let chunk = &result.chunk;
                         let preview: String = chunk.content.lines().take(15).collect::<Vec<_>>().join("\n");
@@ -374,52 +467,67 @@ impl Agent {
                             chunk.file_path.rsplit('.').next().unwrap_or(""),
                             truncated,
                         ));
+                        chunk_details.push((
+                            chunk.file_path.clone(),
+                            chunk.start_line,
+                            chunk.end_line,
+                            result.score,
+                            chunk.content.len(),
+                        ));
                     }
                     let rag_tokens = (context_block.len() / 4) as u64;
-                    log_info!(
-                        "[RAG] Injecting {} chunks (~{} tokens) into context for: \"{}\"",
-                        results.len(), rag_tokens,
-                        truncate_to_boundary(&user_message, 60)
+                    session_log.log_rag_inject(
+                        results.len(),
+                        rag_tokens,
+                        &user_message,
+                        &chunk_details,
                     );
-                    // Log each chunk for debugging
-                    for (i, result) in results.iter().enumerate() {
-                        let chunk = &result.chunk;
-                        log_debug!(
-                            "[RAG]   chunk {}: {}:{}-{} (score: {:.1}, {} chars)",
-                            i + 1, chunk.file_path, chunk.start_line, chunk.end_line,
-                            result.score, chunk.content.len()
-                        );
-                    }
                     // Inject as a system message right after the system prompt
                     ctx.push(Message::System { content: context_block });
                 } else {
-                    log_debug!("[RAG] No relevant chunks found for: \"{}\"",
-                        truncate_to_boundary(&user_message, 60));
+                    session_log.log_flow(&format!(
+                        "No relevant RAG chunks found for: \"{}\"",
+                        truncate_to_boundary(&user_message, 60)
+                    ));
                 }
             }
         }
 
-        let tool_defs = self.tools.essential_definitions();
+        let tool_defs = self.tools.essential_definitions_with_mcp().await;
         let mut total_tool_calls = 0u32;
         let mut consecutive_failures = 0u32;
         const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
-        // Tool loop detection: track last N tool calls (name, key_arg)
-        let mut recent_tool_calls: Vec<(String, String)> = Vec::new();
-        const MAX_REPEATED_TOOLS: usize = 3;
-        let mut consecutive_no_text = 0u32;
-        const MAX_NO_TEXT_ITERATIONS: u32 = 2;
-        const MAX_TOOL_LOOP_WARNINGS: u32 = 2;
+        // Track whether a plan has been established for this request
+        let mut has_plan = false;
+        let mut last_completed_step: Option<u32> = None;
 
-        for iteration in 0..self.max_iterations {
+        // Inject initial progress context (will be updated each iteration)
+        // This tells the LLM whether planning is done, preventing re-planning
+        let progress_context = self.build_progress_context(&has_plan, &last_completed_step);
+        ctx.push(Message::System { content: progress_context });
+
+        let mut iteration = 0u32;
+        loop {
+            iteration += 1;
+
+            // Update progress context for subsequent iterations
+            // This replaces the old progress message with updated state
+            if iteration > 1 {
+                let new_progress = self.build_progress_context(&has_plan, &last_completed_step);
+                // Remove the old progress context and add updated one
+                // The progress context is always the last system message we injected
+                ctx.update_progress_context(new_progress);
+            }
+
             // Send context status update
             let stats = ctx.stats();
             let _ = tx
                 .send(AgentEvent::Thinking {
-                    message: if iteration == 0 {
+                    message: if iteration == 1 {
                         format!("Thinking... ({})", stats)
                     } else {
-                        format!("Continuing (iteration {}, {})...", iteration + 1, stats)
+                        format!("Continuing (iteration {}, {})...", iteration, stats)
                     },
                 })
                 .await;
@@ -446,7 +554,11 @@ impl Agent {
                 max_tokens: request.max_tokens,
             };
 
+            // Log LLM request
+            session_log.log_llm_request(iteration, &request, &tool_defs);
+
             // Use streaming for better UX
+            let request_start = std::time::Instant::now();
             let mut stream = match self.provider.chat_completion_stream(request).await {
                 Ok(s) => s,
                 Err(_) => {
@@ -511,12 +623,27 @@ impl Agent {
             let (full_content, tool_calls, usage) = match stream_result {
                 Ok(result) => result,
                 Err(_) => {
-                    log_info!("[Agent] Stream timed out after {}s, falling back to non-streaming", STREAM_TIMEOUT_SECS);
+                    session_log.log_flow(&format!(
+                        "Stream timed out after {}s, falling back to non-streaming",
+                        STREAM_TIMEOUT_SECS
+                    ));
                     let response = self.provider.chat_completion(fallback_request).await?;
                     self.handle_response(response, &mut ctx, &mut total_tool_calls, &mut consecutive_failures, tx).await?;
                     continue;
                 }
             };
+
+            // Log LLM response
+            let request_duration = request_start.elapsed().as_millis() as u64;
+            let thinking = ""; // Thinking is captured in content for streaming
+            session_log.log_llm_response(
+                iteration,
+                &full_content,
+                thinking,
+                &tool_calls,
+                &usage,
+                request_duration,
+            );
 
             // Record cost if usage is available
             if let Some(ref usage) = usage {
@@ -533,12 +660,35 @@ impl Agent {
             }
 
             // Build the complete message
-            let has_plan = if !tool_calls.is_empty() && !full_content.is_empty() {
+            // Check if plan was created in this response
+            let plan_created_this_turn = if !full_content.is_empty() {
                 let new_steps = self.parse_plan(&full_content);
                 if !new_steps.is_empty() {
                     let mut steps = self.plan_steps.lock().await;
-                    *steps = new_steps.clone();
-                    let _ = tx.send(AgentEvent::PlanUpdate { steps: new_steps }).await;
+                    // Only set initial plan if no plan exists yet (don't reset progress)
+                    if steps.is_empty() {
+                        *steps = new_steps.clone();
+                        
+                        // Create TODO items from plan steps
+                        let todos: Vec<TodoItem> = new_steps.iter().map(|s| {
+                            TodoItem {
+                                id: format!("step_{}", s.step),
+                                content: s.description.clone(),
+                                status: match s.status {
+                                    PlanStepStatus::Pending => TodoStatus::Pending,
+                                    PlanStepStatus::InProgress => TodoStatus::InProgress,
+                                    PlanStepStatus::Done => TodoStatus::Completed,
+                                    PlanStepStatus::Failed => TodoStatus::Failed,
+                                },
+                                priority: TodoPriority::Medium,
+                            }
+                        }).collect();
+                        
+                        let mut todo_store = self.todo_items.lock().await;
+                        *todo_store = todos.clone();
+                        session_log.log_todo_update(&todos);
+                        let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                    }
                     true
                 } else {
                     false
@@ -547,79 +697,16 @@ impl Agent {
                 false
             };
 
+            // Update the outer has_plan variable for next iteration's progress context
+            if plan_created_this_turn {
+                has_plan = true;
+            }
+
+            // Track completed steps by checking todo_write calls
+            // This will be updated when todo_write is intercepted below
+
             // Handle tool calls
             if !tool_calls.is_empty() {
-                // Track tool calls for loop detection (tool name + key arg)
-                let primary = tool_calls.first().map(|c| {
-                    let key = match c.function.name.as_str() {
-                        "read_file" | "write_file" | "edit_file" => {
-                            // Track by file path
-                            serde_json::from_str::<serde_json::Value>(&c.function.arguments)
-                                .ok()
-                                .and_then(|a| a["path"].as_str().map(|s| s.to_string()))
-                                .unwrap_or_default()
-                        }
-                        "search_code" => {
-                            // Track by search pattern
-                            serde_json::from_str::<serde_json::Value>(&c.function.arguments)
-                                .ok()
-                                .and_then(|a| a["pattern"].as_str().map(|s| s.to_string()))
-                                .unwrap_or_default()
-                        }
-                        _ => String::new(),
-                    };
-                    (c.function.name.clone(), key)
-                }).unwrap_or_default();
-
-                recent_tool_calls.push(primary.clone());
-                if recent_tool_calls.len() > MAX_REPEATED_TOOLS {
-                    recent_tool_calls.remove(0);
-                }
-                log_debug!("[Agent] Tool loop check: recent={:?}", recent_tool_calls);
-
-                // A "loop" = same tool + same arg called 3x in a row
-                // (e.g., read_file("main.rs") 3x, or search_code("while") 3x)
-                let same_tool_loop = recent_tool_calls.len() == MAX_REPEATED_TOOLS
-                    && recent_tool_calls.iter().all(|t| t.0 == primary.0 && t.1 == primary.1 && !t.1.is_empty());
-
-                if same_tool_loop {
-                    log_info!("[Agent] Tool loop detected: {}({}) called {} times. Forcing final answer.", primary.0, primary.1, MAX_REPEATED_TOOLS);
-                    let _ = tx.send(AgentEvent::Response {
-                        content: format!(
-                            "I've gathered information through multiple tool calls. \
-                             Here's what I found based on the results. \
-                             Please ask a follow-up if you need more detail."
-                        ),
-                        tool_calls_made: total_tool_calls,
-                        usage,
-                    }).await;
-                    return Ok(());
-                }
-
-                // No-text detector: if model produces only tool calls with no text for N iterations
-                // Exclude spawn_agent/subagent calls - those are legitimate parallel work
-                let is_spawning = tool_calls.iter().any(|c| {
-                    matches!(c.function.name.as_str(), "spawn_agent" | "run_subagent" | "get_subagent_status")
-                });
-                if full_content.trim().is_empty() && !is_spawning {
-                    consecutive_no_text += 1;
-                } else {
-                    consecutive_no_text = 0;
-                }
-                if consecutive_no_text >= MAX_NO_TEXT_ITERATIONS {
-                    log_info!("[Agent] No text output for {} iterations. Forcing final answer.", consecutive_no_text);
-                    let _ = tx.send(AgentEvent::Response {
-                        content: format!(
-                            "I've completed the requested changes through multiple tool calls. \
-                             Here's a summary of what was done. \
-                             Please ask if you need any modifications."
-                        ),
-                        tool_calls_made: total_tool_calls,
-                        usage,
-                    }).await;
-                    return Ok(());
-                }
-
                 // Add assistant message to context
                 ctx.push(Message::Assistant {
                     content: Some(full_content),
@@ -627,6 +714,7 @@ impl Agent {
                 });
 
                 // Execute each tool call
+                let mut executed_this_turn: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
                 for call in &tool_calls {
                     total_tool_calls += 1;
 
@@ -730,6 +818,59 @@ impl Agent {
                         }
                     }
 
+                    // Pre-check: catch empty args for tools that require them
+                    let args_empty = call.function.arguments.trim().is_empty() || call.function.arguments == "{}" || call.function.arguments == "null";
+                    if args_empty {
+                        let needs_args = matches!(
+                            call.function.name.as_str(),
+                            "run_command" | "read_file" | "write_file" | "edit_file" | "search_code" | "list_directory"
+                        );
+                        if needs_args {
+                            session_log.log_flow(&format!(
+                                "Tool '{}' called with empty args - forcing self-correction",
+                                call.function.name
+                            ));
+                            let result = format!(
+                                "ERROR: You called {} without providing any arguments. \
+                                 This tool requires specific arguments to work. \
+                                 Please provide the required arguments and try again.",
+                                call.function.name
+                            );
+                            let _ = tx.send(AgentEvent::ToolResult {
+                                tool_name: call.function.name.clone(),
+                                result: result.clone(),
+                            }).await;
+                            ctx.push(Message::Tool {
+                                tool_call_id: call.id.clone(),
+                                content: result,
+                            });
+                            // Don't increment failures - this is a self-correction
+                            continue;
+                        }
+                    }
+
+                    // Skip duplicate tool calls (same name + same args) within one iteration
+                    let dedup_key = (call.function.name.clone(), call.function.arguments.clone());
+                    if !executed_this_turn.insert(dedup_key.clone()) {
+                        session_log.log_flow(&format!(
+                            "Skipping duplicate tool call: {} with args {}",
+                            dedup_key.0, dedup_key.1
+                        ));
+                        let result = "Skipped: duplicate tool call with identical arguments in this turn.".to_string();
+                        let _ = tx.send(AgentEvent::ToolResult {
+                            tool_name: dedup_key.0,
+                            result: result.clone(),
+                        }).await;
+                        ctx.push(Message::Tool {
+                            tool_call_id: call.id.clone(),
+                            content: result,
+                        });
+                        continue;
+                    }
+
+                    // Log tool execution start
+                    session_log.log_tool_start(&call.function.name, &call.function.arguments);
+
                     let _ = tx
                         .send(AgentEvent::ToolUse {
                             tool_name: call.function.name.clone(),
@@ -737,10 +878,92 @@ impl Agent {
                         })
                         .await;
 
+                    let tool_start = std::time::Instant::now();
                     let result = self
                         .tools
                         .execute(&call.function.name, &call.function.arguments)
                         .await;
+                    let tool_duration = tool_start.elapsed().as_millis() as u64;
+
+                    // Intercept todo_write to update agent state
+                    if call.function.name == "todo_write" {
+                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&call.function.arguments) {
+                            if let Some(todos_arg) = parsed.get("todos").and_then(|v| v.as_array()) {
+                                // Detect plan creation: ANY todo_write that includes content
+                                // (status-only updates don't have content, so content = new item)
+                                let has_new_content = todos_arg.iter().any(|t| {
+                                    !t["content"].as_str().unwrap_or("").is_empty()
+                                });
+
+                                if has_new_content && !has_plan {
+                                    has_plan = true;
+                                    session_log.log_flow("Plan detected via todo_write with content");
+                                }
+
+                                let mut todos = self.todo_items.lock().await;
+                                for todo_args in todos_arg {
+                                    let id = todo_args["id"].as_str().unwrap_or("");
+                                    let content = todo_args["content"].as_str().unwrap_or("");
+                                    let status_str = todo_args["status"].as_str().unwrap_or("pending");
+                                    let priority_str = todo_args["priority"].as_str().unwrap_or("medium");
+
+                                    if id.is_empty() { continue; }
+
+                                    let status = match status_str {
+                                        "completed" | "done" => TodoStatus::Completed,
+                                        "in_progress" | "in-progress" => TodoStatus::InProgress,
+                                        "failed" => TodoStatus::Failed,
+                                        _ => TodoStatus::Pending,
+                                    };
+                                    let priority = match priority_str {
+                                        "high" => TodoPriority::High,
+                                        "low" => TodoPriority::Low,
+                                        _ => TodoPriority::Medium,
+                                    };
+
+                                    if let Some(existing) = todos.iter_mut().find(|t| t.id == id) {
+                                        existing.status = status.clone();
+                                        existing.priority = priority;
+                                        if !content.is_empty() {
+                                            existing.content = content.to_string();
+                                        }
+                                    } else {
+                                        todos.push(TodoItem {
+                                            id: id.to_string(),
+                                            content: content.to_string(),
+                                            status: status.clone(),
+                                            priority,
+                                        });
+                                    }
+
+                                    // Track completed steps for progress context
+                                    if status == TodoStatus::Completed {
+                                        // Extract step number from id like "step_1"
+                                        if let Some(step_num) = id.strip_prefix("step_").and_then(|s| s.parse::<u32>().ok()) {
+                                            last_completed_step = Some(step_num);
+                                        }
+                                    }
+                                }
+                                // Also populate plan_steps if empty so status tracking works
+                                {
+                                    let mut steps = self.plan_steps.lock().await;
+                                    if steps.is_empty() {
+                                        *steps = todos.iter().enumerate().map(|(i, t)| PlanStep {
+                                            step: (i + 1) as u32,
+                                            description: t.content.clone(),
+                                            status: match t.status {
+                                                TodoStatus::Pending => PlanStepStatus::Pending,
+                                                TodoStatus::InProgress => PlanStepStatus::InProgress,
+                                                TodoStatus::Completed => PlanStepStatus::Done,
+                                                TodoStatus::Failed => PlanStepStatus::Failed,
+                                            },
+                                        }).collect();
+                                    }
+                                }
+                                let _ = tx.send(AgentEvent::TodoUpdate { todos: todos.clone() }).await;
+                            }
+                        }
+                    }
 
                     // Track if this was a failure
                     if result.starts_with("Unknown tool:")
@@ -753,14 +976,8 @@ impl Agent {
                         consecutive_failures = 0; // Reset on success
                     }
 
-                    // Update plan step status to in_progress
-                    {
-                        let mut steps = self.plan_steps.lock().await;
-                        if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::Pending) {
-                            step.status = PlanStepStatus::InProgress;
-                            let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
-                        }
-                    }
+                    // Log tool execution end
+                    session_log.log_tool_end(&call.function.name, &result, tool_duration);
 
                     // Send full result to frontend for display
                     let _ = tx
@@ -770,13 +987,14 @@ impl Agent {
                         })
                         .await;
 
-                    // Update plan step status to done
-                    {
-                        let mut steps = self.plan_steps.lock().await;
-                        if let Some(step) = steps.iter_mut().find(|s| s.status == PlanStepStatus::InProgress) {
-                            step.status = PlanStepStatus::Done;
-                            let _ = tx.send(AgentEvent::PlanUpdate { steps: steps.clone() }).await;
-                        }
+                    // Only update plan step status for todo_write calls
+                    // (the model signals step progression via todo_write, not every tool call)
+                    if call.function.name == "todo_write" {
+                        // The todo_write tool already updated todo_items/plan_steps
+                        // Just send the update to frontend
+                        let todos = self.todo_items.lock().await.clone();
+                        session_log.log_todo_update(&todos);
+                        let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
                     }
 
                     // ── Universal truncation: cap tool result for context ──
@@ -789,10 +1007,12 @@ impl Agent {
                             .last()
                             .unwrap_or(0);
                         let truncated = result[..safe_end].to_string();
-                        log_debug!(
-                            "[TokenDiet] Truncated {} output: {} -> {} chars",
-                            call.function.name, result.len(), safe_end
-                        );
+                        session_log.log_flow(&format!(
+                            "Truncated {} output: {} -> {} chars",
+                            call.function.name,
+                            result.len(),
+                            safe_end
+                        ));
                         format!("{}\n... (truncated, {} total chars)", truncated, result.len())
                     } else {
                         result
@@ -805,29 +1025,58 @@ impl Agent {
                     });
                 }
             } else {
+                // Check if the model output todo_write as text instead of a tool call
+                if !full_content.is_empty() && self.try_intercept_todo_write_text(&full_content).await {
+                    // Model output todo_write JSON as text — processed it, continue the loop
+                    // Send TodoUpdate to frontend
+                    {
+                        let todos = self.todo_items.lock().await.clone();
+                        let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                    }
+                    // Preserve the model's original plan content so it remembers what it decided to do
+                    ctx.push(Message::Assistant {
+                        content: Some(full_content.clone()),
+                        tool_calls: None,
+                    });
+                    consecutive_failures = 0;
+                    continue;
+                }
+
                 // No tool calls - final response
+                // If a plan was just created, don't send it as final response - continue loop
+                if plan_created_this_turn {
+                    // Plan was created in text, add it to context and continue
+                    ctx.push(Message::Assistant {
+                        content: Some(full_content.clone()),
+                        tool_calls: None,
+                    });
+                    continue;
+                }
+
+                // If a plan exists but model returned empty response, re-prompt it to execute
+                if has_plan && full_content.is_empty() {
+                    session_log.log_flow("Model returned empty response after plan creation, re-prompting to execute");
+                    ctx.push(Message::System {
+                        content: "You have a plan with TODO items. Execute the first pending step now. Mark it as 'in_progress' with todo_write, then run the required tool.".to_string(),
+                    });
+                    continue;
+                }
+
                 let _ = tx
                     .send(AgentEvent::Response {
-                        content: if has_plan { String::new() } else { full_content },
+                        content: full_content,
                         tool_calls_made: total_tool_calls,
-                        usage,
+                        usage: usage.clone(),
                     })
                     .await;
+
+                // End session log
+                let total_tokens = usage.as_ref().map_or(0, |u| u.total_tokens as u64);
+                session_log.end(iteration, total_tool_calls, total_tokens);
+
                 return Ok(());
             }
         }
-
-        // Exceeded max iterations
-        let _ = tx
-            .send(AgentEvent::Response {
-                content: format!(
-                    "Reached maximum iterations ({}). Stopping.",
-                    self.max_iterations
-                ),
-                tool_calls_made: total_tool_calls,
-                usage: None,
-            })
-            .await;
 
         Ok(())
     }
@@ -877,10 +1126,32 @@ impl Agent {
                 // Handle tool calls
                 if let Some(calls) = tool_calls {
                     if calls.is_empty() {
-                        // No tool calls - this is the final response
+                        // No tool calls — check if model output todo_write as text
+                        let content_text = content.clone().unwrap_or_default();
+                        if !content_text.is_empty() && self.try_intercept_todo_write_text(&content_text).await {
+                            {
+                                let todos = self.todo_items.lock().await.clone();
+                                let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                            }
+                            ctx.push(Message::Assistant {
+                                content: Some(content_text.clone()),
+                                tool_calls: None,
+                            });
+                            *consecutive_failures = 0;
+                            return Ok(());
+                        }
+                        // Final response
+                        // If a plan exists but model returned empty response, re-prompt
+                        let has_plan = !self.todo_items.lock().await.is_empty();
+                        if has_plan && content_text.is_empty() {
+                            ctx.push(Message::System {
+                                content: "You have a plan with TODO items. Execute the first pending step now. Mark it as 'in_progress' with todo_write, then run the required tool.".to_string(),
+                            });
+                            return Ok(());
+                        }
                         let _ = tx
                             .send(AgentEvent::Response {
-                                content: content.clone().unwrap_or_default(),
+                                content: content_text,
                                 tool_calls_made: *total_tool_calls,
                                 usage,
                             })
@@ -892,8 +1163,24 @@ impl Agent {
                     ctx.push(choice.message.clone());
 
                     // Execute each tool call
+                    let mut executed_this_turn: std::collections::HashSet<(String, String)> = std::collections::HashSet::new();
                     for call in calls {
                         *total_tool_calls += 1;
+
+                        // Skip duplicate tool calls within one iteration
+                        let dedup_key = (call.function.name.clone(), call.function.arguments.clone());
+                        if !executed_this_turn.insert(dedup_key.clone()) {
+                            let result = "Skipped: duplicate tool call with identical arguments in this turn.".to_string();
+                            let _ = tx.send(AgentEvent::ToolResult {
+                                tool_name: dedup_key.0,
+                                result: result.clone(),
+                            }).await;
+                            ctx.push(Message::Tool {
+                                tool_call_id: call.id.clone(),
+                                content: result,
+                            });
+                            continue;
+                        }
 
                         // Check permissions
                         let perm_result = self.permissions.check(
@@ -998,10 +1285,24 @@ impl Agent {
                         });
                     }
                 } else {
-                    // No tool calls - final response
+                    // No tool_calls field at all — check for todo_write text
+                    let content_text = content.clone().unwrap_or_default();
+                    if !content_text.is_empty() && self.try_intercept_todo_write_text(&content_text).await {
+                        {
+                            let todos = self.todo_items.lock().await.clone();
+                            let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                        }
+                        ctx.push(Message::Assistant {
+                            content: Some(content_text),
+                            tool_calls: None,
+                        });
+                        *consecutive_failures = 0;
+                        return Ok(());
+                    }
+                    // Final response
                     let _ = tx
                         .send(AgentEvent::Response {
-                            content: content.clone().unwrap_or_default(),
+                            content: content_text,
                             tool_calls_made: *total_tool_calls,
                             usage,
                         })
@@ -1020,6 +1321,31 @@ impl Agent {
         }
 
         Ok(())
+    }
+
+    /// Build progress context message that tells LLM whether planning is done
+    /// This prevents re-planning by explicitly stating the current state
+    fn build_progress_context(&self, has_plan: &bool, last_completed_step: &Option<u32>) -> String {
+        if *has_plan {
+            let step_info = match last_completed_step {
+                Some(step) => format!("Step {} is done.", step),
+                None => "No step completed yet.".to_string(),
+            };
+            format!(
+                "## Progress Status\n\
+                 A plan has already been created for this request. {} \
+                 Do NOT create another plan. Instead:\n\
+                 - Update the TODO item for the next step to 'in_progress' using `todo_write`\n\
+                 - Execute that step\n\
+                 - When done, mark it as 'completed' and move to the next step\n\
+                 - When all steps are done, provide a final summary to the user",
+                step_info
+            )
+        } else {
+            "## Progress Status\n\
+             No plan exists yet. Create a plan and TODO items first, then execute step by step."
+                .to_string()
+        }
     }
 
     fn build_system_prompt(&self) -> String {
@@ -1043,11 +1369,61 @@ You can:
 - Search codebases with regex patterns
 - Find all references to symbols
 - Find definitions of functions, structs, types
-- Run shell commands
+- Run shell commands (for quick, short-lived commands)
+- **Run background processes** (for servers, watchers, long-running tasks)
+- **Read logs from background processes**
+- **Stop background processes**
 - Execute tests (auto-detects framework)
 - Check LSP diagnostics (errors/warnings)
 - View and create git commits
 - **Spawn sub-agents** for parallel work (use spawn_agent or run_subagent)
+
+## Background Processes (CRITICAL)
+
+**DECISION RULE — follow this BEFORE every command:**
+1. Will the command exit within 5 seconds? → Use `run_command`
+2. Will the command run forever or take a long time? → Use `run_background`
+
+**Commands that MUST use `run_background` (never `run_command`):**
+- `go run .` / `go run main.go`
+- `npm run dev` / `npm start`
+- `python -m http.server`
+- `cargo run`
+- Any server, watcher, or long-running process
+
+**Why?** `run_command` blocks until the process exits. Servers never exit, so the agent hangs forever.
+
+**Flow for servers (MUST follow this exact sequence):**
+1. `todo_write({{todos: [{{"id": "step_1", "status": "in_progress"}}]}})` ← Mark step as in_progress
+2. `run_background("go run .")` → returns PID immediately
+3. `read_process_output(pid)` → check if server started — **DO NOT SKIP THIS STEP**
+4. `todo_write({{todos: [{{"id": "step_1", "status": "completed"}}]}})` ← Mark completed AFTER verification
+5. Report to user: "Server started on port 8081. PID: 12345"
+
+**PORT CONFLICT HANDLING — follow this when starting servers:**
+If `read_process_output` shows "address already in use" or "port already in use":
+1. `run_command("lsof -i :PORT -sTCP:LISTEN -P -n")` → find PID using the port
+2. `run_command("kill -9 PID")` → kill the old process
+3. `run_background("go run .")` → re-run the server
+4. `read_process_output(new_pid)` → verify it started
+
+**Example flow:**
+```
+User: "Run the app and share logs"
+Plan:
+1. Start application in background
+2. Check if it started successfully
+3. If port conflict, kill old process and re-run
+4. Share logs
+
+→ run_background("go run .") → PID 12345
+→ read_process_output(12345) → "address already in use"
+→ run_command("lsof -i :8081 -sTCP:LISTEN -P -n") → PID 11140
+→ run_command("kill -9 11140")
+→ run_background("go run .") → PID 12400
+→ read_process_output(12400) → "Server starting on :8081"
+→ "Application is running on port 8081. Logs: ..."
+```
 
 ## Sub-Agents
 
@@ -1067,26 +1443,37 @@ You: Call spawn_agent three times with each task, then report the task IDs.
 
 **For simple tasks like "run cargo test" or "create a file", handle directly with run_command, write_file, etc.**
 
-## CRITICAL: How to Respond
+## Self-Evaluation (IMPORTANT)
 
-1. **Read the user's request carefully**
-2. **Use tools ONLY if needed** — read_file, edit_file, write_file, search_code
-3. **After each tool call, decide**: Do I have enough information? If YES, stop calling tools and write your response
-4. **You MUST produce a text response** — do not end with only tool calls
-5. **Your response should explain what you did** or answer the user's question
+After EVERY tool call, ask yourself these three questions:
 
-Example flow:
-- User: "Add factorial function"
-- You: call write_file (write the code), then respond "Done. I added the factorial function to utils.rs and updated main.rs to use it."
+1. **Have I answered the user's question?** — If YES, respond with text immediately.
+2. **Is there anything else the user might need?** — If NO, respond with text.
+3. **Am I stuck or uncertain?** — If YES, STOP and ask the user for clarification.
 
-Do NOT: call read_file → call search_code → call read_file → call edit_file → ... (infinite tools, no answer)
+Never call a tool just to "be thorough" or "double-check." Only call a tool when you need specific information you don't already have.
+
+## When to Stop
+
+Stop calling tools and respond with text when:
+- You have completed what the user asked
+- You have enough information to answer the question
+- You are unsure how to proceed (ask the user)
+- A tool call failed and you need user guidance
+
+Your response should:
+- Confirm what you did (for task requests)
+- Answer the question (for explanation requests)
+- Explain what went wrong (if tools failed)
+- Ask for clarification (if the request is unclear)
 
 ## RAG Auto-Context
 
-CRITICAL: Relevant code is automatically injected into your context BEFORE each turn.
-When you see "Relevant Code Context" in the messages, that IS your answer. Use it directly.
-- DO NOT call search_code or read_file if the answer is in the auto-context
-- DO NOT call any tools for explanation questions — just answer from the auto-context
+Relevant code is automatically injected into your context BEFORE each turn.
+When you see "Relevant Code Context" in the messages, use it directly.
+- **NEVER call `read_file` if the file content is already shown in "Relevant Code Context"** — it wastes tokens and time
+- **NEVER call `search_code` if the answer is in the auto-context** — search only when auto-context is empty or insufficient
+- Do NOT call any tools for explanation questions — just answer from the auto-context
 - Only call tools for WRITE tasks (write_file, edit_file) or if the auto-context is empty
 
 ## When to Use Tools vs Just Answer
@@ -1095,63 +1482,94 @@ Classify the user's request FIRST:
 
 **EXPLANATION questions** (no tools needed):
 - "How does X work?" / "What does X do?" / "Explain X"
-- "Why is X written this way?"
 → Answer directly from RAG context. Do NOT call any tools.
 
 **CODE WRITING tasks** (write directly, don't re-read):
 - "Add function X" / "Create file Y" / "Implement Z"
-→ The RAG context already has the existing code. Use it to understand the structure, then call write_file/edit_file directly. Do NOT re-read files first.
+→ Use the RAG context to understand structure, then call write_file/edit_file directly.
 
 **COMPLEX tasks** (may need exploration):
 - "Refactor X across multiple files" / "Fix bug in X"
 → Read ONE file if needed for context, then execute. Do NOT read the same file multiple times.
 
-## Response Style
-
-- Be CONCISE. Answer in 1-3 paragraphs unless the user asks for detail.
-- Don't repeat information already in the auto-context.
-
-## RULE: After calling tools, YOU MUST RESPOND WITH TEXT
-
-This is the most important rule. You have two choices after calling a tool:
-
-1. **Call another tool** (only if you truly need more information)
-2. **Respond with text** (explain what you did, answer the question, etc.)
-
-NEVER end a conversation with only tool calls. You MUST produce a text response.
-
-Example correct flow:
-- User: "Add factorial function"
-- You: call write_file("src/utils.rs", "...fact function...")
-- You: respond "Done. I added the factorial function to utils.rs and updated main.rs to use it."
-
-Example WRONG flow (DO NOT DO THIS):
-- User: "Add factorial function"
-- You: call read_file("src/utils.rs")
-- You: call read_file("src/main.rs")
-- You: call search_code("fact")
-- You: call edit_file(...)
-- You: call edit_file(...)
-- You: [no text response, loop continues]
-
-STOP after 2-3 tool calls maximum. Then RESPOND WITH TEXT.
-- Don't read files you already have in context.
+**RUNNING commands** (choose the right tool):
+- Quick command (exits in <5s): `run_command`
+- Server/long-running: `run_background` → `read_process_output`
 
 ## Decision Framework
 
 1. **Check RAG context first**: The auto-context already has relevant code — use it
-2. **Plan before acting**: For complex tasks, output a numbered plan
+2. **Check Progress Status**: If a plan exists, continue execution. If not, create a plan first.
 3. **Write code directly**: Use write_file/edit_file with the code from RAG context
 4. **Verify once**: After writing, run get_diagnostics or cargo check ONCE
 5. **Explain your changes**: Tell the user what you did and why
 
-## Planning
+## Planning (CONDITIONAL)
 
-- For complex tasks, output a numbered plan before executing tools
-- Use this format: Plan: 1. First step 2. Second step ...
-- Keep plans to 3-7 steps
-- Each step should be a clear, actionable task
-- Execute one step at a time using tools
+**Check the "Progress Status" context message first:**
+- If it says "No plan exists yet" → Create a plan and TODO items
+- If it says "A plan has already been created" → Do NOT create a new plan. Instead, update existing TODOs and continue execution.
+
+**When creating a plan (first time only):**
+Before executing ANY tools, output a numbered plan. This is mandatory for multi-step requests.
+
+**When to plan (any request with 2+ steps):**
+- "Run the app" → plan: 1. Start in background 2. Check if started 3. Handle port conflict if needed 4. Share logs
+- "Add a function" → plan: 1. Read file 2. Write code 3. Verify
+- "Fix the bug" → plan: 1. Read error 2. Find cause 3. Fix 4. Test
+
+**SERVER WORKFLOWS — always include these steps in your plan:**
+1. Start server in background (`run_background`)
+2. Check if it started successfully (`read_process_output`)
+3. If port conflict → find PID, kill, re-run
+4. Share logs with user
+
+**Format:**
+```
+Plan:
+1. First step
+2. Second step
+3. Third step
+```
+
+Then execute step by step. Update the user after each step.
+
+**Exception:** Only skip planning for single-action requests like "read file X" or "what is on line 10?"
+
+## After Outputting a Plan
+
+After outputting your numbered plan, use the `todo_write` tool to create a TODO item for each plan step. This updates the user's task list in real-time. IMPORTANT: Use the `todo_write` tool as an actual tool call, do NOT output it as text.
+
+Correct: Make a tool_call to `todo_write` with JSON arguments like {{"todos": [{{"id": "step_1", "content": "...", "status": "pending", "priority": "medium"}}]}}
+Wrong: Writing "todo_write: id=..." as plain text in your response
+
+## Updating TODO Status (CRITICAL)
+
+As you complete each step, you MUST update the TODO status using `todo_write`:
+1. Before starting a step: Set status to `"in_progress"`
+2. **Execute the tool call for that step** (e.g., `run_background`, `read_process_output`)
+3. **ONLY AFTER the tool succeeds**: Set status to `"completed"`
+4. Move to the next step
+
+**CRITICAL: Do NOT mark a step as completed before executing its tool call!**
+**CRITICAL: Do NOT skip steps! You MUST execute each step in order before marking it completed.**
+
+Example flow:
+- `todo_write({{todos: [{{"id": "step_1", "status": "in_progress"}}]}})` → `run_background("go run .")` → **wait for result** → `read_process_output(pid)` → **then** `todo_write({{todos: [{{"id": "step_1", "status": "completed"}}]}})`
+
+**WRONG — skipping verification:**
+1. `run_background("go run .")` ← Started server
+2. `todo_write({{todos: [{{"id": "step_1", "status": "completed"}}]}})` ← WRONG! Did NOT verify server started!
+
+**WRONG — marking completed before executing:**
+1. `todo_write({{todos: [{{"id": "step_1", "status": "completed"}}]}})` ← Marked completed before executing!
+2. `run_background("go run .")` ← Now executing, but already marked done
+
+**RIGHT:**
+1. `todo_write({{todos: [{{"id": "step_1", "status": "in_progress"}}]}})` ← Mark in progress
+2. `run_background("go run .")` ← Execute the tool
+3. `read_process_output(pid)` ← Verify result
+4. `todo_write({{todos: [{{"id": "step_1", "status": "completed"}}]}})` ← Mark completed AFTER verification
 
 ## Error Handling
 
@@ -1312,6 +1730,122 @@ STOP after 2-3 tool calls maximum. Then RESPOND WITH TEXT.
             }
             _ => arguments.to_string(),
         }
+    }
+
+    /// Try to detect and process todo_write JSON output as text.
+    /// Some models output the todo_write arguments as plain text instead of a tool call.
+    /// Returns true if todos were successfully intercepted.
+    async fn try_intercept_todo_write_text(&self, text: &str) -> bool {
+        let trimmed = text.trim();
+        
+        // Try to find a JSON object containing "todos" anywhere in the text
+        // The model often outputs plan text + todo_write JSON as plain text
+        if let Some(json_str) = self.extract_todos_json(trimmed) {
+            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                if let Some(todos_arg) = parsed.get("todos").and_then(|v| v.as_array()) {
+                let mut new_todos = Vec::new();
+                for (idx, todo_args) in todos_arg.iter().enumerate() {
+                    let id = todo_args["id"].as_str().unwrap_or("");
+                    let content = todo_args["content"].as_str().unwrap_or("");
+                    let priority_str = todo_args["priority"].as_str().unwrap_or("medium");
+
+                    if id.is_empty() || content.is_empty() { continue; }
+
+                    // Force all new todos to start as Pending or InProgress (first item)
+                    // The model often sends status: "completed" which is wrong
+                    let status = if idx == 0 {
+                        TodoStatus::InProgress  // First task starts in progress
+                    } else {
+                        TodoStatus::Pending     // All others start pending
+                    };
+                    let priority = match priority_str {
+                        "high" => TodoPriority::High,
+                        "low" => TodoPriority::Low,
+                        _ => TodoPriority::Medium,
+                    };
+
+                    new_todos.push(TodoItem {
+                        id: id.to_string(),
+                        content: content.to_string(),
+                        status,
+                        priority,
+                    });
+                }
+
+                if !new_todos.is_empty() {
+                    // Update todo store
+                    {
+                        let mut todo_store = self.todo_items.lock().await;
+                        *todo_store = new_todos.clone();
+                    }
+                    // Update plan steps to match
+                    {
+                        let mut steps = self.plan_steps.lock().await;
+                        if steps.is_empty() {
+                            *steps = new_todos.iter().enumerate().map(|(i, t)| PlanStep {
+                                step: (i + 1) as u32,
+                                description: t.content.clone(),
+                                status: match t.status {
+                                    TodoStatus::Pending => PlanStepStatus::Pending,
+                                    TodoStatus::InProgress => PlanStepStatus::InProgress,
+                                    TodoStatus::Completed => PlanStepStatus::Done,
+                                    TodoStatus::Failed => PlanStepStatus::Failed,
+                                },
+                            }).collect();
+                        }
+                    }
+                    return true;
+                }
+                }
+            }
+        }
+        false
+    }
+
+    /// Extract JSON containing "todos" from text that may include plan text before/after
+    fn extract_todos_json(&self, text: &str) -> Option<String> {
+        // Look for a JSON object that contains "todos"
+        // Find the first '{' and try to find a matching '}' that contains "todos"
+        if let Some(start) = text.find('{') {
+            // Try to find the end of the JSON object by counting braces
+            let mut depth = 0;
+            let mut in_string = false;
+            let mut escape_next = false;
+            
+            for (i, c) in text[start..].char_indices() {
+                if escape_next {
+                    escape_next = false;
+                    continue;
+                }
+                if c == '\\' && in_string {
+                    escape_next = true;
+                    continue;
+                }
+                if c == '"' {
+                    in_string = !in_string;
+                    continue;
+                }
+                if in_string {
+                    continue;
+                }
+                match c {
+                    '{' => depth += 1,
+                    '}' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            let json_str = &text[start..=start + i];
+                            // Verify it contains "todos"
+                            if json_str.contains("\"todos\"") {
+                                return Some(json_str.to_string());
+                            }
+                            // If no "todos", continue looking
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        None
     }
 
     /// Parse a plan from the LLM's text response

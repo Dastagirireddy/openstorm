@@ -33,3 +33,6 @@ test-folder
 DEBUG_RUN_PLAN.md
 .progress.md
 graphify-out
+
+# AI agent config (per-developer)
+opencode.json
