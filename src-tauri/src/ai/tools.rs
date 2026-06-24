@@ -7,6 +7,8 @@ use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 
 use super::agent::AgentEvent;
+use super::agent::DiffLine;
+use super::agent::FileModification;
 use super::embedding_store::EmbeddingStore;
 use super::mcp::McpManager;
 use super::provider::{FunctionDefinition, ToolDefinition};
@@ -127,6 +129,8 @@ pub struct ToolRegistry {
     pub process_manager: Arc<Mutex<ProcessManager>>,
     /// Event sender for streaming tool output to the frontend
     pub event_tx: Arc<Mutex<Option<tokio::sync::mpsc::Sender<AgentEvent>>>>,
+    /// Pending file modifications captured during tool execution (for v2 summary)
+    pending_file_modifications: std::sync::Mutex<Vec<FileModification>>,
 }
 
 impl ToolRegistry {
@@ -139,6 +143,7 @@ impl ToolRegistry {
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
             event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -152,6 +157,7 @@ impl ToolRegistry {
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
             event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -169,6 +175,7 @@ impl ToolRegistry {
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
             event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -187,6 +194,7 @@ impl ToolRegistry {
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
             event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -206,6 +214,7 @@ impl ToolRegistry {
             mcp_manager: Some(mcp_manager),
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
             event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }
     }
 
@@ -224,6 +233,72 @@ impl ToolRegistry {
                 output_type: output_type.to_string(),
                 data: data.to_string(),
             }).await;
+        }
+    }
+
+    /// Take all pending file modifications (drains the list)
+    pub fn take_file_modifications(&self) -> Vec<FileModification> {
+        let mut pending = self.pending_file_modifications.lock().unwrap();
+        std::mem::take(&mut *pending)
+    }
+
+    /// Compute a simple line-by-line diff between old and new content
+    fn compute_diff(path: &str, old_content: &str, new_content: &str) -> FileModification {
+        let old_lines: Vec<&str> = old_content.lines().collect();
+        let new_lines: Vec<&str> = new_content.lines().collect();
+        let mut diff_lines = Vec::new();
+        let mut lines_added = 0u32;
+        let mut lines_removed = 0u32;
+
+        let max_lines = old_lines.len().max(new_lines.len());
+        let mut old_idx = 0;
+        let mut new_idx = 0;
+
+        for _ in 0..max_lines + 5 {
+            let old_line = old_lines.get(old_idx).copied();
+            let new_line = new_lines.get(new_idx).copied();
+
+            match (old_line, new_line) {
+                (Some(o), Some(n)) if o == n => {
+                    diff_lines.push(DiffLine {
+                        line_type: "context".to_string(),
+                        line_num: (new_idx + 1) as u32,
+                        content: o.to_string(),
+                    });
+                    old_idx += 1;
+                    new_idx += 1;
+                }
+                (Some(o), _) => {
+                    diff_lines.push(DiffLine {
+                        line_type: "delete".to_string(),
+                        line_num: (old_idx + 1) as u32,
+                        content: o.to_string(),
+                    });
+                    lines_removed += 1;
+                    old_idx += 1;
+                }
+                (None, Some(n)) => {
+                    diff_lines.push(DiffLine {
+                        line_type: "add".to_string(),
+                        line_num: (new_idx + 1) as u32,
+                        content: n.to_string(),
+                    });
+                    lines_added += 1;
+                    new_idx += 1;
+                }
+                (None, None) => break,
+            }
+
+            if old_idx >= old_lines.len() && new_idx >= new_lines.len() {
+                break;
+            }
+        }
+
+        FileModification {
+            path: path.to_string(),
+            diff: diff_lines,
+            lines_added,
+            lines_removed,
         }
     }
 
@@ -916,13 +991,24 @@ impl ToolRegistry {
         let content = args["content"].as_str().unwrap_or("");
         let full_path = Path::new(&self.project_path).join(path);
 
+        // Read old content for diff capture
+        let old_content = fs::read_to_string(&full_path).await.unwrap_or_default();
+
         // Ensure parent directory exists
         if let Some(parent) = full_path.parent() {
             let _ = fs::create_dir_all(parent).await;
         }
 
         match fs::write(&full_path, content).await {
-            Ok(_) => format!("Successfully wrote to {}", path),
+            Ok(_) => {
+                // Capture diff if content changed
+                if old_content != content {
+                    let modification = Self::compute_diff(path, &old_content, content);
+                    let mut pending = self.pending_file_modifications.lock().unwrap();
+                    pending.push(modification);
+                }
+                format!("Successfully wrote to {}", path)
+            }
             Err(e) => format!("Error writing file: {}", e),
         }
     }
@@ -1315,6 +1401,12 @@ impl ToolRegistry {
         // Write the file
         match fs::write(&full_path, &result).await {
             Ok(_) => {
+                // Capture diff if content changed
+                if content != result {
+                    let modification = Self::compute_diff(path, &content, &result);
+                    let mut pending = self.pending_file_modifications.lock().unwrap();
+                    pending.push(modification);
+                }
                 let replaced = end_line - start_line + 1;
                 format!(
                     "Successfully edited {} (replaced lines {}-{} with {} new lines)",

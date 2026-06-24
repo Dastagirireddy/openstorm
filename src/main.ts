@@ -78,6 +78,8 @@ import "./components/overlays/theme-palette.js";
 import "./components/overlays/settings-panel.js";
 import "./components/ai/ai-panel.js";
 import "./components/ai/ai-todo-panel.js";
+import "./components/ai/v2/ai-panel-v2.js";
+import { FEATURES } from "./lib/config/features.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
@@ -1117,6 +1119,14 @@ export class OpenStormApp extends TailwindElement() {
     }
 
     if (activeTabType === 'openstorm') {
+      if (FEATURES.AI_PANEL_VERSION === 'v2') {
+        return html`
+          <ai-panel-v2
+            class="flex-1 flex flex-col overflow-hidden min-h-0"
+            .projectPath=${this.projectPath}>
+          </ai-panel-v2>
+        `;
+      }
       return html`
         <ai-panel
           class="flex-1 flex flex-col overflow-hidden min-h-0"
@@ -1194,6 +1204,16 @@ export class OpenStormApp extends TailwindElement() {
         <!-- OpenStorm panes (one per openstorm tab) -->
         ${openstormTabs.map(openstormTab => {
           const isActive = activeTab?.id === openstormTab.id;
+          if (FEATURES.AI_PANEL_VERSION === 'v2') {
+            return html`
+              <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
+                <ai-panel-v2
+                  class="flex-1 flex flex-col overflow-hidden min-h-0"
+                  .projectPath=${this.projectPath}>
+                </ai-panel-v2>
+              </div>
+            `;
+          }
           return html`
             <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
               <ai-panel

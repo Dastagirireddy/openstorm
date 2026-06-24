@@ -355,7 +355,7 @@ impl PermissionSystem {
             PermissionProfile::Smart => {
                 let mut perms = HashMap::new();
                 perms.insert("write_file".to_string(), ToolPermission {
-                    requires_approval: false,
+                    requires_approval: true,
                     allowed_patterns: vec![],
                     denied_patterns: vec![
                         r"^\..*".to_string(),
@@ -365,7 +365,7 @@ impl PermissionSystem {
                     rate_limit: Some(10),
                 });
                 perms.insert("edit_file".to_string(), ToolPermission {
-                    requires_approval: false,
+                    requires_approval: true,
                     allowed_patterns: vec![],
                     denied_patterns: vec![
                         r"^\..*".to_string(),
@@ -384,7 +384,7 @@ impl PermissionSystem {
                     rate_limit: Some(5),
                 });
                 perms.insert("git_commit".to_string(), ToolPermission {
-                    requires_approval: false,
+                    requires_approval: true,
                     allowed_patterns: vec![],
                     denied_patterns: vec![],
                     rate_limit: Some(3),

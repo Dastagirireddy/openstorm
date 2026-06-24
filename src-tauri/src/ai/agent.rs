@@ -71,6 +71,49 @@ pub enum TodoPriority {
     High,
 }
 
+/// Type of a telemetry field value
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TelemetryFieldType {
+    Text,
+    Link,
+    Success,
+    Error,
+}
+
+/// A single key-value field in a tool's telemetry box
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TelemetryField {
+    pub key: String,
+    pub value: String,
+    pub field_type: TelemetryFieldType,
+}
+
+/// A line in a unified diff
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DiffLine {
+    pub line_type: String, // "context" | "add" | "delete"
+    pub line_num: u32,
+    pub content: String,
+}
+
+/// A file modification tracked during agent execution
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct FileModification {
+    pub path: String,
+    pub diff: Vec<DiffLine>,
+    pub lines_added: u32,
+    pub lines_removed: u32,
+}
+
+/// Snapshot of cost data for execution summary
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CostSnapshot {
+    pub total_prompt_tokens: u32,
+    pub total_completion_tokens: u32,
+    pub total_cost: f64,
+}
+
 /// A single TODO item for tracking progress
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TodoItem {
@@ -185,6 +228,23 @@ pub enum AgentEvent {
         tool_name: String,
         prompt: String,
     },
+
+    /// Structured telemetry data from a tool execution (for v2 timeline boxes)
+    #[serde(rename = "tool_telemetry")]
+    ToolTelemetry {
+        tool_name: String,
+        fields: Vec<TelemetryField>,
+    },
+
+    /// Execution summary emitted at the end of the agent loop (for v2 summary block)
+    #[serde(rename = "execution_summary")]
+    ExecutionSummary {
+        status: String, // "completed" | "failed" | "aborted"
+        files_modified: Vec<FileModification>,
+        total_tool_calls: u32,
+        duration_ms: u64,
+        cost_summary: CostSnapshot,
+    },
 }
 
 /// The agent orchestrates the LLM tool-calling loop
@@ -211,6 +271,10 @@ pub struct Agent {
     cost_tracker: SharedCostTracker,
     /// TODO items for tracking progress
     todo_items: Mutex<Vec<TodoItem>>,
+    /// File modifications accumulated during execution (for v2 summary)
+    file_modifications: Mutex<Vec<FileModification>>,
+    /// Session start time (for v2 summary duration)
+    session_start: std::time::Instant,
 }
 
 impl Agent {
@@ -241,6 +305,8 @@ impl Agent {
             embedding_store,
             cost_tracker,
             todo_items: Mutex::new(Vec::new()),
+            file_modifications: Mutex::new(Vec::new()),
+            session_start: std::time::Instant::now(),
         }
     }
 
@@ -277,6 +343,8 @@ impl Agent {
             embedding_store,
             cost_tracker,
             todo_items: Mutex::new(Vec::new()),
+            file_modifications: Mutex::new(Vec::new()),
+            session_start: std::time::Instant::now(),
         }
     }
 
@@ -315,6 +383,8 @@ impl Agent {
             embedding_store,
             cost_tracker,
             todo_items: Mutex::new(Vec::new()),
+            file_modifications: Mutex::new(Vec::new()),
+            session_start: std::time::Instant::now(),
         }
     }
 
@@ -355,6 +425,8 @@ impl Agent {
             embedding_store,
             cost_tracker,
             todo_items: Mutex::new(Vec::new()),
+            file_modifications: Mutex::new(Vec::new()),
+            session_start: std::time::Instant::now(),
         }
     }
 
@@ -377,6 +449,165 @@ impl Agent {
     /// Get a sender that the frontend can use to approve/deny tool execution
     pub async fn get_approval_sender(&self) -> Option<mpsc::Sender<bool>> {
         self.approval_tx.lock().await.clone()
+    }
+
+    /// Generate telemetry fields from a tool execution result.
+    /// Returns structured key-value pairs for the v2 timeline telemetry box.
+    fn build_telemetry_fields(&self, tool_name: &str, result: &str, arguments: &str) -> Vec<TelemetryField> {
+        let args: serde_json::Value = serde_json::from_str(arguments).unwrap_or_default();
+
+        match tool_name {
+            "run_background" => {
+                // Parse PID and command from result
+                let mut fields = Vec::new();
+                if let Some(pid) = result.lines().find_map(|l| {
+                    l.split_whitespace().find_map(|w| w.parse::<u32>().ok())
+                }) {
+                    fields.push(TelemetryField {
+                        key: "pid".to_string(),
+                        value: pid.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    });
+                }
+                let command = args["command"].as_str().unwrap_or("unknown");
+                fields.push(TelemetryField {
+                    key: "command".to_string(),
+                    value: command.to_string(),
+                    field_type: TelemetryFieldType::Text,
+                });
+                fields.push(TelemetryField {
+                    key: "status".to_string(),
+                    value: "running".to_string(),
+                    field_type: TelemetryFieldType::Success,
+                });
+                fields
+            }
+            "read_process_output" => {
+                let pid = args["pid"].as_u64().map(|p| p.to_string()).unwrap_or_default();
+                let mut fields = vec![
+                    TelemetryField {
+                        key: "pid".to_string(),
+                        value: pid,
+                        field_type: TelemetryFieldType::Text,
+                    },
+                    TelemetryField {
+                        key: "output_lines".to_string(),
+                        value: result.lines().count().to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                ];
+                if result.contains("error") || result.contains("Error") {
+                    fields.push(TelemetryField {
+                        key: "status".to_string(),
+                        value: "error".to_string(),
+                        field_type: TelemetryFieldType::Error,
+                    });
+                } else {
+                    fields.push(TelemetryField {
+                        key: "status".to_string(),
+                        value: "ok".to_string(),
+                        field_type: TelemetryFieldType::Success,
+                    });
+                }
+                fields
+            }
+            "run_command" => {
+                let command = args["command"].as_str().unwrap_or("unknown");
+                let mut fields = vec![
+                    TelemetryField {
+                        key: "command".to_string(),
+                        value: command.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                    TelemetryField {
+                        key: "exit".to_string(),
+                        value: if result.starts_with("Error") { "error".to_string() } else { "0".to_string() },
+                        field_type: if result.starts_with("Error") { TelemetryFieldType::Error } else { TelemetryFieldType::Success },
+                    },
+                ];
+                fields
+            }
+            "write_file" | "edit_file" => {
+                let path = args["path"].as_str().unwrap_or("unknown");
+                let mut fields = vec![
+                    TelemetryField {
+                        key: "path".to_string(),
+                        value: path.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                ];
+                if result.starts_with("Successfully") {
+                    fields.push(TelemetryField {
+                        key: "status".to_string(),
+                        value: "written".to_string(),
+                        field_type: TelemetryFieldType::Success,
+                    });
+                } else {
+                    fields.push(TelemetryField {
+                        key: "status".to_string(),
+                        value: "error".to_string(),
+                        field_type: TelemetryFieldType::Error,
+                    });
+                }
+                fields
+            }
+            "read_file" => {
+                let path = args["path"].as_str().unwrap_or("unknown");
+                vec![
+                    TelemetryField {
+                        key: "path".to_string(),
+                        value: path.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                    TelemetryField {
+                        key: "lines".to_string(),
+                        value: result.lines().count().to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                ]
+            }
+            "search_code" => {
+                let pattern = args["pattern"].as_str().unwrap_or("");
+                vec![
+                    TelemetryField {
+                        key: "pattern".to_string(),
+                        value: pattern.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                    TelemetryField {
+                        key: "matches".to_string(),
+                        value: result.lines().filter(|l| !l.starts_with("...")).count().to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                ]
+            }
+            _ => {
+                // Generic telemetry for unknown tools
+                vec![
+                    TelemetryField {
+                        key: "tool".to_string(),
+                        value: tool_name.to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                    TelemetryField {
+                        key: "result_len".to_string(),
+                        value: result.len().to_string(),
+                        field_type: TelemetryFieldType::Text,
+                    },
+                ]
+            }
+        }
+    }
+
+    /// Record a file modification for the v2 execution summary
+    pub async fn record_file_modification(&self, modification: FileModification) {
+        let mut mods = self.file_modifications.lock().await;
+        mods.push(modification);
+    }
+
+    /// Get accumulated file modifications
+    pub async fn get_file_modifications(&self) -> Vec<FileModification> {
+        self.file_modifications.lock().await.clone()
     }
 
     /// Run the agent loop for a user message
@@ -760,6 +991,9 @@ impl Agent {
                                 usage,
                             })
                             .await;
+                        // Emit execution summary for v2 panel
+                        let summary = self.build_execution_summary("failed", total_tool_calls).await;
+                        let _ = tx.send(summary).await;
                         return Ok(());
                     }
 
@@ -1005,6 +1239,25 @@ impl Agent {
                         })
                         .await;
 
+                    // Send structured telemetry for v2 timeline boxes
+                    let telemetry_fields = self.build_telemetry_fields(
+                        &call.function.name,
+                        &result,
+                        &call.function.arguments,
+                    );
+                    let _ = tx
+                        .send(AgentEvent::ToolTelemetry {
+                            tool_name: call.function.name.clone(),
+                            fields: telemetry_fields,
+                        })
+                        .await;
+
+                    // Collect any file modifications captured by write_file/edit_file
+                    let file_mods = self.tools.take_file_modifications();
+                    for modification in file_mods {
+                        self.record_file_modification(modification).await;
+                    }
+
                     // Only update plan step status for todo_write calls
                     // (the model signals step progression via todo_write, not every tool call)
                     if call.function.name == "todo_write" {
@@ -1087,6 +1340,10 @@ impl Agent {
                         usage: usage.clone(),
                     })
                     .await;
+
+                // Emit execution summary for v2 panel
+                let summary = self.build_execution_summary("completed", total_tool_calls).await;
+                let _ = tx.send(summary).await;
 
                 // End session log
                 let total_tokens = usage.as_ref().map_or(0, |u| u.total_tokens as u64);
@@ -1297,6 +1554,25 @@ impl Agent {
                             })
                             .await;
 
+                        // Send structured telemetry for v2 timeline boxes
+                        let telemetry_fields = self.build_telemetry_fields(
+                            &call.function.name,
+                            &result,
+                            &call.function.arguments,
+                        );
+                        let _ = tx
+                            .send(AgentEvent::ToolTelemetry {
+                                tool_name: call.function.name.clone(),
+                                fields: telemetry_fields,
+                            })
+                            .await;
+
+                        // Collect any file modifications captured by write_file/edit_file
+                        let file_mods = self.tools.take_file_modifications();
+                        for modification in file_mods {
+                            self.record_file_modification(modification).await;
+                        }
+
                         ctx.push(Message::Tool {
                             tool_call_id: call.id.clone(),
                             content: result,
@@ -1325,6 +1601,10 @@ impl Agent {
                             usage,
                         })
                         .await;
+
+                    // Emit execution summary for v2 panel
+                    let summary = self.build_execution_summary("completed", *total_tool_calls).await;
+                    let _ = tx.send(summary).await;
                 }
             }
             _ => {
@@ -1335,10 +1615,41 @@ impl Agent {
                         usage,
                     })
                     .await;
+
+                // Emit execution summary for v2 panel
+                let summary = self.build_execution_summary("failed", *total_tool_calls).await;
+                let _ = tx.send(summary).await;
             }
         }
 
         Ok(())
+    }
+
+    /// Build execution summary for the v2 panel
+    async fn build_execution_summary(
+        &self,
+        status: &str,
+        total_tool_calls: u32,
+    ) -> AgentEvent {
+        let duration_ms = self.session_start.elapsed().as_millis() as u64;
+        let files_modified = self.get_file_modifications().await;
+        let cost_summary = {
+            let tracker = self.cost_tracker.lock().await;
+            let (prompt, completion) = tracker.total_tokens();
+            CostSnapshot {
+                total_prompt_tokens: prompt as u32,
+                total_completion_tokens: completion as u32,
+                total_cost: tracker.total_cost(),
+            }
+        };
+
+        AgentEvent::ExecutionSummary {
+            status: status.to_string(),
+            files_modified,
+            total_tool_calls,
+            duration_ms,
+            cost_summary,
+        }
     }
 
     /// Build progress context message that tells LLM whether planning is done
