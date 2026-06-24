@@ -269,6 +269,10 @@ pub async fn ai_chat(
             _ = abort_rx.recv(), if !agent_finished => {
                 // Abort requested
                 _aborted = true;
+                // Notify frontend that agent was aborted
+                let _ = app.emit("ai-agent-event", &AgentEvent::Error {
+                    message: "Aborted by user".to_string(),
+                });
                 break;
             }
         }
@@ -300,6 +304,36 @@ pub async fn ai_abort(state: State<'_, AiState>) -> Result<(), String> {
     } else {
         Err("No active request to abort".to_string())
     }
+}
+
+/// Reset all AI agent state. Called on frontend reload to ensure a clean session.
+#[tauri::command]
+pub async fn ai_reset(state: State<'_, AiState>) -> Result<(), String> {
+    // Send abort signal to any running agent (ignore errors if none)
+    {
+        let tx = state.abort_tx.lock().await;
+        if let Some(sender) = tx.as_ref() {
+            let _ = sender.send(()).await;
+        }
+    }
+    // Clear all state
+    {
+        let mut active = state.active_agent.lock().await;
+        *active = None;
+    }
+    {
+        let mut tx = state.abort_tx.lock().await;
+        *tx = None;
+    }
+    {
+        let mut tx = state.approval_tx.lock().await;
+        *tx = None;
+    }
+    {
+        let mut orch = state.orchestrator.lock().await;
+        *orch = None;
+    }
+    Ok(())
 }
 
 #[tauri::command]

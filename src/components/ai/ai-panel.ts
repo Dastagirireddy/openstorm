@@ -63,13 +63,28 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
   private unlistenFn?: () => void;
   private tipTimer?: ReturnType<typeof setInterval>;
 
-  connectedCallback() {
+  async connectedCallback() {
     super.connectedCallback();
+    // Reset backend agent state on mount to ensure a clean session
+    await this.resetBackendState();
     this.setupEventListeners();
     this.loadState();
     this.tipTimer = setInterval(() => {
       this.currentTipIndex = (this.currentTipIndex + 1) % AI_TIPS.length;
     }, 6000);
+  }
+
+  private async resetBackendState() {
+    try {
+      await invoke('ai_reset');
+      // Reset frontend state to ensure clean session
+      aiState.setThinking(false);
+      aiState.setStreaming(false);
+      aiState.setTodos([]);
+    } catch (e) {
+      // ai_reset may fail if no agent is running — that's fine
+      console.debug('[AI] Reset on mount:', e);
+    }
   }
 
   disconnectedCallback() {
@@ -396,11 +411,12 @@ export class AiPanel extends TailwindElement(aiPanelStyles, unsafeCSS(hljsTheme)
   private async abortRequest() {
     try {
       await invoke('ai_abort');
-      aiState.setThinking(false);
-      aiState.setStreaming(false);
     } catch (e) {
       console.error('[AI] Abort failed:', e);
     }
+    // Always reset streaming state for instant UI feedback
+    aiState.setThinking(false);
+    aiState.setStreaming(false);
   }
 
   private async handleToolApproval(approved: boolean) {

@@ -757,6 +757,15 @@ impl Agent {
         ctx.push(Message::System { content: progress_context });
 
         let mut iteration = 0u32;
+        // Track how many iterations each TODO has been pending
+        // If a TODO stays pending for 2+ iterations after tools were executed,
+        // the model forgot to mark it completed — we auto-complete it.
+        let mut todo_stale_iterations: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        // Track consecutive text-only responses (no tool calls)
+        // If model keeps responding without using tools, force-stop to prevent infinite loop
+        let mut consecutive_text_only = 0u32;
+        const MAX_CONSECUTIVE_TEXT_ONLY: u32 = 3;
+
         loop {
             iteration += 1;
 
@@ -909,13 +918,15 @@ impl Agent {
             }
 
             // Build the complete message
-            // Check if plan was created in this response
+            // Check if plan was CREATED in this response (not just present in text)
             let plan_created_this_turn = if !full_content.is_empty() {
                 let new_steps = self.parse_plan(&full_content);
                 if !new_steps.is_empty() {
                     let mut steps = self.plan_steps.lock().await;
                     // Only set initial plan if no plan exists yet (don't reset progress)
-                    if steps.is_empty() {
+                    // Return true ONLY if we actually created a new plan (steps were empty before)
+                    let actually_created = steps.is_empty();
+                    if actually_created {
                         *steps = new_steps.clone();
                         
                         // Create TODO items from plan steps
@@ -938,7 +949,7 @@ impl Agent {
                         session_log.log_todo_update(&todos);
                         let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
                     }
-                    true
+                    actually_created
                 } else {
                     false
                 }
@@ -956,6 +967,7 @@ impl Agent {
 
             // Handle tool calls
             if !tool_calls.is_empty() {
+                consecutive_text_only = 0; // Reset — model is using tools
                 // Add assistant message to context
                 ctx.push(Message::Assistant {
                     content: Some(full_content),
@@ -1239,6 +1251,15 @@ impl Agent {
                         })
                         .await;
 
+                    // Send TodoUpdate after every tool execution to keep frontend in sync
+                    // (the model often forgets to call todo_write after executing tools)
+                    {
+                        let todos = self.todo_items.lock().await.clone();
+                        if !todos.is_empty() {
+                            let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                        }
+                    }
+
                     // Send structured telemetry for v2 timeline boxes
                     let telemetry_fields = self.build_telemetry_fields(
                         &call.function.name,
@@ -1295,6 +1316,51 @@ impl Agent {
                         content: context_result,
                     });
                 }
+
+                // ── TODO staleness check ──────────────────────────────
+                // If any TODOs have been pending for 2+ iterations, the model
+                // forgot to mark them completed after executing their tools.
+                // Auto-complete them and tell the model what happened.
+                {
+                    let mut todos = self.todo_items.lock().await;
+                    let mut stale_ids: Vec<String> = Vec::new();
+                    for todo in todos.iter_mut() {
+                        if todo.status == TodoStatus::Pending {
+                            let count = todo_stale_iterations.entry(todo.id.clone()).or_insert(0);
+                            *count += 1;
+                            if *count >= 2 {
+                                stale_ids.push(todo.id.clone());
+                                todo.status = TodoStatus::Completed;
+                            }
+                        }
+                    }
+                    if !stale_ids.is_empty() {
+                        let ids_str = stale_ids.join(", ");
+                        session_log.log_flow(&format!(
+                            "Auto-completed stale TODOs after {} iterations: {}",
+                            iteration, ids_str
+                        ));
+                        let todos_clone = todos.clone();
+                        drop(todos);
+                        let _ = tx.send(AgentEvent::TodoUpdate { todos: todos_clone }).await;
+                        ctx.push(Message::System {
+                            content: format!(
+                                "NOTE: Your TODOs ({}) were auto-marked as completed because their tools \
+                                 already succeeded in previous iterations. You forgot to call todo_write \
+                                 to mark them done. Now provide a final text response summarizing what \
+                                 was accomplished. Do NOT re-run any tools.",
+                                ids_str
+                            ),
+                        });
+                        continue;
+                    }
+                    // Reset stale counters for TODOs that are no longer pending
+                    for todo in todos.iter() {
+                        if todo.status != TodoStatus::Pending {
+                            todo_stale_iterations.remove(&todo.id);
+                        }
+                    }
+                }
             } else {
                 // Check if the model output todo_write as text instead of a tool call
                 if !full_content.is_empty() && self.try_intercept_todo_write_text(&full_content).await {
@@ -1310,6 +1376,7 @@ impl Agent {
                         tool_calls: None,
                     });
                     consecutive_failures = 0;
+                    consecutive_text_only = 0;
                     continue;
                 }
 
@@ -1321,7 +1388,45 @@ impl Agent {
                         content: Some(full_content.clone()),
                         tool_calls: None,
                     });
+                    consecutive_text_only += 1;
                     continue;
+                }
+
+                // Guard: if model keeps responding without tools, force-stop
+                consecutive_text_only += 1;
+                if consecutive_text_only >= MAX_CONSECUTIVE_TEXT_ONLY {
+                    session_log.log_flow(&format!(
+                        "Force-stopping after {} consecutive text-only responses (no tool calls)",
+                        consecutive_text_only
+                    ));
+                    // If there are pending TODOs, auto-complete them
+                    {
+                        let mut todos = self.todo_items.lock().await;
+                        let mut changed = false;
+                        for todo in todos.iter_mut() {
+                            if todo.status == TodoStatus::Pending || todo.status == TodoStatus::InProgress {
+                                todo.status = TodoStatus::Completed;
+                                changed = true;
+                            }
+                        }
+                        if changed {
+                            let todos_clone = todos.clone();
+                            drop(todos);
+                            let _ = tx.send(AgentEvent::TodoUpdate { todos: todos_clone }).await;
+                        }
+                    }
+                    let _ = tx
+                        .send(AgentEvent::Response {
+                            content: full_content,
+                            tool_calls_made: total_tool_calls,
+                            usage: usage.clone(),
+                        })
+                        .await;
+                    let summary = self.build_execution_summary("completed", total_tool_calls).await;
+                    let _ = tx.send(summary).await;
+                    let total_tokens = usage.as_ref().map_or(0, |u| u.total_tokens as u64);
+                    session_log.end(iteration, total_tool_calls, total_tokens);
+                    return Ok(());
                 }
 
                 // If a plan exists but model returned empty response, re-prompt it to execute
@@ -1553,6 +1658,15 @@ impl Agent {
                                 result: result.clone(),
                             })
                             .await;
+
+                        // Send TodoUpdate after every tool execution to keep frontend in sync
+                        // (the model often forgets to call todo_write after executing tools)
+                        {
+                            let todos = self.todo_items.lock().await.clone();
+                            if !todos.is_empty() {
+                                let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                            }
+                        }
 
                         // Send structured telemetry for v2 timeline boxes
                         let telemetry_fields = self.build_telemetry_fields(

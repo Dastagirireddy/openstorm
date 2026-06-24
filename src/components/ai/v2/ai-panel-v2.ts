@@ -90,8 +90,11 @@ export class AiPanelV2 extends LitElement {
   private _unsub: (() => void)[] = [];
   private _listenUnsub: (() => void) | null = null;
 
-  connectedCallback(): void {
+  async connectedCallback(): Promise<void> {
     super.connectedCallback();
+    // Reset backend agent state on mount to ensure a clean session
+    // (prevents stale events from a previous session's running agent)
+    await this._resetBackendState();
     this._loadConfig();
     // Ensure a session exists for storing messages
     if (!aiState.activeSessionId) {
@@ -103,6 +106,20 @@ export class AiPanelV2 extends LitElement {
       aiState.on('thinking-status', (t: boolean) => { this.streaming = t; if (this.timelineEl) this.timelineEl.setStreaming(t); }),
       aiState.on('streaming-status', (s: boolean) => { this.streaming = s; if (this.timelineEl) this.timelineEl.setStreaming(s); }),
     );
+  }
+
+  private async _resetBackendState() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('ai_reset');
+      // Reset frontend state to ensure clean session
+      aiState.setThinking(false);
+      aiState.setStreaming(false);
+      aiState.setTodos([]);
+    } catch (e) {
+      // ai_reset may fail if no agent is running — that's fine
+      console.debug('[AI] Reset on mount:', e);
+    }
   }
 
   firstUpdated() {
@@ -159,10 +176,13 @@ export class AiPanelV2 extends LitElement {
     this.timelineEl?.setUserPrompt(msg);
 
     // Build conversation history from aiState
+    // Limit to last 10 messages to prevent context bloat from old conversations
     const session = aiState.getActiveSession();
+    const MAX_HISTORY = 10;
     const history = session
       ? session.messages
           .filter((m, i) => (m.role === 'user' || m.role === 'assistant') && i < session.messages.length - 1)
+          .slice(-MAX_HISTORY)
           .map(m => ({
             role: m.role === 'user' ? 'user' : 'assistant',
             content: m.content,
@@ -198,7 +218,19 @@ export class AiPanelV2 extends LitElement {
   }
 
   private async interrupt() {
-    try { const { invoke } = await import('@tauri-apps/api/core'); await invoke('ai_abort'); } catch (e) { console.error(e); }
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('ai_abort');
+    } catch (e) {
+      console.error('[AI] Abort failed:', e);
+    }
+    // Reset streaming state immediately for instant UI feedback
+    this.streaming = false;
+    aiState.setThinking(false);
+    aiState.setStreaming(false);
+    if (this.timelineEl) {
+      this.timelineEl.setStreaming(false);
+    }
   }
 
   private clear() { this.timelineEl?.setUserPrompt(''); this.timelineEl?.setResponseText(''); }
