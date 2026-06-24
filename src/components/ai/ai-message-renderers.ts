@@ -150,7 +150,11 @@ export function renderMessage(msg: ChatMessage, ctx: MessageRenderContext) {
       const renderedHtml = renderMarkdown(msg.content || '');
       return html`
         <div class="ai-system-msg">
-          <div class="ai-markdown-content">${unsafeHTML(renderedHtml)}</div>
+          <div class="ai-system-msg-header">
+            <iconify-icon icon="lucide:info" width="12"></iconify-icon>
+            <span>System</span>
+          </div>
+          <div class="ai-system-msg-content ai-markdown-content">${unsafeHTML(renderedHtml)}</div>
         </div>`;
     }
 

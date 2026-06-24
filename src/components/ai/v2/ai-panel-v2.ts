@@ -230,7 +230,7 @@ export class AiPanelV2 extends LitElement {
         <div class="body">
           <div class="center">
             <ai-timeline .sessionId=${this.sessionId} style="flex:1;overflow:hidden;"></ai-timeline>
-            <ai-input-deck .sessionId=${this.sessionId} @ai-send-message=${this.sendMsg} @ai-interrupt=${this.interrupt}></ai-input-deck>
+            <ai-input-deck .sessionId=${this.sessionId} .projectPath=${this.projectPath} @ai-send-message=${this.sendMsg} @ai-interrupt=${this.interrupt}></ai-input-deck>
           </div>
           <div class="sidebar">
             <ai-task-sidebar></ai-task-sidebar>

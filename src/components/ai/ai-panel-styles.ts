@@ -783,13 +783,32 @@ export const aiPanelStyles = css`
     }
 
     .ai-system-msg {
-      margin: 0.5em 0 0.5em 1.5em;
-      padding: 0.75em 1em;
-      color: var(--ai-text-dim);
-      font-size: 13px;
-      background: var(--ai-tool-background);
+      margin: 0.75em 0;
+      padding: 0;
+      font-size: 12px;
+      border-radius: 6px;
+      overflow: hidden;
       border: 1px solid var(--ai-panel-border);
-      border-left: 3px solid var(--ai-primary);
+      background: var(--ai-tool-background);
+    }
+    .ai-system-msg-header {
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.4em 0.75em;
+      background: color-mix(in srgb, var(--ai-primary) 12%, transparent);
+      border-bottom: 1px solid var(--ai-panel-border);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--ai-primary);
+    }
+    .ai-system-msg-content {
+      padding: 0.6em 0.75em;
+      color: var(--ai-text-dim);
+      font-size: 12px;
+      line-height: 1.5;
     }
 
     /* Empty state */

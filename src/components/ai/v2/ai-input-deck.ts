@@ -1,6 +1,7 @@
 import { html, unsafeCSS, LitElement } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import { aiState } from '../../../lib/ai/ai-state.js';
+import { searchFiles, parseFileMentions, readMentionedFiles, buildContextMessage } from '../ai-file-utils.js';
 
 const INPUT_STYLES = `
   :host { display: block; }
@@ -12,6 +13,7 @@ const INPUT_STYLES = `
     display: flex;
     flex-direction: column;
     gap: 12px;
+    position: relative;
   }
   
   .input-box {
@@ -189,6 +191,55 @@ const INPUT_STYLES = `
   @media (prefers-reduced-motion: reduce) {
     .loader-segment { animation: none; background: #61afef; }
   }
+
+  .file-suggestions {
+    position: absolute;
+    bottom: calc(100% + 4px);
+    left: 20px;
+    right: 20px;
+    background: #1a1d21;
+    border: 1px solid #2b2d31;
+    border-radius: 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 4px;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .file-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #abb2bf;
+    transition: background 0.1s ease;
+  }
+
+  .file-suggestion-item:hover,
+  .file-suggestion-item.selected {
+    background: #21252b;
+    color: #e0e0e0;
+  }
+
+  .file-suggestion-item.no-results {
+    color: #5c6370;
+    cursor: default;
+    font-style: italic;
+  }
+
+  .file-suggestion-icon {
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .file-suggestion-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 `;
 
 @customElement('ai-input-deck')
@@ -196,12 +247,19 @@ export class AiInputDeck extends LitElement {
   static styles = unsafeCSS(INPUT_STYLES);
 
   @property({ type: String }) sessionId = '';
+  @property({ type: String }) projectPath = '';
   @state() private value = '';
   @state() private streaming = false;
   @state() private thinking = false;
   @state() private model = '';
   @state() private provider = '';
   @state() private tokens = '0 in  0 out';
+  @state() private showFileSuggestions = false;
+  @state() private fileSuggestions: string[] = [];
+  @state() private selectedFileIndex = 0;
+  @state() private fileFilter = '';
+  private searchFilesRequestId = 0;
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   @query('textarea') private ta!: HTMLTextAreaElement;
 
@@ -226,15 +284,96 @@ export class AiInputDeck extends LitElement {
     this.value = t.value;
     t.style.height = 'auto';
     t.style.height = Math.min(t.scrollHeight, 120) + 'px';
+    this.checkForAtMention(t.value);
+  }
+
+  private checkForAtMention(value: string) {
+    const lastAtIndex = value.lastIndexOf('@');
+    if (lastAtIndex >= 0) {
+      const afterAt = value.slice(lastAtIndex + 1);
+      if (afterAt.indexOf(' ') === -1) {
+        const searchQuery = afterAt.split('#')[0];
+        this.fileFilter = searchQuery;
+        this.showFileSuggestions = true;
+        this.selectedFileIndex = 0;
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        const requestId = this.searchFilesRequestId + 1;
+        this.searchFilesRequestId = requestId;
+        this.debounceTimer = setTimeout(() => {
+          this.triggerFileSearch(searchQuery, requestId);
+        }, 150);
+      } else {
+        this.showFileSuggestions = false;
+      }
+    } else {
+      this.showFileSuggestions = false;
+    }
+  }
+
+  private async triggerFileSearch(query: string, requestId: number) {
+    const files = await searchFiles(query, this.projectPath);
+    if (requestId !== this.searchFilesRequestId) return;
+    this.fileSuggestions = files;
+  }
+
+  private selectFile(file: string) {
+    const lastAtIndex = this.value.lastIndexOf('@');
+    if (lastAtIndex >= 0) {
+      const afterAt = this.value.slice(lastAtIndex + 1);
+      const hashIndex = afterAt.indexOf('#');
+      const lineRange = hashIndex >= 0 ? afterAt.slice(hashIndex) : '';
+      this.value = this.value.slice(0, lastAtIndex) + `@${file}${lineRange}`;
+    }
+    this.showFileSuggestions = false;
+    this.fileSuggestions = [];
+    this.fileFilter = '';
+    if (this.ta) {
+      this.ta.value = this.value;
+      this.ta.focus();
+      const cursorPos = this.value.lastIndexOf('#') >= 0
+        ? this.value.lastIndexOf('#')
+        : this.value.length;
+      this.ta.setSelectionRange(cursorPos, cursorPos);
+    }
   }
 
   private onKey(e: KeyboardEvent) {
+    if (this.showFileSuggestions) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.selectedFileIndex = Math.min(this.selectedFileIndex + 1, this.fileSuggestions.length - 1);
+        return;
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.selectedFileIndex = Math.max(this.selectedFileIndex - 1, 0);
+        return;
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (this.fileSuggestions.length > 0) {
+          e.preventDefault();
+          this.selectFile(this.fileSuggestions[this.selectedFileIndex]);
+          return;
+        }
+      } else if (e.key === 'Escape') {
+        this.showFileSuggestions = false;
+        return;
+      }
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); }
   }
 
-  private send() {
+  private async send() {
     if (!this.value.trim() || this.streaming) return;
-    this.dispatchEvent(new CustomEvent('ai-send-message', { detail: { message: this.value, sessionId: this.sessionId }, bubbles: true, composed: true }));
+    const text = this.value.trim();
+
+    const mentions = parseFileMentions(text);
+    let messageToSend = text;
+    if (mentions.length > 0 && this.projectPath) {
+      const attachments = await readMentionedFiles(mentions, this.projectPath);
+      messageToSend = buildContextMessage(text, attachments);
+    }
+
+    this.dispatchEvent(new CustomEvent('ai-send-message', { detail: { message: messageToSend, sessionId: this.sessionId }, bubbles: true, composed: true }));
     this.value = '';
     if (this.ta) this.ta.style.height = 'auto';
   }
@@ -274,6 +413,19 @@ export class AiInputDeck extends LitElement {
             </div>
           </div>
         </div>
+        ${this.showFileSuggestions ? html`
+          <div class="file-suggestions">
+            ${this.fileSuggestions.length === 0 ? html`
+              <div class="file-suggestion-item no-results">No files found</div>
+            ` : this.fileSuggestions.map((file, i) => html`
+              <div class="file-suggestion-item ${i === this.selectedFileIndex ? 'selected' : ''}"
+                   @click=${() => this.selectFile(file)}>
+                <span class="file-suggestion-icon">\uD83D\uDCC4</span>
+                <span class="file-suggestion-name">${file}</span>
+              </div>
+            `)}
+          </div>
+        ` : ''}
         ${(this.streaming || this.thinking) ? html`
           <div class="streaming-indicator">
             <span class="loader-segment"></span>

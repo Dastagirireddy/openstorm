@@ -2,7 +2,8 @@ import { html, unsafeCSS, LitElement } from 'lit';
 import { customElement, property, state, query } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { renderMarkdown } from '../ai-markdown.js';
-import { ASCII_LOGO, AI_TIPS } from '../ai-commands.js';
+import { ASCII_LOGO } from '../ai-commands.js';
+
 import './ai-timeline-step.js';
 import './ai-permission-card.js';
 import './ai-execution-summary.js';
@@ -47,52 +48,24 @@ const TIMELINE_STYLES = `
     padding: 40px;
   }
   
-  .logo {
+  .empty-icon {
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     font-size: 11px;
     line-height: 1.2;
     color: var(--ai-text-dim, #3e4451);
     white-space: pre;
-    margin-bottom: 32px;
-    opacity: 0.8;
-  }
-  
-  .welcome-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--ai-text, #abb2bf);
-    margin-bottom: 8px;
+    margin-bottom: 20px;
+    opacity: 0.4;
   }
   
   .welcome-subtitle {
     font-size: 13px;
     color: var(--ai-text-muted, #5c6370);
-    margin-bottom: 24px;
-    max-width: 400px;
-    line-height: 1.6;
+    max-width: 320px;
+    line-height: 1.5;
   }
   
-  .tips {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    max-width: 360px;
-  }
-  
-  .tip {
-    font-size: 12px;
-    color: var(--ai-text-muted, #5c6370);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  
-  .tip::before {
-    content: '\\2022';
-    color: var(--ai-text-dim, #3e4451);
-  }
-  
-  .header-text { font-size: 14px; color: var(--ai-text, #abb2bf); line-height: 1.6; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--ai-panel-border, #1e2128); }
+  .header-text { font-size: 14px; font-weight: 600; color: var(--ai-text, #e0e0e0); line-height: 1.6; margin-bottom: 20px; padding: 12px 16px; background: var(--ai-input-background, #0d0f12); border: 1px solid var(--ai-panel-border, #1e2128); border-radius: 8px; }
   .response-text { 
     font-size: 14px; 
     color: var(--ai-text, #abb2bf); 
@@ -118,7 +91,8 @@ const TIMELINE_STYLES = `
     border-radius: 4px; 
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 13px;
-    color: var(--ai-text, #abb2bf);
+    color: #e6db74;
+    border: 1px solid var(--ai-code-border, #30363d);
   }
   .response-text pre { 
     background: var(--ai-input-background, #0d0f12); 
@@ -144,6 +118,10 @@ const TIMELINE_STYLES = `
     color: var(--ai-text-muted, #828997);
     background: var(--ai-input-background, #0d0f12);
     border-radius: 0 8px 8px 0;
+  }
+  .response-text code-block { 
+    display: block;
+    margin: 12px 0;
   }
 `;
 
@@ -225,12 +203,8 @@ export class AiTimeline extends LitElement {
       <div class="scroll">
         ${!hasContent ? html`
           <div class="empty-state">
-            <div class="logo">${ASCII_LOGO}</div>
-            <div class="welcome-title">OpenStorm AI</div>
-            <div class="welcome-subtitle">Ask questions about your code, get help with tasks, or let me analyze your project.</div>
-            <div class="tips">
-              ${AI_TIPS.slice(0, 4).map(tip => html`<div class="tip">${tip}</div>`)}
-            </div>
+            <div class="empty-icon">${ASCII_LOGO}</div>
+            <div class="welcome-subtitle">Ask about your code or attach files with @</div>
           </div>
         ` : html`
           ${this.headerText ? html`<div class="header-text">${this.headerText}</div>` : ''}
