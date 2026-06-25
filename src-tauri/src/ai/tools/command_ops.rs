@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use tokio::io::AsyncBufReadExt;
 use tokio::io::BufReader;
@@ -6,8 +6,77 @@ use tokio::io::BufReader;
 use super::ToolRegistry;
 
 impl ToolRegistry {
+    /// Validate that a command does not escape the project directory via `cd`.
+    /// Returns the resolved working directory or an error message.
+    pub(super) fn validate_working_dir(&self, command: &str) -> Result<PathBuf, String> {
+        let project_root = Path::new(&self.project_path)
+            .canonicalize()
+            .map_err(|e| format!("Cannot resolve project root: {}", e))?;
+
+        // Simple heuristic: check for `cd <path>` patterns
+        // This handles: cd /path, cd ~/path, cd ../path, cd ./path, cd path
+        for part in command.split_whitespace() {
+            if part == "cd" {
+                continue;
+            }
+            // If previous part was cd, check this path
+        }
+
+        // More robust: parse shell-like cd commands
+        let words: Vec<&str> = command.split_whitespace().collect();
+        let mut i = 0;
+        while i < words.len() {
+            if words[i] == "cd" && i + 1 < words.len() {
+                let target = words[i + 1];
+                // Skip flags like -P, -L
+                if target.starts_with('-') {
+                    i += 1;
+                    continue;
+                }
+                let resolved = if target.starts_with('~') {
+                    // Expand ~ to home directory
+                    if let Some(home) = std::env::var("HOME").ok() {
+                        PathBuf::from(home).join(&target[1..])
+                    } else {
+                        PathBuf::from(target)
+                    }
+                } else if target.starts_with('/') {
+                    PathBuf::from(target)
+                } else if target.starts_with("..") {
+                    // Relative to current dir (which is project_path)
+                    project_root.parent().unwrap_or(&project_root).join(target)
+                } else {
+                    project_root.join(target)
+                };
+
+                // Canonicalize if possible
+                let canonical = resolved.canonicalize().unwrap_or(resolved);
+
+                // Check if within project root
+                if !canonical.starts_with(&project_root) {
+                    return Err(format!(
+                        "Sandbox violation: 'cd {}' resolves to {}, which is outside the project directory {}",
+                        target,
+                        canonical.display(),
+                        project_root.display()
+                    ));
+                }
+                i += 2;
+            } else {
+                i += 1;
+            }
+        }
+
+        Ok(project_root)
+    }
+
     pub(super) async fn run_command(&self, args: &serde_json::Value) -> String {
         let command = args["command"].as_str().unwrap_or("");
+
+        // Validate that command doesn't escape project directory
+        if let Err(e) = self.validate_working_dir(command) {
+            return e;
+        }
 
         let mut child = match tokio::process::Command::new("sh")
             .args(["-c", command])

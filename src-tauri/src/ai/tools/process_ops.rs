@@ -7,6 +7,11 @@ impl ToolRegistry {
             return "Error: command is required".to_string();
         }
 
+        // Validate that command doesn't escape project directory
+        if let Err(e) = self.validate_working_dir(command) {
+            return e;
+        }
+
         let mut pm = self.process_manager.lock().await;
         match pm.spawn(command, &self.project_path) {
             Ok(pid) => format!("Process started in background with PID: {}", pid),
