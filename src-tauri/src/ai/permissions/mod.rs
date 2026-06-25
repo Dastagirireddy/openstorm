@@ -97,7 +97,7 @@ impl PermissionSystem {
     }
 
     pub fn check_with_tiers(&mut self, tool: &str, args: &str) -> PermissionResult {
-        if let Some(perm) = self.tool_permissions.get(tool) {
+        if let Some(_perm) = self.tool_permissions.get(tool) {
             if let Some(denied) = self.compiled_denied.get(tool) {
                 for pattern in denied {
                     if pattern.is_match(args) {
@@ -249,7 +249,7 @@ impl PermissionSystem {
     }
 
     pub fn is_denied(&self, tool: &str) -> bool {
-        if let Some(perm) = self.tool_permissions.get(tool) {
+        if let Some(_perm) = self.tool_permissions.get(tool) {
             if let Some(denied) = self.compiled_denied.get(tool) {
                 return denied.iter().any(|p| p.as_str() == ".*");
             }

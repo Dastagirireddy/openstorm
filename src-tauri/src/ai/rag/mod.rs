@@ -29,18 +29,17 @@ impl CodeChunker {
 
     /// Chunk a file into meaningful code segments
     pub fn chunk_file(&self, file_path: &str, content: &str) -> Vec<CodeChunk> {
-        let mut chunks = Vec::new();
         let lines: Vec<&str> = content.lines().collect();
         let total_lines = lines.len() as u32;
 
         let ext = file_path.rsplit('.').next().unwrap_or("");
 
-        match ext {
-            "rs" => chunks = rust::chunk_rust(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
-            "ts" | "tsx" | "js" | "jsx" => chunks = typescript::chunk_typescript(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
-            "py" => chunks = python::chunk_python(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
-            _ => chunks = self.chunk_generic(file_path, &lines),
-        }
+        let mut chunks = match ext {
+            "rs" => rust::chunk_rust(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
+            "ts" | "tsx" | "js" | "jsx" => typescript::chunk_typescript(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
+            "py" => python::chunk_python(file_path, &lines, self.min_lines, |fp, sl, el, ls, ct, sn| self.create_chunk(fp, sl, el, ls, ct, sn)),
+            _ => self.chunk_generic(file_path, &lines),
+        };
 
         if chunks.is_empty() && total_lines > 0 {
             chunks.push(self.create_chunk(

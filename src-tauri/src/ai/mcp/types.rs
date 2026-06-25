@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-use super::super::providers::{FunctionDefinition, ToolDefinition};
+use super::super::providers::ToolDefinition;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpServerConfig {

@@ -61,7 +61,7 @@ impl AiSessionLog {
                     self.line(&format!("  msg[{}] role={}", i, role));
                     self.line("  ```"); for l in content.lines() { self.line(&format!("  {}", l)); } self.line("  ```");
                 }
-                Message::Assistant { content, tool_calls } => {
+                Message::Assistant { content: _, tool_calls } => {
                     let tc = tool_calls.as_ref().map_or(0, |tc| tc.len());
                     self.line(&format!("  msg[{}] role=assistant tools={}", i, tc));
                     if let Some(calls) = tool_calls {
@@ -90,7 +90,7 @@ impl AiSessionLog {
         self.line(""); self.flush();
     }
 
-    pub fn log_llm_response(&mut self, iteration: u32, content: &str, thinking: &str, tool_calls: &[ToolCall], usage: &Option<Usage>, duration_ms: u64) {
+    pub fn log_llm_response(&mut self, _iteration: u32, content: &str, thinking: &str, tool_calls: &[ToolCall], usage: &Option<Usage>, duration_ms: u64) {
         let usage_str = usage.as_ref().map_or(String::new(), |u| format!(", prompt={}tok, completion={}tok", u.prompt_tokens, u.completion_tokens));
         self.line(&format!("[{}] ← LLM RESPONSE ({}ms, {} thinking chars{})", self.ts(), duration_ms, thinking.len(), usage_str));
         if !thinking.is_empty() {

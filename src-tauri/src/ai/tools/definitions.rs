@@ -2,7 +2,7 @@ use super::super::{FunctionDefinition, ToolDefinition};
 
 /// Get all available tool definitions (OpenAI function-calling format)
 pub fn builtin_definitions() -> Vec<ToolDefinition> {
-    let mut tools = vec![
+    let tools = vec![
         ToolDefinition {
             tool_type: "function".to_string(),
             function: FunctionDefinition {

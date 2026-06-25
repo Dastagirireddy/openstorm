@@ -11,7 +11,7 @@ mod types;
 
 pub use event::AgentEvent;
 pub use types::{
-    CostSnapshot, DiffLine, FileModification, PlanStep, PlanStepStatus, TelemetryField,
+    CostSnapshot, DiffLine, FileModification, PlanStep, TelemetryField,
     TelemetryFieldType, TodoItem, TodoPriority, TodoStatus,
 };
 

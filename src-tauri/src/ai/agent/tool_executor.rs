@@ -47,8 +47,8 @@ pub async fn execute_tool_call(
     consecutive_failures: &mut u32,
     has_plan: &mut bool,
     last_completed_step: &mut Option<u32>,
-    todo_stale_iterations: &mut std::collections::HashMap<String, u32>,
-    iteration: u32,
+    _todo_stale_iterations: &mut std::collections::HashMap<String, u32>,
+    _iteration: u32,
 ) -> bool {
     // Check permission
     let perm_result = agent.permissions.check(&call.function.name, &call.function.arguments);

@@ -556,7 +556,7 @@ impl Agent {
         ctx: &mut ContextManager,
         total_tool_calls: &mut u32,
         consecutive_failures: &mut u32,
-        usage: Option<Usage>,
+        _usage: Option<Usage>,
         tx: &mpsc::Sender<AgentEvent>,
     ) -> Result<(), ProviderError> {
         ctx.push(Message::Assistant {

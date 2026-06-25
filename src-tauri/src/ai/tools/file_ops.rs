@@ -114,7 +114,7 @@ impl ToolRegistry {
                     let mut pending = self.pending_file_modifications.lock().unwrap();
                     pending.push(modification);
                 }
-                let replaced = end_line - start_line + 1;
+                let _replaced = end_line - start_line + 1;
                 format!(
                     "Successfully edited {} (replaced lines {}-{} with {} new lines)",
                     path,

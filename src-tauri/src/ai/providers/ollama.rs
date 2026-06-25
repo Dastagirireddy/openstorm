@@ -25,7 +25,7 @@ impl OllamaProvider {
         }
     }
 
-    fn parse_model(&self, m: &serde_json::Value, is_local: bool) -> ModelInfo {
+    fn parse_model(&self, m: &serde_json::Value, _is_local: bool) -> ModelInfo {
         let name = m["name"].as_str().unwrap_or("unknown").to_string();
         let size = m["size"].as_u64().unwrap_or(0);
         let context_window = if size > 20_000_000_000 {
