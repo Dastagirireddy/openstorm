@@ -200,14 +200,15 @@ const STEP_STYLES = `
   }
   
   .telemetry-box {
-    background: var(--ai-panel-background, #ffffff);
+    background: var(--ai-tool-background, #f9fafb);
     border: 1px solid var(--ai-panel-border, #e5e7eb);
     border-radius: 8px;
     padding: 12px 16px;
-    max-width: 520px;
+    width: 100%;
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     font-size: 12px;
     margin-top: 6px;
+    box-sizing: border-box;
   }
   
   .telemetry-row {
