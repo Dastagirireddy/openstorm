@@ -348,7 +348,11 @@ export class AiPanelV2 extends LitElement {
     }
     // Clear all timeline content
     this.timelineEl?.clearAll();
-    // Create a new session
+    // Clear current session messages and create a new fresh session
+    const currentSession = aiState.getActiveSession();
+    if (currentSession) {
+      aiState.clearSession(currentSession.id);
+    }
     aiState.createSession('AI Conversation');
   }
 

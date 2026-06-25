@@ -11,10 +11,10 @@ export class AIStateManager {
   ollamaConnected: boolean = false;
   isThinking: boolean = false;
   isStreaming: boolean = false;
-  private _saveTimer: ReturnType<typeof setTimeout> | null = null;
 
   private constructor() {
-    this.loadFromStorage();
+    // Start with a fresh session — no localStorage persistence
+    this.createSession('AI Conversation');
   }
 
   static getInstance(): AIStateManager {
@@ -26,39 +26,6 @@ export class AIStateManager {
 
   private generateId(): string {
     return `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  private loadFromStorage(): void {
-    try {
-      const stored = localStorage.getItem('ai-sessions');
-      if (stored) {
-        this.sessions = JSON.parse(stored);
-      }
-      const activeId = localStorage.getItem('ai-active-session');
-      if (activeId) {
-        this.activeSessionId = activeId;
-      }
-    } catch (e) {
-      console.error('[AI State] Failed to load from storage:', e);
-    }
-  }
-
-  private saveToStorage(): void {
-    // Debounce saves during streaming to prevent UI freezing
-    if (this._saveTimer) {
-      clearTimeout(this._saveTimer);
-    }
-    this._saveTimer = setTimeout(() => {
-      this._saveTimer = null;
-      try {
-        localStorage.setItem('ai-sessions', JSON.stringify(this.sessions));
-        if (this.activeSessionId) {
-          localStorage.setItem('ai-active-session', this.activeSessionId);
-        }
-      } catch (e) {
-        console.error('[AI State] Failed to save to storage:', e);
-      }
-    }, this.isStreaming ? 500 : 0);
   }
 
   private emit(event: string, data?: any): void {
@@ -88,7 +55,6 @@ export class AIStateManager {
     };
     this.sessions.unshift(session);
     this.activeSessionId = session.id;
-    this.saveToStorage();
     this.emit('session-created', session);
     this.emit('session-switched', session.id);
     return session;
@@ -98,7 +64,6 @@ export class AIStateManager {
     const session = this.sessions.find(s => s.id === sessionId);
     if (session) {
       this.activeSessionId = sessionId;
-      this.saveToStorage();
       this.emit('session-switched', sessionId);
     }
   }
@@ -108,7 +73,6 @@ export class AIStateManager {
     if (this.activeSessionId === sessionId) {
       this.activeSessionId = this.sessions[0]?.id || null;
     }
-    this.saveToStorage();
     this.emit('session-deleted', sessionId);
   }
 
@@ -117,7 +81,6 @@ export class AIStateManager {
     if (session) {
       session.name = name;
       session.updatedAt = Date.now();
-      this.saveToStorage();
       this.emit('session-renamed', { sessionId, name });
     }
   }
@@ -127,7 +90,6 @@ export class AIStateManager {
     if (session) {
       session.messages = [];
       session.updatedAt = Date.now();
-      this.saveToStorage();
       this.emit('session-cleared', sessionId);
     }
   }
@@ -166,7 +128,6 @@ export class AIStateManager {
     if (session) {
       session.messages.push(message);
       session.updatedAt = Date.now();
-      this.saveToStorage();
       this.emit('message-added', { sessionId, message });
     }
   }
@@ -178,7 +139,6 @@ export class AIStateManager {
       if (message) {
         Object.assign(message, updates);
         session.updatedAt = Date.now();
-        this.saveToStorage();
         this.emit('message-updated', { sessionId, messageId, updates });
       }
     }
