@@ -20,7 +20,7 @@ impl Orchestrator {
         model: &str,
         event_tx: &mpsc::Sender<AgentEvent>,
         message: String,
-        _profile: PermissionProfile,
+        profile: PermissionProfile,
     ) -> Result<TaskResult, String> {
         log_info!("[Orchestrator] Spawning agent for task {}: {}", task_id, message);
 
@@ -34,7 +34,7 @@ impl Orchestrator {
             provider,
             model.to_string(),
             project_path.to_string(),
-            PermissionProfile::Full,
+            profile,
         ));
 
         let (abort_tx, mut abort_rx) = mpsc::channel::<()>(1);
