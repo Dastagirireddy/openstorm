@@ -98,16 +98,16 @@ const STEP_STYLES = `
     white-space: nowrap;
   }
   
-  .step.active .step-name { color: var(--ai-warning, #f59e0b); }
-  .step.completed .step-name { color: var(--ai-success, #22c55e); }
+  .step.active .step-name { color: var(--ai-text, #1f2937); }
+  .step.completed .step-name { color: var(--ai-text, #1f2937); }
   .step.failed .step-name { color: var(--ai-danger, #ef4444); }
   
   .step-badge {
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     font-size: 11px;
-    background: color-mix(in srgb, var(--ai-accent, #3574f0) 12%, transparent);
-    color: var(--ai-accent, #3574f0);
-    border: 1px solid color-mix(in srgb, var(--ai-accent, #3574f0) 25%, transparent);
+    background: var(--ai-tool-background, #f9fafb);
+    color: var(--ai-text-muted, #4b5563);
+    border: 1px solid var(--ai-panel-border, #e5e7eb);
     padding: 2px 8px;
     border-radius: 4px;
     white-space: nowrap;
@@ -115,9 +115,9 @@ const STEP_STYLES = `
   }
   
   .step-badge.tool {
-    background: color-mix(in srgb, var(--ai-success, #22c55e) 12%, transparent);
-    color: var(--ai-success, #22c55e);
-    border-color: color-mix(in srgb, var(--ai-success, #22c55e) 25%, transparent);
+    background: var(--ai-code-background, #f9fafb);
+    color: var(--ai-text-muted, #4b5563);
+    border-color: var(--ai-code-border, #e5e7eb);
   }
   
   .step-tag {
