@@ -17,11 +17,10 @@ pub use types::{
 
 use std::sync::Arc;
 
-use crate::ai::context::ContextManager;
+use crate::ai::context::{ContextManager, ProjectContext};
 use crate::ai::cost_tracker::SharedCostTracker;
 use crate::ai::embedding_store::EmbeddingStore;
 use crate::ai::permissions::PermissionSystem;
-use crate::ai::project_context::ProjectContext;
 use crate::ai::sandbox::Sandbox;
 use crate::ai::tools::ToolRegistry;
 

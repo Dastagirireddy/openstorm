@@ -24,7 +24,7 @@ impl Agent {
         model: String,
         project_path: String,
     ) -> Self {
-        let project_context = crate::ai::project_context::ProjectContext::detect(&project_path);
+        let project_context = crate::ai::context::ProjectContext::detect(&project_path);
         let (approval_tx, approval_rx) = mpsc::channel(1);
         let sandbox = crate::ai::sandbox::Sandbox::new();
         let permissions =
@@ -69,7 +69,7 @@ impl Agent {
         project_path: String,
         profile: PermissionProfile,
     ) -> Self {
-        let project_context = crate::ai::project_context::ProjectContext::detect(&project_path);
+        let project_context = crate::ai::context::ProjectContext::detect(&project_path);
         let (approval_tx, approval_rx) = mpsc::channel(1);
         let sandbox = crate::ai::sandbox::Sandbox::new();
         let permissions = crate::ai::permissions::PermissionSystem::new(profile);
@@ -115,7 +115,7 @@ impl Agent {
         profile: PermissionProfile,
         orchestrator: Arc<crate::ai::orchestrator::Orchestrator>,
     ) -> Self {
-        let project_context = crate::ai::project_context::ProjectContext::detect(&project_path);
+        let project_context = crate::ai::context::ProjectContext::detect(&project_path);
         let (approval_tx, approval_rx) = mpsc::channel(1);
         let sandbox = crate::ai::sandbox::Sandbox::new();
         let permissions = crate::ai::permissions::PermissionSystem::new(profile);
@@ -164,7 +164,7 @@ impl Agent {
         orchestrator: Arc<crate::ai::orchestrator::Orchestrator>,
         mcp_manager: Arc<tokio::sync::Mutex<crate::ai::mcp::McpManager>>,
     ) -> Self {
-        let project_context = crate::ai::project_context::ProjectContext::detect(&project_path);
+        let project_context = crate::ai::context::ProjectContext::detect(&project_path);
         let (approval_tx, approval_rx) = mpsc::channel(1);
         let sandbox = crate::ai::sandbox::Sandbox::new();
         let permissions = crate::ai::permissions::PermissionSystem::new(profile);

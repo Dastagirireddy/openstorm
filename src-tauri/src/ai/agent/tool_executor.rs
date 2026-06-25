@@ -42,7 +42,7 @@ pub async fn execute_tool_call(
     call: &crate::ai::provider::ToolCall,
     ctx: &mut crate::ai::context::ContextManager,
     tx: &mpsc::Sender<AgentEvent>,
-    session_log: &mut crate::ai::session_log::AiSessionLog,
+    session_log: &mut crate::ai::context::AiSessionLog,
     executed_this_turn: &mut HashSet<(String, String)>,
     consecutive_failures: &mut u32,
     has_plan: &mut bool,
@@ -278,7 +278,7 @@ async fn intercept_todo_write(
     call: &crate::ai::provider::ToolCall,
     has_plan: &mut bool,
     last_completed_step: &mut Option<u32>,
-    session_log: &mut crate::ai::session_log::AiSessionLog,
+    session_log: &mut crate::ai::context::AiSessionLog,
     tx: &mpsc::Sender<AgentEvent>,
 ) {
     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&call.function.arguments) {

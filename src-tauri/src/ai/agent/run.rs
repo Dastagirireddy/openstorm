@@ -9,10 +9,9 @@ use super::tool_executor;
 use super::todo_interceptor;
 use super::types::{TodoItem, TodoStatus};
 use super::Agent;
-use crate::ai::context::ContextManager;
+use crate::ai::context::{ContextManager, AiSessionLog};
 use crate::ai::permissions::PermissionResult;
 use crate::ai::provider::*;
-use crate::ai::session_log::AiSessionLog;
 
 /// Maximum time to wait for streaming response from LLM (per iteration).
 const STREAM_TIMEOUT_SECS: u64 = 120;
