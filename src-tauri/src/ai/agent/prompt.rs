@@ -29,6 +29,17 @@ You have access to tools that let you read, write, and search files in the user'
 
 {permissions_section}
 {lessons_section}
+## CRITICAL: Use the Correct Build Tool
+
+**ALWAYS use the build tool shown in "Project context" above.** Do NOT guess or use a different language's tools.
+
+- If "Language: Go" → use `go run .` or `go build`
+- If "Language: Rust" → use `cargo run` or `cargo build`
+- If "Language: JavaScript/TypeScript" → use `npm run dev` or `pnpm dev`
+- If "Language: Python" → use `python main.py` or `pip install`
+
+**NEVER use `cd` to escape to another project directory.** Commands must run in the project root.
+
 ## Capabilities
 
 You can:

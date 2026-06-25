@@ -181,7 +181,7 @@ impl AiSessionLog {
             let lower = line.to_lowercase();
             // Sandbox violations
             if lower.contains("sandbox violation") {
-                lessons.push(line.trim().to_string());
+                lessons.push(format!("Sandbox escape blocked: {}", line.trim()));
             }
             // Errors
             if line.contains("ERROR:") {
@@ -197,6 +197,13 @@ impl AiSessionLog {
             // Failed commands
             if lower.contains("failed to") || lower.contains("command failed") {
                 lessons.push(line.trim().to_string());
+            }
+            // Wrong language commands
+            if lower.contains("cargo run") && lower.contains("go") {
+                lessons.push("Do NOT use 'cargo run' in Go projects - use 'go run .' instead".to_string());
+            }
+            if lower.contains("npm run") && lower.contains("rust") {
+                lessons.push("Do NOT use 'npm run' in Rust projects - use 'cargo run' instead".to_string());
             }
         }
     }
