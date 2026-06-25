@@ -196,4 +196,49 @@ impl Agent {
             session_start: std::time::Instant::now(),
         }
     }
+
+    /// Create an agent with MCP support and a shared process manager.
+    /// The shared process manager persists across agent resets.
+    pub fn with_mcp_and_process_manager(
+        provider: Arc<dyn crate::ai::provider::LlmProvider>,
+        model: String,
+        project_path: String,
+        profile: PermissionProfile,
+        orchestrator: Arc<crate::ai::orchestrator::Orchestrator>,
+        mcp_manager: Arc<tokio::sync::Mutex<crate::ai::mcp::McpManager>>,
+        process_manager: Arc<tokio::sync::Mutex<crate::ai::tools::ProcessManager>>,
+    ) -> Self {
+        let project_context = crate::ai::context::ProjectContext::detect(&project_path);
+        let (approval_tx, approval_rx) = mpsc::channel(1);
+        let sandbox = crate::ai::sandbox::Sandbox::new();
+        let permissions = crate::ai::permissions::PermissionSystem::new(profile);
+        let embedding_store = Arc::new(tokio::sync::Mutex::new(EmbeddingStore::new()));
+        let tools = ToolRegistry::with_process_manager(
+            project_path.clone(),
+            sandbox.clone(),
+            embedding_store.clone(),
+            orchestrator,
+            mcp_manager,
+            process_manager,
+        );
+        let cost_tracker = create_shared_cost_tracker();
+
+        Self {
+            provider,
+            model,
+            tools,
+            project_context,
+            approval_rx: tokio::sync::Mutex::new(Some(approval_rx)),
+            approval_tx: tokio::sync::Mutex::new(Some(approval_tx)),
+            plan_steps: tokio::sync::Mutex::new(Vec::new()),
+            context_manager: tokio::sync::Mutex::new(crate::ai::context::ContextManager::new(8192)),
+            permissions,
+            sandbox,
+            embedding_store,
+            cost_tracker,
+            todo_items: tokio::sync::Mutex::new(Vec::new()),
+            file_modifications: tokio::sync::Mutex::new(Vec::new()),
+            session_start: std::time::Instant::now(),
+        }
+    }
 }

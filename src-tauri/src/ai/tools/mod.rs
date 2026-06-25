@@ -114,6 +114,14 @@ impl ProcessManager {
         Ok(format!("Process {} ({}) stopped", pid, proc.command))
     }
 
+    /// Kill all running processes
+    pub async fn kill_all(&mut self) {
+        for (pid, mut proc) in self.processes.drain() {
+            let _ = proc.child.kill().await;
+            eprintln!("[AI] Killed background process {}", pid);
+        }
+    }
+
     pub fn list(&mut self) -> Vec<(u32, String, bool)> {
         self.processes.iter_mut().map(|(pid, p)| {
             let is_running = p.child.try_wait().ok().flatten().is_none();
@@ -221,6 +229,27 @@ impl ToolRegistry {
             orchestrator: Some(orchestrator),
             mcp_manager: Some(mcp_manager),
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Create a tool registry with a shared process manager (for session persistence)
+    pub fn with_process_manager(
+        project_path: String,
+        sandbox: super::sandbox::Sandbox,
+        embedding_store: Arc<Mutex<EmbeddingStore>>,
+        orchestrator: Arc<super::orchestrator::Orchestrator>,
+        mcp_manager: Arc<Mutex<McpManager>>,
+        process_manager: Arc<Mutex<ProcessManager>>,
+    ) -> Self {
+        Self {
+            project_path,
+            sandbox: Some(sandbox),
+            embedding_store: Some(embedding_store),
+            orchestrator: Some(orchestrator),
+            mcp_manager: Some(mcp_manager),
+            process_manager,
             event_tx: Arc::new(Mutex::new(None)),
             pending_file_modifications: std::sync::Mutex::new(Vec::new()),
         }

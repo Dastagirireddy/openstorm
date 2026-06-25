@@ -46,6 +46,9 @@ fn detect_language(root: &Path) -> (String, Option<String>, Option<String>) {
         };
         return ("Rust".into(), fw.map(String::from), Some("Cargo".into()));
     }
+    // Go — check before package.json since Go projects often have
+    // package.json for tooling (Playwright, linting, etc.)
+    if root.join("go.mod").exists() { return ("Go".into(), None, Some("Go modules".into())); }
     // Node.js / TypeScript
     if let Some(content) = read_if_exists(root, "package.json") {
         let fw = match true {
@@ -69,8 +72,6 @@ fn detect_language(root: &Path) -> (String, Option<String>, Option<String>) {
         };
         return (lang.into(), fw.map(String::from), bt.map(String::from));
     }
-    // Go
-    if root.join("go.mod").exists() { return ("Go".into(), None, Some("Go modules".into())); }
     // Python
     if root.join("pyproject.toml").exists() || root.join("requirements.txt").exists() || root.join("setup.py").exists() {
         let fw = if root.join("manage.py").exists() { Some("Django") }

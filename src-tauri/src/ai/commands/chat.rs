@@ -68,13 +68,15 @@ pub async fn ai_chat(
     };
 
     let mcp_manager = state.mcp_manager();
-    let agent = Arc::new(Agent::with_mcp(
+    let process_manager = state.process_manager();
+    let agent = Arc::new(Agent::with_mcp_and_process_manager(
         provider,
         model,
         project_path,
         PermissionProfile::Smart,
         orchestrator,
         mcp_manager,
+        process_manager,
     ));
 
     {

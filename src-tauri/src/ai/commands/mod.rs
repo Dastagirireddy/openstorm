@@ -11,6 +11,7 @@ use std::sync::Arc;
 use super::agent::Agent;
 use super::mcp::McpManager;
 use super::orchestrator::Orchestrator;
+use super::tools::ProcessManager;
 
 pub use providers::*;
 pub use chat::*;
@@ -26,6 +27,7 @@ pub struct AiState {
     approval_tx: Mutex<Option<mpsc::Sender<bool>>>,
     orchestrator: Mutex<Option<Arc<Orchestrator>>>,
     mcp_manager: Arc<Mutex<McpManager>>,
+    process_manager: Arc<Mutex<ProcessManager>>,
 }
 
 impl AiState {
@@ -38,10 +40,15 @@ impl AiState {
             approval_tx: Mutex::new(None),
             orchestrator: Mutex::new(None),
             mcp_manager: Arc::new(Mutex::new(mcp_manager)),
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
         }
     }
 
     pub fn mcp_manager(&self) -> Arc<Mutex<McpManager>> {
         self.mcp_manager.clone()
+    }
+
+    pub fn process_manager(&self) -> Arc<Mutex<ProcessManager>> {
+        self.process_manager.clone()
     }
 }

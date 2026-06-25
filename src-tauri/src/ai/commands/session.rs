@@ -16,6 +16,11 @@ pub async fn ai_abort(state: State<'_, AiState>) -> Result<(), String> {
 /// Reset all AI agent state. Called on frontend reload to ensure a clean session.
 #[tauri::command]
 pub async fn ai_reset(state: State<'_, AiState>) -> Result<(), String> {
+    // Kill all background processes first
+    {
+        let mut pm = state.process_manager.lock().await;
+        pm.kill_all().await;
+    }
     {
         let tx = state.abort_tx.lock().await;
         if let Some(sender) = tx.as_ref() {
