@@ -1,48 +1,13 @@
-use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Verification engine for post-action checks
+use super::types::*;
+
 pub struct Verifier {
-    /// Project path
     project_path: String,
-    /// Whether verification is enabled
     enabled: bool,
 }
 
-/// Result of a verification check
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VerificationResult {
-    /// Whether all checks passed
-    pub passed: bool,
-    /// Individual check results
-    pub checks: Vec<CheckResult>,
-    /// Suggestion for fixing issues
-    pub suggestion: Option<String>,
-}
-
-/// A single check result
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CheckResult {
-    /// Check name
-    pub name: String,
-    /// Whether the check passed
-    pub passed: bool,
-    /// Check message
-    pub message: String,
-    /// Severity level
-    pub severity: Severity,
-}
-
-/// Severity of a check result
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum Severity {
-    Info,
-    Warning,
-    Error,
-}
-
 impl Verifier {
-    /// Create a new verifier
     pub fn new(project_path: String) -> Self {
         Self {
             project_path,
@@ -50,7 +15,6 @@ impl Verifier {
         }
     }
 
-    /// Create a disabled verifier
     pub fn disabled(project_path: String) -> Self {
         Self {
             project_path,
@@ -58,7 +22,6 @@ impl Verifier {
         }
     }
 
-    /// Verify a file write action
     pub async fn verify_write(&self, path: &str, _content: &str) -> VerificationResult {
         if !self.enabled {
             return VerificationResult {
@@ -70,7 +33,6 @@ impl Verifier {
 
         let mut checks = Vec::new();
 
-        // Check file extension and run appropriate linter
         if let Some(ext) = Path::new(path).extension().and_then(|e| e.to_str()) {
             match ext {
                 "rs" => {
@@ -110,8 +72,7 @@ impl Verifier {
         }
     }
 
-    /// Verify a command execution
-    pub async fn verify_command(&self, command: &str, exit_code: i32, stderr: &str) -> VerificationResult {
+    pub async fn verify_command(&self, _command: &str, exit_code: i32, stderr: &str) -> VerificationResult {
         if !self.enabled {
             return VerificationResult {
                 passed: true,
@@ -122,7 +83,6 @@ impl Verifier {
 
         let mut checks = Vec::new();
 
-        // Check exit code
         checks.push(CheckResult {
             name: "exit_code".to_string(),
             passed: exit_code == 0,
@@ -134,7 +94,6 @@ impl Verifier {
             },
         });
 
-        // Check for common error patterns in stderr
         let error_patterns = ["error:", "Error:", "FAILED", "panic:", "fatal:", "Permission denied"];
         for pattern in &error_patterns {
             if stderr.contains(pattern) {
@@ -160,7 +119,10 @@ impl Verifier {
         }
     }
 
-    /// Check Rust syntax using cargo check
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     async fn check_rust_syntax(&self, _path: &str) -> Option<CheckResult> {
         let output = tokio::process::Command::new("cargo")
             .args(["check", "--message-format=json", "--quiet"])
@@ -188,7 +150,6 @@ impl Verifier {
         })
     }
 
-    /// Check TypeScript syntax using tsc
     async fn check_typescript_syntax(&self, path: &str) -> Option<CheckResult> {
         let output = tokio::process::Command::new("npx")
             .args(["tsc", "--noEmit", "--pretty", "false", path])
@@ -216,7 +177,6 @@ impl Verifier {
         })
     }
 
-    /// Check JavaScript syntax using eslint
     async fn check_javascript_syntax(&self, path: &str) -> Option<CheckResult> {
         let output = tokio::process::Command::new("npx")
             .args(["eslint", "--format=json", path])
@@ -244,7 +204,6 @@ impl Verifier {
         })
     }
 
-    /// Check Python syntax using py_compile
     async fn check_python_syntax(&self, path: &str) -> Option<CheckResult> {
         let output = tokio::process::Command::new("python")
             .args(["-m", "py_compile", path])
@@ -271,11 +230,6 @@ impl Verifier {
             },
         })
     }
-
-    /// Check if verification is enabled
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
 }
 
 impl Default for Verifier {
@@ -284,7 +238,6 @@ impl Default for Verifier {
     }
 }
 
-/// Truncate a string to max_len characters
 fn truncate_str(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         s.to_string()
