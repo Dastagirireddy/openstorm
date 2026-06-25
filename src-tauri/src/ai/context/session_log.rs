@@ -141,6 +141,66 @@ impl AiSessionLog {
     pub fn log_flow(&mut self, msg: &str) { self.line(&format!("[{}] {}", self.ts(), msg)); self.flush(); }
     pub fn log_error(&mut self, msg: &str) { self.line(&format!("[{}] ERROR: {}", self.ts(), msg)); self.flush(); }
 
+    /// Read previous session logs and extract lessons learned (errors, sandbox violations, misidentifications).
+    pub fn read_lessons(project_path: &str) -> Vec<String> {
+        let dir = PathBuf::from(project_path).join(".openstorm").join("ai-sessions");
+        if !dir.exists() {
+            return Vec::new();
+        }
+
+        let mut lessons = Vec::new();
+
+        // Read latest.log first
+        if let Ok(content) = fs::read_to_string(dir.join("latest.log")) {
+            Self::extract_lessons_from_content(&content, &mut lessons);
+        }
+
+        // Read archived session logs
+        if let Ok(entries) = fs::read_dir(&dir) {
+            let mut files: Vec<_> = entries.filter_map(|e| e.ok()).collect();
+            files.sort_by(|a, b| b.file_name().cmp(&a.file_name())); // newest first
+            for entry in files.into_iter().take(5) { // last 5 sessions
+                let path = entry.path();
+                if path.file_name().and_then(|n| n.to_str()) == Some("latest.log") {
+                    continue;
+                }
+                if path.extension().and_then(|e| e.to_str()) == Some("log") {
+                    if let Ok(content) = fs::read_to_string(&path) {
+                        Self::extract_lessons_from_content(&content, &mut lessons);
+                    }
+                }
+            }
+        }
+
+        lessons.dedup();
+        lessons
+    }
+
+    fn extract_lessons_from_content(content: &str, lessons: &mut Vec<String>) {
+        for line in content.lines() {
+            let lower = line.to_lowercase();
+            // Sandbox violations
+            if lower.contains("sandbox violation") {
+                lessons.push(line.trim().to_string());
+            }
+            // Errors
+            if line.contains("ERROR:") {
+                let msg = line.split("ERROR:").nth(1).unwrap_or("").trim();
+                if !msg.is_empty() && !msg.contains("Failed to kill process") {
+                    lessons.push(format!("Previous error: {}", msg));
+                }
+            }
+            // Misidentifications (language/build tool mismatches)
+            if lower.contains("language:") && lower.contains("javascript") && lower.contains("go") {
+                lessons.push("Project was misidentified as JavaScript when it contains Go files".to_string());
+            }
+            // Failed commands
+            if lower.contains("failed to") || lower.contains("command failed") {
+                lessons.push(line.trim().to_string());
+            }
+        }
+    }
+
     pub fn end(&mut self, iterations: u32, tool_calls: u32, tokens: u64) {
         let div = "═".repeat(64);
         self.line(&div);

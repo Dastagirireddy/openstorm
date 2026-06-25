@@ -1,12 +1,25 @@
 use super::Agent;
+use crate::ai::context::AiSessionLog;
 
 /// Build the system prompt for the LLM.
 ///
-/// Composes project context and permissions into a single prompt
-/// that instructs the model on its capabilities and constraints.
+/// Composes project context, permissions, and lessons learned from previous sessions
+/// into a single prompt that instructs the model on its capabilities and constraints.
 pub fn build_system_prompt(agent: &Agent) -> String {
     let project_section = agent.project_context.to_prompt_section();
     let permissions_section = agent.permissions.to_prompt_section();
+
+    // Load lessons from previous sessions
+    let lessons = AiSessionLog::read_lessons(&agent.tools.project_path);
+    let lessons_section = if lessons.is_empty() {
+        String::new()
+    } else {
+        let items: Vec<String> = lessons.iter().take(5).map(|l| format!("- {}", l)).collect();
+        format!(
+            "\n## Lessons Learned from Previous Sessions\n\n{}\n",
+            items.join("\n")
+        )
+    };
 
     format!(
         r##"You are an AI coding assistant embedded in the OpenStorm IDE.
@@ -15,7 +28,7 @@ You have access to tools that let you read, write, and search files in the user'
 {project_section}
 
 {permissions_section}
-
+{lessons_section}
 ## Capabilities
 
 You can:
