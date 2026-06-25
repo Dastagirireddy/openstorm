@@ -5,7 +5,8 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use super::super::{ChatCompletionRequest, Message, ToolCall, ToolDefinition, Usage};
 
-/// Logs complete AI session flow to `.openstorm/ai-sessions/latest.log`.
+/// Logs complete AI session flow to `.openstorm/ai-sessions/`.
+/// Previous `latest.log` is preserved as a timestamped file.
 pub struct AiSessionLog {
     file: BufWriter<File>,
     start_time: Instant,
@@ -17,7 +18,19 @@ impl AiSessionLog {
     pub fn start(user_message: &str, model: &str, project_path: &str) -> Self {
         let dir = PathBuf::from(project_path).join(".openstorm").join("ai-sessions");
         fs::create_dir_all(&dir).ok();
-        let file = BufWriter::new(File::create(dir.join("latest.log")).expect("Failed to create AI session log"));
+
+        // Preserve previous session by renaming latest.log
+        let latest = dir.join("latest.log");
+        if latest.exists() {
+            let ts = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let archived = dir.join(format!("session-{}.log", ts));
+            fs::rename(&latest, &archived).ok();
+        }
+
+        let file = BufWriter::new(File::create(&latest).expect("Failed to create AI session log"));
         let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
         let mut log = AiSessionLog { file, start_time: Instant::now(), session_id: ts.to_string(), model: model.into() };
         let div = "═".repeat(64);
