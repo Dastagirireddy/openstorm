@@ -11,8 +11,8 @@ const PERM_STYLES = `
   :host { display: block; }
   
   .permission-card {
-    background: #1a1215;
-    border: 1px solid #3d2025;
+    background: color-mix(in srgb, var(--ai-danger, #ef4444) 8%, var(--ai-panel-background, #ffffff));
+    border: 1px solid color-mix(in srgb, var(--ai-danger, #ef4444) 30%, var(--ai-panel-border, #e5e7eb));
     border-radius: 10px;
     padding: 20px;
     margin: 12px 0;
@@ -25,7 +25,7 @@ const PERM_STYLES = `
     gap: 10px;
     margin-bottom: 16px;
     padding-bottom: 12px;
-    border-bottom: 1px solid #3d2025;
+    border-bottom: 1px solid color-mix(in srgb, var(--ai-danger, #ef4444) 20%, var(--ai-panel-border, #e5e7eb));
   }
   
   .permission-icon {
@@ -34,11 +34,11 @@ const PERM_STYLES = `
   
   .permission-warning-icon {
     font-size: 16px;
-    color: #e06c75;
+    color: var(--ai-danger, #ef4444);
   }
   
   .permission-title {
-    color: #e06c75;
+    color: var(--ai-danger, #ef4444);
     font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
@@ -51,33 +51,33 @@ const PERM_STYLES = `
   
   .permission-label {
     font-size: 13px;
-    color: #abb2bf;
+    color: var(--ai-text-muted, #6b7280);
     font-weight: 600;
     margin-bottom: 4px;
   }
   
   .permission-value {
     font-size: 13px;
-    color: #abb2bf;
+    color: var(--ai-text-muted, #6b7280);
     line-height: 1.6;
   }
   
   .permission-value code {
-    background: #212327;
+    background: var(--ai-code-background, #f9fafb);
     padding: 2px 6px;
     border-radius: 4px;
-    color: #e06c75;
+    color: var(--ai-danger, #ef4444);
     font-size: 12px;
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
   
   .permission-command {
-    background: #0d0f12;
-    border: 1px solid #1e2128;
+    background: var(--ai-code-background, #f9fafb);
+    border: 1px solid var(--ai-code-border, #e5e7eb);
     padding: 12px 16px;
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 12px;
-    color: #abb2bf;
+    color: var(--ai-text-muted, #6b7280);
     border-radius: 8px;
     margin: 12px 0 18px 0;
     overflow-x: auto;
@@ -91,9 +91,9 @@ const PERM_STYLES = `
   }
   
   .perm-btn {
-    background: #1e2128;
-    border: 1px solid #2d3139;
-    color: #abb2bf;
+    background: var(--ai-tool-background, #f9fafb);
+    border: 1px solid var(--ai-panel-border, #e5e7eb);
+    color: var(--ai-text-muted, #6b7280);
     padding: 8px 16px;
     font-size: 12px;
     font-weight: 500;
@@ -103,38 +103,38 @@ const PERM_STYLES = `
   }
   
   .perm-btn:hover {
-    filter: brightness(1.2);
+    filter: brightness(0.95);
   }
   
   .perm-btn.deny:hover {
-    background: #2c1418;
-    border-color: #e06c75;
-    color: #e06c75;
+    background: color-mix(in srgb, var(--ai-danger, #ef4444) 12%, transparent);
+    border-color: var(--ai-danger, #ef4444);
+    color: var(--ai-danger, #ef4444);
   }
   
   .perm-btn.grant {
-    background: #1a2332;
-    color: #60a5fa;
-    border-color: #1a2a4a;
+    background: color-mix(in srgb, var(--ai-accent, #3574f0) 12%, transparent);
+    color: var(--ai-accent, #3574f0);
+    border-color: color-mix(in srgb, var(--ai-accent, #3574f0) 25%, transparent);
   }
   .perm-btn.grant:hover {
-    background: #1e2a3e;
-    border-color: #60a5fa;
+    background: color-mix(in srgb, var(--ai-accent, #3574f0) 20%, transparent);
+    border-color: var(--ai-accent, #3574f0);
   }
   
   .perm-btn.always {
-    background: #1a2322;
-    color: #4ade80;
-    border-color: #1a3a2a;
+    background: color-mix(in srgb, var(--ai-success, #22c55e) 12%, transparent);
+    color: var(--ai-success, #22c55e);
+    border-color: color-mix(in srgb, var(--ai-success, #22c55e) 25%, transparent);
   }
   .perm-btn.always:hover {
-    background: #1e2e2c;
-    border-color: #4ade80;
+    background: color-mix(in srgb, var(--ai-success, #22c55e) 20%, transparent);
+    border-color: var(--ai-success, #22c55e);
   }
   
   .perm-hint {
     font-size: 11px;
-    color: #5c6370;
+    color: var(--ai-text-dim, #9ca3af);
     font-family: 'SF Mono', 'Fira Code', monospace;
     margin-left: auto;
     display: flex;
@@ -143,10 +143,10 @@ const PERM_STYLES = `
   }
   
   .perm-hint-key {
-    background: #21252b;
+    background: var(--ai-tool-header-background, #f3f4f6);
     padding: 2px 6px;
     border-radius: 3px;
-    border: 1px solid #3e4451;
+    border: 1px solid var(--ai-panel-border, #e5e7eb);
   }
 `;
 
