@@ -373,7 +373,7 @@ export class AiInputDeck extends LitElement {
       messageToSend = buildContextMessage(text, attachments);
     }
 
-    this.dispatchEvent(new CustomEvent('ai-send-message', { detail: { message: messageToSend, sessionId: this.sessionId }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent('ai-send-message', { detail: { message: messageToSend, originalText: text, sessionId: this.sessionId }, bubbles: true, composed: true }));
     this.value = '';
     if (this.ta) this.ta.style.height = 'auto';
   }

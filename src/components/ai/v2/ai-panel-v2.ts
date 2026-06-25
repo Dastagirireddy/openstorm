@@ -170,10 +170,10 @@ export class AiPanelV2 extends LitElement {
     });
   }
 
-  private async sendMsg(e: CustomEvent<{ message: string }>) {
+  private async sendMsg(e: CustomEvent<{ message: string; originalText?: string }>) {
     const msg = e.detail.message;
     if (!msg.trim()) return;
-    this.timelineEl?.setUserPrompt(msg);
+    this.timelineEl?.setUserPrompt(e.detail.originalText || msg);
 
     // Build conversation history from aiState
     // Limit to last 10 messages to prevent context bloat from old conversations
