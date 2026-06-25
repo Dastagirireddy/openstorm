@@ -131,6 +131,12 @@ importers:
       markdown-it-mermaid-plugin:
         specifier: ^0.1.0
         version: 0.1.0
+      markdown-it-table:
+        specifier: ^4.1.1
+        version: 4.1.1
+      markdown-it-task-lists:
+        specifier: ^2.1.1
+        version: 2.1.1
       marked:
         specifier: ^18.0.2
         version: 18.0.2
@@ -1379,6 +1385,13 @@ packages:
 
   markdown-it-mermaid-plugin@0.1.0:
     resolution: {integrity: sha512-e5+BqzHA/P9rGLnryaLricGeQRnWkBKlfPdj1K8y5g7pZaIxQ6CtsDcxCqJ78aO7lmt0dLFI60wM0rq+D9V5YQ==}
+
+  markdown-it-table@4.1.1:
+    resolution: {integrity: sha512-dzFHRwCe97sXD071Gw/LSIwgAcO2vNsT0BcPCmnrKhNW/W57Bnknl8EaC+j4hM3bAqus1CiVPcTQAvLkUfHLhw==}
+    engines: {node: '>12.6'}
+
+  markdown-it-task-lists@2.1.1:
+    resolution: {integrity: sha512-TxFAc76Jnhb2OUu+n3yz9RMu4CwGfaT788br6HhEDlvWfdeJcLUsxk1Hgw2yJio0OXsxv7pyIPmvECY7bMbluA==}
 
   markdown-it@14.1.1:
     resolution: {integrity: sha512-BuU2qnTti9YKgK5N+IeMubp14ZUKUUw7yeJbkjtosvHiP0AZ5c8IAgEMk79D0eC8F23r4Ac/q8cAIFdm2FtyoA==}
@@ -2807,6 +2820,10 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   markdown-it-mermaid-plugin@0.1.0: {}
+
+  markdown-it-table@4.1.1: {}
+
+  markdown-it-task-lists@2.1.1: {}
 
   markdown-it@14.1.1:
     dependencies:

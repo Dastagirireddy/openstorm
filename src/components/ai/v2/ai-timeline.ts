@@ -169,7 +169,11 @@ const TIMELINE_STYLES = `
   .response-text tbody tr:last-child td { 
     border-bottom: none; 
   }
-  .response-text code-block { 
+  .response-text ai-code-block { 
+    display: block;
+    margin: 12px 0;
+  }
+  .response-text ai-mermaid { 
     display: block;
     margin: 12px 0;
   }

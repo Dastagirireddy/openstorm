@@ -29,8 +29,8 @@ const hljsOverrides = css`
   .code-content code.hljs .hljs-params { color: #f8f8f2 !important; }
 `;
 
-@customElement('code-block')
-export class CodeBlock extends LitElement {
+@customElement('ai-code-block')
+export class AiCodeBlock extends LitElement {
   static styles = css`
     :host {
       display: block;
@@ -198,9 +198,16 @@ export class CodeBlock extends LitElement {
   @state()
   private isExpanded = false;
 
+  @state()
+  private showPreview = false;
+
   private highlightedCode = '';
-  private lines: string[] = [];
+  private lines: string[] = '';
   private displayLanguage = '';
+
+  get isHtml(): boolean {
+    return this.language === 'html' || this.language === 'htm';
+  }
 
   willUpdate(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('code') || changedProperties.has('language')) {
@@ -271,6 +278,18 @@ export class CodeBlock extends LitElement {
     this.isExpanded = !this.isExpanded;
   }
 
+  private togglePreview() {
+    this.showPreview = !this.showPreview;
+  }
+
+  private openPreviewInNewTab() {
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(this.code);
+      win.document.close();
+    }
+  }
+
   render() {
     const lineCount = this.lines.length;
     const shouldShowLineNumbers = this.showLineNumbers && lineCount > this.maxLinesForNumbers;
@@ -285,6 +304,17 @@ export class CodeBlock extends LitElement {
             <span class="code-lines">${lineCount} lines</span>
           </div>
           <div class="code-actions">
+            ${this.isHtml ? html`
+              <button class="code-btn ${this.showPreview ? 'copied' : ''}" @click=${this.togglePreview}>
+                <iconify-icon icon="${this.showPreview ? 'lucide:code' : 'lucide:eye'}" width="12"></iconify-icon>
+                ${this.showPreview ? 'Code' : 'Preview'}
+              </button>
+              ${this.showPreview ? html`
+                <button class="code-btn" @click=${this.openPreviewInNewTab}>
+                  <iconify-icon icon="lucide:external-link" width="12"></iconify-icon>
+                </button>
+              ` : ''}
+            ` : ''}
             ${canCollapse ? html`
               <button class="code-btn expand-btn" @click=${this.toggleExpand}>
                 <iconify-icon icon="${this.isExpanded ? 'lucide:minimize-2' : 'lucide:maximize-2'}" width="12"></iconify-icon>
@@ -296,14 +326,24 @@ export class CodeBlock extends LitElement {
             </button>
           </div>
         </div>
-        <div class="code-content ${showCollapsed ? 'collapsed' : ''}">
-          ${shouldShowLineNumbers ? html`
-            <span class="code-line-numbers">
-              ${this.lines.map((_, i) => html`<span>${i + 1}</span>`)}
-            </span>
-          ` : ''}
-          ${unsafeHTML(this.highlightedCode)}
-        </div>
+        ${this.showPreview && this.isHtml ? html`
+          <div style="padding: 0; background: white;">
+            <iframe 
+              srcdoc="${this.code}" 
+              style="width: 100%; height: 300px; border: none;"
+              sandbox="allow-scripts"
+            ></iframe>
+          </div>
+        ` : html`
+          <div class="code-content ${showCollapsed ? 'collapsed' : ''}">
+            ${shouldShowLineNumbers ? html`
+              <span class="code-line-numbers">
+                ${this.lines.map((_, i) => html`<span>${i + 1}</span>`)}
+              </span>
+            ` : ''}
+            ${unsafeHTML(this.highlightedCode)}
+          </div>
+        `}
       </div>
     `;
   }
@@ -311,6 +351,6 @@ export class CodeBlock extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'code-block': CodeBlock;
+    'ai-code-block': AiCodeBlock;
   }
 }

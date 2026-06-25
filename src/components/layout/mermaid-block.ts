@@ -28,7 +28,7 @@ function onRenderComplete(): void {
   }
 }
 
-async function tryRender(code: string, component: MermaidBlock): Promise<boolean> {
+async function tryRender(code: string, component: AiMermaid): Promise<boolean> {
   try {
     const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const { svg } = await mermaid.render(id, code);
@@ -67,8 +67,8 @@ function fixMermaidSyntax(code: string): string {
   return fixed;
 }
 
-@customElement('mermaid-block')
-export class MermaidBlock extends LitElement {
+@customElement('ai-mermaid')
+export class AiMermaid extends LitElement {
   static styles = css`
     :host {
       display: block;
@@ -310,6 +310,6 @@ export class MermaidBlock extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'mermaid-block': MermaidBlock;
+    'ai-mermaid': AiMermaid;
   }
 }
