@@ -31,11 +31,24 @@ export interface SummaryData {
 }
 
 const TIMELINE_STYLES = `
-  :host { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--ai-panel-background, #141618); }
-  .scroll { flex: 1; overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 0; }
+  :host { 
+    display: flex; 
+    flex-direction: column; 
+    height: 100%; 
+    overflow: hidden; 
+    background: var(--ai-panel-background, #ffffff);
+  }
+  .scroll { 
+    flex: 1; 
+    overflow-y: auto; 
+    padding: 24px 32px; 
+    display: flex; 
+    flex-direction: column; 
+    gap: 0; 
+  }
   .scroll::-webkit-scrollbar { width: 6px; }
   .scroll::-webkit-scrollbar-track { background: transparent; }
-  .scroll::-webkit-scrollbar-thumb { background: var(--ai-text-dim, #333); border-radius: 3px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--ai-text-dim, #d1d5db); border-radius: 3px; }
   
   .empty-state {
     display: flex;
@@ -52,7 +65,7 @@ const TIMELINE_STYLES = `
     font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
     font-size: 11px;
     line-height: 1.2;
-    color: var(--ai-text-dim, #3e4451);
+    color: var(--ai-text-dim, #9ca3af);
     white-space: pre;
     margin-bottom: 20px;
     opacity: 0.4;
@@ -60,22 +73,33 @@ const TIMELINE_STYLES = `
   
   .welcome-subtitle {
     font-size: 13px;
-    color: var(--ai-text-muted, #5c6370);
+    color: var(--ai-text-muted, #6b7280);
     max-width: 320px;
     line-height: 1.5;
   }
   
-  .header-text { font-size: 14px; font-weight: 600; color: var(--ai-text, #e0e0e0); line-height: 1.6; margin-bottom: 20px; padding: 12px 16px; background: var(--ai-input-background, #0d0f12); border: 1px solid var(--ai-panel-border, #1e2128); border-radius: 8px; }
+  .header-text { 
+    font-size: 14px; 
+    font-weight: 500; 
+    color: var(--ai-text, #1f2937); 
+    line-height: 1.6; 
+    margin-bottom: 20px; 
+    padding: 14px 18px; 
+    background: linear-gradient(135deg, color-mix(in srgb, var(--ai-primary, #3574f0) 6%, transparent) 0%, color-mix(in srgb, var(--ai-secondary, #5a9cf8) 4%, transparent) 100%); 
+    border-left: 3px solid var(--ai-primary, #3574f0);
+    border-radius: 0 8px 8px 0; 
+    font-weight: 600;
+  }
   .response-text { 
     font-size: 14px; 
-    color: var(--ai-text, #abb2bf); 
+    color: var(--ai-text, #4b5563); 
     line-height: 1.7; 
     margin-top: 16px;
     padding-top: 16px;
-    border-top: 1px solid var(--ai-panel-border, #1e2128);
+    border-top: 1px solid var(--ai-panel-border, #e5e7eb);
   }
   .response-text h1, .response-text h2, .response-text h3, .response-text h4 { 
-    color: var(--ai-text, #e0e0e0); 
+    color: var(--ai-text, #1f2937); 
     margin: 16px 0 8px 0; 
     line-height: 1.4;
   }
@@ -86,17 +110,17 @@ const TIMELINE_STYLES = `
   .response-text ul, .response-text ol { margin: 8px 0; padding-left: 24px; }
   .response-text li { margin: 4px 0; }
   .response-text code { 
-    background: var(--ai-code-background, #21252b); 
+    background: var(--ai-code-background, #f3f4f6); 
     padding: 2px 6px; 
     border-radius: 4px; 
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 13px;
-    color: #e6db74;
-    border: 1px solid var(--ai-code-border, #30363d);
+    color: var(--ai-syntax-keyword, #dc2626);
+    border: 1px solid var(--ai-code-border, #e5e7eb);
   }
   .response-text pre { 
-    background: var(--ai-input-background, #0d0f12); 
-    border: 1px solid var(--ai-panel-border, #1e2128); 
+    background: var(--ai-input-background, #f9fafb); 
+    border: 1px solid var(--ai-panel-border, #e5e7eb); 
     border-radius: 8px; 
     padding: 12px 16px; 
     margin: 12px 0;
@@ -107,17 +131,43 @@ const TIMELINE_STYLES = `
     padding: 0; 
     border-radius: 0;
   }
-  .response-text strong { color: var(--ai-text, #e0e0e0); font-weight: 600; }
-  .response-text em { color: var(--ai-text, #abb2bf); }
-  .response-text a { color: var(--ai-accent, #61afef); text-decoration: none; }
+  .response-text strong { color: var(--ai-text, #1f2937); font-weight: 600; }
+  .response-text em { color: var(--ai-text, #4b5563); }
+  .response-text a { color: var(--ai-accent, #3574f0); text-decoration: none; }
   .response-text a:hover { text-decoration: underline; }
   .response-text blockquote { 
-    border-left: 3px solid var(--ai-text-dim, #3e4451); 
+    border-left: 3px solid var(--ai-text-dim, #d1d5db); 
     margin: 12px 0; 
     padding: 8px 16px; 
-    color: var(--ai-text-muted, #828997);
-    background: var(--ai-input-background, #0d0f12);
+    color: var(--ai-text-muted, #6b7280);
+    background: var(--ai-input-background, #f9fafb);
     border-radius: 0 8px 8px 0;
+  }
+  .response-text table { 
+    width: 100%; 
+    border-collapse: collapse; 
+    margin: 16px 0; 
+    font-size: 13px;
+  }
+  .response-text thead th { 
+    background: var(--ai-tool-header-background, #f3f4f6); 
+    color: var(--ai-text, #1f2937); 
+    font-weight: 600; 
+    text-align: left; 
+    padding: 10px 14px; 
+    border-bottom: 2px solid var(--ai-panel-border, #e5e7eb);
+  }
+  .response-text tbody td { 
+    padding: 10px 14px; 
+    border-bottom: 1px solid var(--ai-panel-border, #e5e7eb); 
+    color: var(--ai-text, #4b5563);
+    vertical-align: top;
+  }
+  .response-text tbody tr:hover { 
+    background: var(--ai-tool-background, #f9fafb); 
+  }
+  .response-text tbody tr:last-child td { 
+    border-bottom: none; 
   }
   .response-text code-block { 
     display: block;
@@ -152,8 +202,28 @@ export class AiTimeline extends LitElement {
     this.steps = [];
     this.permissionRequest = null;
     this.summary = null;
-    this.headerText = `Execution timeline for '${prompt}' task:`;
+    this.headerText = prompt;
     this.scrollToBottom();
+    this._emitContentChange();
+  }
+
+  clearAll() {
+    this.userPrompt = '';
+    this.responseText = '';
+    this.steps = [];
+    this.permissionRequest = null;
+    this.summary = null;
+    this.headerText = '';
+    this._emitContentChange();
+  }
+
+  private _emitContentChange() {
+    const hasContent = !!(this.headerText || this.steps.length > 0 || this.responseText || this.permissionRequest || this.summary);
+    this.dispatchEvent(new CustomEvent('timeline-content-change', { 
+      detail: { hasContent }, 
+      bubbles: true, 
+      composed: true 
+    }));
   }
 
   clearResponse() {
@@ -162,17 +232,19 @@ export class AiTimeline extends LitElement {
     this.summary = null;
   }
 
-  setResponseText(text: string) { this.responseText = text; this.scrollToBottom(); }
-  appendResponseText(delta: string) { this.responseText += delta; this.scrollToBottom(); }
+  setResponseText(text: string) { this.responseText = text; this.scrollToBottom(); this._emitContentChange(); }
+  appendResponseText(delta: string) { this.responseText += delta; this.scrollToBottom(); this._emitContentChange(); }
 
   addStep(step: TimelineStepData) { 
     this.steps = [...this.steps, step]; 
-    this.scrollToBottom(); 
+    this.scrollToBottom();
+    this._emitContentChange();
   }
 
   updateStep(id: string, updates: Partial<TimelineStepData>) {
     this.steps = this.steps.map(s => s.id === id ? { ...s, ...updates } : s);
     this.scrollToBottom();
+    this._emitContentChange();
   }
 
   updateStepTelemetry(id: string, fields: TelemetryField[]) {

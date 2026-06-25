@@ -179,9 +179,10 @@ impl AiSessionLog {
     fn extract_lessons_from_content(content: &str, lessons: &mut Vec<String>) {
         for line in content.lines() {
             let lower = line.to_lowercase();
-            // Sandbox violations
-            if lower.contains("sandbox violation") {
-                lessons.push(format!("Sandbox escape blocked: {}", line.trim()));
+            // Sandbox violations — strip paths to avoid injecting wrong project names
+            if lower.contains("sandbox violation") || lower.contains("sandbox escape blocked") {
+                lessons.push("Sandbox escape blocked: commands must stay within the project directory".to_string());
+                continue;
             }
             // Errors
             if line.contains("ERROR:") {

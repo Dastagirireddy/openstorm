@@ -191,7 +191,13 @@ export class AIStateManager {
 
   setSelectedModel(modelId: string): void {
     this.selectedModel = modelId;
-    this.emit('model-selected', modelId);
+    // Find model name from models list
+    const model = this.models.find(m => m.id === modelId);
+    this.emit('model-selected', { 
+      id: modelId, 
+      name: model ? model.name : modelId, 
+      provider: model ? model.provider : '' 
+    });
   }
 
   setOllamaConnected(connected: boolean): void {

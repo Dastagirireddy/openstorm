@@ -173,7 +173,7 @@ export class AiPermissionCard extends LitElement {
     return html`
       <div class="permission-card">
         <div class="permission-header">
-          <span class="permission-icon">\u26A0\uFE0F</span>
+          <iconify-icon class="permission-icon" icon="mdi:alert" width="18"></iconify-icon>
           <span class="permission-title">PERMISSION REQUEST: ${this.request.toolName}</span>
         </div>
         <div class="permission-field">

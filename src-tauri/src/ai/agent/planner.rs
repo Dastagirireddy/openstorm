@@ -60,7 +60,9 @@ pub fn build_progress_context(has_plan: &bool, last_completed_step: &Option<u32>
         )
     } else {
         "## Progress Status\n\
-         No plan exists yet. Create a plan and TODO items first, then execute step by step."
+         No plan exists yet. Create a plan and TODO items first, then execute step by step.\n\n\
+         IMPORTANT: The project identity (name, path, language) is ALREADY provided in the system prompt. \
+         Do NOT include 'Identify the project' or 'Inspect project' as a plan step — you already know what this project is."
             .to_string()
     }
 }

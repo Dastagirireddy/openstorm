@@ -267,10 +267,10 @@ export class AiTimelineStep extends LitElement {
 
   private icon() {
     switch (this.status) {
-      case 'completed': return '\u2713';
-      case 'active': return '\u25CB';
-      case 'failed': return '\u2717';
-      default: return '\u25CB';
+      case 'completed': return html`<iconify-icon icon="mdi:check-circle" width="16"></iconify-icon>`;
+      case 'active': return html`<iconify-icon icon="mdi:loading" width="16"></iconify-icon>`;
+      case 'failed': return html`<iconify-icon icon="mdi:close-circle" width="16"></iconify-icon>`;
+      default: return html`<iconify-icon icon="mdi:circle-outline" width="16"></iconify-icon>`;
     }
   }
 
@@ -308,7 +308,7 @@ export class AiTimelineStep extends LitElement {
                 <span class="telemetry-key">${f.key}</span>
                 ${f.field_type === 'link'
                   ? html`<a href="${f.value}" target="_blank" class="telemetry-value link">${f.value}</a>`
-                  : html`<span class="telemetry-value ${f.field_type === 'success' ? 'success' : f.field_type === 'error' ? 'error' : ''}">${f.field_type === 'success' ? '\u2713 ' : f.field_type === 'running' ? '\u25CF ' : ''}${f.value}</span>`}
+                  : html`<span class="telemetry-value ${f.field_type === 'success' ? 'success' : f.field_type === 'error' ? 'error' : ''}">${f.field_type === 'success' ? html`<iconify-icon icon="mdi:check" width="12"></iconify-icon> ` : f.field_type === 'running' ? html`<iconify-icon icon="mdi:circle" width="8"></iconify-icon> ` : ''}${f.value}</span>`}
               </div>
             `)}
           </div>

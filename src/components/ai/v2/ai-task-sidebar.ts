@@ -11,22 +11,22 @@ const SIDEBAR_STYLES = `
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #0d0f12;
-    border-left: 1px solid #1e2128;
+    background: var(--ai-panel-background, #ffffff);
+    border-left: 1px solid var(--ai-panel-border, #e5e7eb);
     overflow-y: auto;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   
   .sidebar::-webkit-scrollbar { width: 6px; }
   .sidebar::-webkit-scrollbar-track { background: transparent; }
-  .sidebar::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--ai-text-dim, #d1d5db); border-radius: 3px; }
   
   .section {
     padding: 16px;
   }
   
   .section + .section {
-    border-top: 1px solid #1e2128;
+    border-top: 1px solid var(--ai-panel-border, #e5e7eb);
   }
   
   .section-header {
@@ -41,16 +41,16 @@ const SIDEBAR_STYLES = `
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.8px;
-    color: #5c6370;
+    color: var(--ai-text-muted, #6b7280);
   }
   
   .section-badge {
-    background: #1e2128;
+    background: var(--ai-tool-background, #f9fafb);
     padding: 2px 8px;
     font-size: 10px;
     font-weight: 600;
     border-radius: 4px;
-    color: #abb2bf;
+    color: var(--ai-text-muted, #6b7280);
     font-family: 'SF Mono', 'Fira Code', monospace;
   }
   
@@ -65,15 +65,15 @@ const SIDEBAR_STYLES = `
     gap: 10px;
     align-items: flex-start;
     padding: 10px 12px;
-    background: #141618;
-    border: 1px solid #1e2128;
+    background: var(--ai-tool-background, #f9fafb);
+    border: 1px solid var(--ai-tool-border, #e5e7eb);
     border-radius: 6px;
     transition: all 0.15s ease;
   }
   
   .task-card:hover {
-    background: #1a1d21;
-    border-color: #2b2d31;
+    background: var(--ai-tool-header-background, #f3f4f6);
+    border-color: var(--ai-text-dim, #d1d5db);
   }
   
   .task-card.pending {
@@ -97,24 +97,24 @@ const SIDEBAR_STYLES = `
   }
   
   .task-icon.pending {
-    color: #5c6370;
-    border: 1.5px solid #3e4451;
+    color: var(--ai-text-dim, #9ca3af);
+    border: 1.5px solid var(--ai-panel-border, #e5e7eb);
   }
   
   .task-icon.in_progress {
-    color: #d19a66;
-    border: 1.5px solid #d19a66;
+    color: var(--ai-warning, #f59e0b);
+    border: 1.5px solid var(--ai-warning, #f59e0b);
   }
   
   .task-icon.completed {
-    color: #98c379;
-    background: rgba(152, 195, 121, 0.15);
+    color: var(--ai-success, #22c55e);
+    background: color-mix(in srgb, var(--ai-success, #22c55e) 15%, transparent);
     border: none;
   }
   
   .task-icon.failed {
-    color: #e06c75;
-    background: rgba(224, 108, 117, 0.15);
+    color: var(--ai-danger, #ef4444);
+    background: color-mix(in srgb, var(--ai-danger, #ef4444) 15%, transparent);
     border: none;
   }
   
@@ -129,7 +129,7 @@ const SIDEBAR_STYLES = `
   .task-name {
     font-size: 13px;
     line-height: 1.4;
-    color: #abb2bf;
+    color: var(--ai-text, #4b5563);
     font-weight: 500;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -137,7 +137,7 @@ const SIDEBAR_STYLES = `
   }
   
   .task-card.completed .task-name {
-    color: #5c6370;
+    color: var(--ai-text-dim, #9ca3af);
     text-decoration: line-through;
   }
   
@@ -153,18 +153,18 @@ const SIDEBAR_STYLES = `
   }
   
   .task-priority.high {
-    color: #e06c75;
-    background: rgba(224, 108, 117, 0.1);
+    color: var(--ai-danger, #ef4444);
+    background: color-mix(in srgb, var(--ai-danger, #ef4444) 10%, transparent);
   }
   
   .task-priority.medium {
-    color: #d19a66;
-    background: rgba(209, 154, 102, 0.1);
+    color: var(--ai-warning, #f59e0b);
+    background: color-mix(in srgb, var(--ai-warning, #f59e0b) 10%, transparent);
   }
   
   .task-priority.low {
-    color: #5c6370;
-    background: rgba(92, 99, 112, 0.2);
+    color: var(--ai-text-muted, #6b7280);
+    background: color-mix(in srgb, var(--ai-text-muted, #6b7280) 20%, transparent);
   }
   
   .system-resources {
@@ -182,21 +182,21 @@ const SIDEBAR_STYLES = `
   .resource-label {
     font-size: 11px;
     font-weight: 600;
-    color: #5c6370;
+    color: var(--ai-text-muted, #6b7280);
   }
   
   .resource-value {
     font-size: 13px;
     font-family: 'SF Mono', 'Fira Code', monospace;
-    color: #abb2bf;
+    color: var(--ai-text, #4b5563);
   }
   
   .resource-value.warning {
-    color: #d19a66;
+    color: var(--ai-warning, #f59e0b);
   }
   
   .resource-value.error {
-    color: #e06c75;
+    color: var(--ai-danger, #ef4444);
   }
 `;
 
@@ -229,10 +229,10 @@ export class AiTaskSidebar extends LitElement {
 
   private icon(s: string) {
     switch (s) {
-      case 'completed': return '\u2713';
-      case 'in_progress': return '\u2192';
-      case 'failed': return '\u2717';
-      default: return '\u25CB';
+      case 'completed': return html`<iconify-icon icon="mdi:check-circle" width="16"></iconify-icon>`;
+      case 'in_progress': return html`<iconify-icon icon="mdi:loading" width="16"></iconify-icon>`;
+      case 'failed': return html`<iconify-icon icon="mdi:close-circle" width="16"></iconify-icon>`;
+      default: return html`<iconify-icon icon="mdi:circle-outline" width="16"></iconify-icon>`;
     }
   }
 
@@ -252,23 +252,6 @@ export class AiTaskSidebar extends LitElement {
       <div class="sidebar">
         <div class="section">
           <div class="section-header">
-            <span class="section-title">Tasks</span>
-            <span class="section-badge">${this.completedCount()}/${this.todos.length}</span>
-          </div>
-          <div class="task-list">
-            ${this.todos.map(t => html`
-              <div class="task-card ${t.status}">
-                <div class="task-icon ${this.iconClass(t.status)}">${this.icon(t.status)}</div>
-                <div class="task-content">
-                  <span class="task-name">${t.content}</span>
-                  <span class="task-priority ${t.priority}">${t.priority}</span>
-                </div>
-              </div>
-            `)}
-          </div>
-        </div>
-        <div class="section">
-          <div class="section-header">
             <span class="section-title">System Resources</span>
           </div>
           <div class="system-resources">
@@ -282,6 +265,25 @@ export class AiTaskSidebar extends LitElement {
             </div>
           </div>
         </div>
+        ${this.todos.length > 0 ? html`
+          <div class="section">
+            <div class="section-header">
+              <span class="section-title">Tasks</span>
+              <span class="section-badge">${this.completedCount()}/${this.todos.length}</span>
+            </div>
+            <div class="task-list">
+              ${this.todos.map(t => html`
+                <div class="task-card ${t.status}">
+                  <div class="task-icon ${this.iconClass(t.status)}">${this.icon(t.status)}</div>
+                  <div class="task-content">
+                    <span class="task-name">${t.content}</span>
+                    <span class="task-priority ${t.priority}">${t.priority}</span>
+                  </div>
+                </div>
+              `)}
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
   }

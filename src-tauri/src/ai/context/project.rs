@@ -4,6 +4,8 @@ use std::path::Path;
 /// Detected project metadata for building the system prompt.
 #[derive(Debug, Clone, Serialize)]
 pub struct ProjectContext {
+    pub project_name: String,
+    pub project_path: String,
     pub language: String,
     pub framework: Option<String>,
     pub build_tool: Option<String>,
@@ -15,7 +17,14 @@ impl ProjectContext {
     pub fn detect(project_path: &str) -> Self {
         let root = Path::new(project_path);
         let (language, framework, build_tool) = detect_language(root);
+        let project_name = root
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+            .to_string();
         Self {
+            project_name,
+            project_path: project_path.to_string(),
             language,
             framework,
             build_tool,
@@ -25,7 +34,14 @@ impl ProjectContext {
     }
 
     pub fn to_prompt_section(&self) -> String {
-        let mut lines = vec![format!("Project context:\n- Language: {}", self.language)];
+        let mut lines = vec![
+            format!(
+                "Project Identity (DETECTED BY SYSTEM — do NOT override or hallucinate a different identity):"
+            ),
+            format!("- Name: {}", self.project_name),
+            format!("- Path: {}", self.project_path),
+            format!("- Language: {}", self.language),
+        ];
         if let Some(ref fw) = self.framework { lines.push(format!("- Framework: {}", fw)); }
         if let Some(ref bt) = self.build_tool { lines.push(format!("- Build tool: {}", bt)); }
         if self.has_git { lines.push("- Version control: Git".to_string()); }

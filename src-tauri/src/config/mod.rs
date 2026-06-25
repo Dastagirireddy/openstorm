@@ -290,6 +290,9 @@ pub struct AiProviderConfig {
     pub base_url: String,
     /// Currently selected model ID
     pub model: String,
+    /// Model display name (cached for display)
+    #[serde(default)]
+    pub model_name: String,
 }
 
 impl Default for AiProviderConfig {
@@ -299,6 +302,7 @@ impl Default for AiProviderConfig {
             api_key: String::new(),
             base_url: "http://localhost:11434".to_string(),
             model: String::new(),
+            model_name: String::new(),
         }
     }
 }

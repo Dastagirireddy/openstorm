@@ -56,7 +56,7 @@ pub async fn execute_tool_call(
         PermissionResult::Denied { reason } => {
             *consecutive_failures += 1;
             let result = format!(
-                "Tool '{}' denied: {}. Use a different tool or approach.",
+                "Tool '{}' DENIED: {}. You did NOT execute this tool and did NOT read any files. Do NOT claim you inspected files or ran commands. Use a different tool or ask the user.",
                 call.function.name, reason
             );
             let _ = tx
