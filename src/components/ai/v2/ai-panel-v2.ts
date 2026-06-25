@@ -212,6 +212,7 @@ export class AiPanelV2 extends LitElement {
   @state() private hasContent = false;
 
   private _handle: ((e: { type: string; [k: string]: unknown }) => void) | null = null;
+  private _resetContext: (() => void) | null = null;
   private _unsub: (() => void)[] = [];
   private _listenUnsub: (() => void) | null = null;
 
@@ -255,7 +256,9 @@ export class AiPanelV2 extends LitElement {
   }
 
   firstUpdated() {
-    this._handle = createTimelineEventHandler(this.timelineEl);
+    const handlers = createTimelineEventHandler(this.timelineEl);
+    this._handle = handlers.handleAgentEvent;
+    this._resetContext = handlers.resetContext;
     this._listen();
     this._setupPermissionListeners();
     // Listen for clear events from input deck
@@ -377,6 +380,10 @@ export class AiPanelV2 extends LitElement {
   private async sendMsg(e: CustomEvent<{ message: string; originalText?: string }>) {
     const msg = e.detail.message;
     if (!msg.trim()) return;
+
+    // Clear previous response state to prevent stale content
+    this.timelineEl?.clearResponse();
+    this._resetContext?.();
     this.timelineEl?.setUserPrompt(e.detail.originalText || msg);
 
     // Build conversation history from aiState

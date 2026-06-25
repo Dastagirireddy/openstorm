@@ -23,7 +23,13 @@ export function createTimelineEventHandler(timeline: AiTimeline) {
     streamingInitialized: false,
   };
 
-  return function handleAgentEvent(event: AgentEvent) {
+  function resetContext() {
+    ctx.stepCounter = 0;
+    ctx.steps.clear();
+    ctx.streamingInitialized = false;
+  }
+
+  function handleAgentEvent(event: AgentEvent) {
     switch (event.type) {
       case 'thinking':
         handleThinking(ctx, event);
@@ -60,7 +66,9 @@ export function createTimelineEventHandler(timeline: AiTimeline) {
         handleExecutionSummary(ctx, event);
         break;
     }
-  };
+  }
+
+  return { handleAgentEvent, resetContext };
 }
 
 function handleThinking(ctx: EventHandlerContext, _event: AgentEvent) {
