@@ -1,71 +1,16 @@
 use std::collections::HashMap;
-use std::path::Path;
 
-use super::ignore::{exclusions_for_project, should_skip_dir};
-use super::rag::{CodeChunk, CodeChunker};
+use super::super::ignore::{exclusions_for_project, should_skip_dir};
+use super::super::rag::{CodeChunk, CodeChunker};
+use super::types::*;
 
-/// RAG usage metrics
-#[derive(Debug, Clone, Default)]
-pub struct RagMetrics {
-    /// Total searches performed
-    pub searches: u64,
-    /// Total chunks returned
-    pub chunks_returned: u64,
-    /// Total keywords matched
-    pub keywords_matched: u64,
-    /// Estimated tokens saved (vs reading full files)
-    pub tokens_saved: u64,
-    /// Searches that returned no results
-    pub empty_results: u64,
-}
-
-impl RagMetrics {
-    /// Get metrics summary as a string
-    pub fn metrics_summary(&self) -> String {
-        let avg_chunks_per_search = if self.searches > 0 {
-            self.chunks_returned as f64 / self.searches as f64
-        } else {
-            0.0
-        };
-        let success_rate = if self.searches > 0 {
-            ((self.searches - self.empty_results) as f64 / self.searches as f64) * 100.0
-        } else {
-            0.0
-        };
-
-        format!(
-            "RAG Metrics:\n\
-             - Searches: {} (success rate: {:.0}%)\n\
-             - Chunks returned: {} (avg {:.1} per search)\n\
-             - Keywords matched: {}\n\
-             - Estimated tokens saved: {}\n\
-             - Empty results: {}",
-            self.searches,
-            success_rate,
-            self.chunks_returned,
-            avg_chunks_per_search,
-            self.keywords_matched,
-            self.tokens_saved,
-            self.empty_results
-        )
-    }
-}
-
-/// In-memory vector store for code chunks using BM25-style retrieval
 pub struct EmbeddingStore {
-    /// All indexed chunks
     chunks: Vec<CodeChunk>,
-    /// Inverted index: keyword -> chunk indices
     inverted_index: HashMap<String, Vec<usize>>,
-    /// Document frequencies: keyword -> number of documents containing it
     doc_freq: HashMap<String, usize>,
-    /// Total number of documents
     total_docs: usize,
-    /// Average document length (in keywords)
     avg_doc_len: f64,
-    /// Chunker for processing files
     chunker: CodeChunker,
-    /// Usage metrics
     metrics: RagMetrics,
 }
 
@@ -82,7 +27,6 @@ impl EmbeddingStore {
         }
     }
 
-    /// Index a file's content
     pub fn index_file(&mut self, file_path: &str, content: &str) -> usize {
         let chunks = self.chunker.chunk_file(file_path, content);
         let chunk_count = chunks.len();
@@ -91,13 +35,11 @@ impl EmbeddingStore {
             let idx = self.chunks.len();
             self.chunks.push(chunk.clone());
 
-            // Update inverted index
             let mut unique_keywords = Vec::new();
             for keyword in &chunk.keywords {
                 let lower = keyword.to_lowercase();
                 if !unique_keywords.contains(&lower) {
                     unique_keywords.push(lower.clone());
-
                     self.inverted_index
                         .entry(lower.clone())
                         .or_insert_with(Vec::new)
@@ -105,7 +47,6 @@ impl EmbeddingStore {
                 }
             }
 
-            // Update document frequencies
             for keyword in &unique_keywords {
                 *self.doc_freq.entry(keyword.clone()).or_insert(0) += 1;
             }
@@ -113,7 +54,6 @@ impl EmbeddingStore {
             self.total_docs += 1;
         }
 
-        // Recalculate average document length
         let total_keywords: usize = self.chunks.iter().map(|c| c.keywords.len()).sum();
         self.avg_doc_len = if self.total_docs > 0 {
             total_keywords as f64 / self.total_docs as f64
@@ -124,7 +64,6 @@ impl EmbeddingStore {
         chunk_count
     }
 
-    /// Index all files in a directory (recursively)
     pub async fn index_directory(&mut self, dir: &str) -> Result<usize, std::io::Error> {
         let mut total_chunks = 0;
         let mut stack = vec![std::path::PathBuf::from(dir)];
@@ -150,7 +89,6 @@ impl EmbeddingStore {
                     }
                     stack.push(path);
                 } else if metadata.is_file() {
-                    // Skip binary files and large files
                     if metadata.len() > 1_000_000 {
                         continue;
                     }
@@ -172,9 +110,7 @@ impl EmbeddingStore {
         Ok(total_chunks)
     }
 
-    /// Search for relevant chunks using BM25 scoring
     pub fn search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
-        // Stop words to ignore in queries
         const STOP_WORDS: &[&str] = &[
             "how", "what", "why", "when", "where", "which", "does", "do",
             "is", "are", "was", "were", "the", "a", "an", "in", "on", "at",
@@ -193,11 +129,9 @@ impl EmbeddingStore {
             return Vec::new();
         }
 
-        // Accumulate scores per chunk (don't skip duplicates)
         let mut chunk_scores: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
 
         for keyword in &query_keywords {
-            // Check inverted index for exact matches (BM25)
             if let Some(indices) = self.inverted_index.get(keyword) {
                 let df = *self.doc_freq.get(keyword).unwrap_or(&1) as f64;
                 let idf = ((self.total_docs as f64 - df + 0.5) / (df + 0.5) + 1.0).ln();
@@ -207,7 +141,6 @@ impl EmbeddingStore {
                     let tf = chunk.keywords.iter().filter(|k| k.to_lowercase() == *keyword).count() as f64;
                     let doc_len = chunk.keywords.len() as f64;
 
-                    // BM25 formula
                     let k1 = 1.5;
                     let b = 0.75;
                     let score = idf * (tf * (k1 + 1.0)) / (tf + k1 * (1.0 - b + b * doc_len / self.avg_doc_len));
@@ -216,7 +149,6 @@ impl EmbeddingStore {
                 }
             }
 
-            // Partial matches in keywords (lower weight)
             for (idx, chunk) in self.chunks.iter().enumerate() {
                 for chunk_keyword in &chunk.keywords {
                     if chunk_keyword.to_lowercase().contains(keyword) || keyword.contains(&chunk_keyword.to_lowercase()) {
@@ -227,7 +159,6 @@ impl EmbeddingStore {
             }
         }
 
-        // Bonus: exact symbol name matches
         for (idx, chunk) in self.chunks.iter().enumerate() {
             if let Some(ref name) = chunk.symbol_name {
                 let name_lower = name.to_lowercase();
@@ -240,7 +171,6 @@ impl EmbeddingStore {
             }
         }
 
-        // Bonus: content keyword matches
         for (idx, chunk) in self.chunks.iter().enumerate() {
             let content_lower = chunk.content.to_lowercase();
             for keyword in &query_keywords {
@@ -251,7 +181,6 @@ impl EmbeddingStore {
             }
         }
 
-        // Bonus: file path relevance — if query keywords appear in the file path
         for (idx, chunk) in self.chunks.iter().enumerate() {
             let path_lower = chunk.file_path.to_lowercase();
             let path_matches = query_keywords.iter().filter(|kw| path_lower.contains(kw.as_str())).count();
@@ -260,7 +189,6 @@ impl EmbeddingStore {
             }
         }
 
-        // Bonus: multi-keyword overlap — chunks matching 2+ keywords get a boost
         for (idx, chunk) in self.chunks.iter().enumerate() {
             let chunk_text = format!("{} {}", chunk.file_path.to_lowercase(), chunk.content.to_lowercase());
             let matches = query_keywords.iter().filter(|kw| chunk_text.contains(kw.as_str())).count();
@@ -269,11 +197,9 @@ impl EmbeddingStore {
             }
         }
 
-        // Sort by score descending
         let mut scores: Vec<(usize, f64)> = chunk_scores.into_iter().collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        // Return top results
         scores
             .into_iter()
             .take(max_results)
@@ -284,14 +210,12 @@ impl EmbeddingStore {
             .collect()
     }
 
-    /// Record a search (call after search to update metrics)
-    pub fn record_search(&mut self, query: &str, results: &[SearchResult]) {
+    pub fn record_search(&mut self, _query: &str, results: &[SearchResult]) {
         self.metrics.searches += 1;
         self.metrics.chunks_returned += results.len() as u64;
         if results.is_empty() {
             self.metrics.empty_results += 1;
         }
-        // Estimate tokens saved
         let tokens_per_chunk = 30 * 4;
         let tokens_without_rag = 200 * 4;
         let tokens_with_rag = results.len() * tokens_per_chunk;
@@ -300,7 +224,6 @@ impl EmbeddingStore {
         }
     }
 
-    /// Get chunks for a specific file
     pub fn get_file_chunks(&self, file_path: &str) -> Vec<&CodeChunk> {
         self.chunks
             .iter()
@@ -308,12 +231,10 @@ impl EmbeddingStore {
             .collect()
     }
 
-    /// Get a specific chunk by ID
     pub fn get_chunk(&self, chunk_id: &str) -> Option<&CodeChunk> {
         self.chunks.iter().find(|c| c.id == chunk_id)
     }
 
-    /// Get all indexed files
     pub fn indexed_files(&self) -> Vec<&str> {
         let mut files: Vec<&str> = self.chunks.iter().map(|c| c.file_path.as_str()).collect();
         files.sort();
@@ -321,7 +242,6 @@ impl EmbeddingStore {
         files
     }
 
-    /// Get statistics about the store
     pub fn stats(&self) -> StoreStats {
         StoreStats {
             total_chunks: self.chunks.len(),
@@ -335,17 +255,14 @@ impl EmbeddingStore {
         }
     }
 
-    /// Get RAG usage metrics
     pub fn metrics(&self) -> &RagMetrics {
         &self.metrics
     }
 
-    /// Check if the store has been indexed
     pub fn is_empty(&self) -> bool {
         self.chunks.is_empty()
     }
 
-    /// Clear the store
     pub fn clear(&mut self) {
         self.chunks.clear();
         self.inverted_index.clear();
@@ -359,32 +276,6 @@ impl EmbeddingStore {
 impl Default for EmbeddingStore {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Search result with relevance score
-#[derive(Debug, Clone)]
-pub struct SearchResult {
-    pub chunk: CodeChunk,
-    pub score: f64,
-}
-
-/// Store statistics
-#[derive(Debug, Clone)]
-pub struct StoreStats {
-    pub total_chunks: usize,
-    pub total_files: usize,
-    pub total_keywords: usize,
-    pub avg_chunk_size: f64,
-}
-
-impl std::fmt::Display for StoreStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} chunks, {} files, {} keywords, avg {:.1} keywords/chunk",
-            self.total_chunks, self.total_files, self.total_keywords, self.avg_chunk_size
-        )
     }
 }
 
