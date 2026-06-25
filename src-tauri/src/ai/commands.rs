@@ -3,11 +3,9 @@ use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{mpsc, Mutex};
 
 use super::agent::{Agent, AgentEvent};
-use super::lmstudio::LmStudioProvider;
 use super::mcp::{McpManager, McpServerConfig, McpServerStatus};
-use super::ollama::OllamaProvider;
 use super::orchestrator::Orchestrator;
-use super::provider::{LlmProvider, Message, ModelInfo, ProviderInfo};
+use super::{LlmProvider, LmStudioProvider, Message, ModelInfo, OllamaProvider, ProviderInfo};
 use crate::config::AiProviderConfig;
 
 /// Active agent session state

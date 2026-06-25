@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use tokio::sync::Mutex;
 
-use super::provider::{FunctionDefinition, ToolDefinition};
+use super::{FunctionDefinition, ToolDefinition};
 
 /// Configuration for a single MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]

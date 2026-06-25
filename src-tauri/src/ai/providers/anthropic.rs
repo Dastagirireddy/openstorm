@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use reqwest::Client;
 use tokio::sync::mpsc;
 
-use super::provider::*;
+use super::traits::*;
 
 const DEFAULT_ANTHROPIC_URL: &str = "https://api.anthropic.com/v1";
 

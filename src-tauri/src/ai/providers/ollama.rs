@@ -3,7 +3,7 @@ use futures::StreamExt;
 use reqwest::Client;
 use tokio::sync::mpsc;
 
-use super::provider::*;
+use super::traits::*;
 
 const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 

@@ -1,8 +1,4 @@
-pub mod provider;
-pub mod ollama;
-pub mod lmstudio;
-pub mod openai;
-pub mod anthropic;
+pub mod providers;
 pub mod agent;
 pub mod tools;
 pub mod commands;
@@ -20,11 +16,10 @@ pub mod orchestrator;
 pub mod mcp;
 pub mod session_log;
 
-pub use provider::*;
-pub use ollama::OllamaProvider;
-pub use lmstudio::LmStudioProvider;
-pub use openai::OpenAiProvider;
-pub use anthropic::AnthropicProvider;
+/// Backward-compatible alias for `providers::traits`
+pub use providers::traits as provider;
+
+pub use providers::*;
 pub use agent::Agent;
 pub use tools::ToolRegistry;
 pub use project_context::ProjectContext;

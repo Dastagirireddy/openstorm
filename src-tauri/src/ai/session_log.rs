@@ -3,7 +3,7 @@ use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-use super::provider::{ChatCompletionRequest, Message, ToolCall, ToolDefinition, Usage};
+use super::{ChatCompletionRequest, Message, ToolCall, ToolDefinition, Usage};
 
 /// AI Session Logger - writes complete flow to .openstorm/ai-sessions/latest.log
 /// File is overwritten each session, providing full context of the most recent AI interaction.

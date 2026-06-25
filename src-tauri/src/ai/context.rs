@@ -1,4 +1,4 @@
-use super::provider::Message;
+use super::Message;
 use std::collections::VecDeque;
 
 /// Token encoder - heuristic-based approximation

@@ -1,264 +1,31 @@
+pub mod types;
+pub mod session_memory;
+pub mod profiles;
+
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PermissionResult {
-    Allowed,
-    ApprovalRequired { reason: String },
-    Denied { reason: String },
-}
+pub use types::*;
+pub use session_memory::SessionMemory;
+pub use profiles::default_permissions_for_profile;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum TrustTier {
-    Safe,
-    Standard,
-    Destructive,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrustTierConfig {
-    pub patterns: HashMap<TrustTier, Vec<String>>,
-    pub whitelists: HashMap<TrustTier, Vec<String>>,
-}
-
-impl Default for TrustTierConfig {
-    fn default() -> Self {
-        let mut patterns = HashMap::new();
-        let mut whitelists = HashMap::new();
-
-        patterns.insert(TrustTier::Safe, vec![
-            r"^ls(\s+.*)?$".to_string(),
-            r"^cat(\s+.*)?$".to_string(),
-            r"^grep(\s+.*)?$".to_string(),
-            r"^find(\s+.*)?$".to_string(),
-            r"^git\s+status$".to_string(),
-            r"^git\s+log(\s+.*)?$".to_string(),
-            r"^git\s+diff(\s+.*)?$".to_string(),
-            r"^git\s+show(\s+.*)?$".to_string(),
-            r"^head(\s+.*)?$".to_string(),
-            r"^tail(\s+.*)?$".to_string(),
-            r"^wc(\s+.*)?$".to_string(),
-            r"^file(\s+.*)?$".to_string(),
-        ]);
-        whitelists.insert(TrustTier::Safe, vec![
-            "read_file".to_string(),
-            "list_directory".to_string(),
-            "search_code".to_string(),
-            "search_files".to_string(),
-            "get_diagnostics".to_string(),
-            "print_tree".to_string(),
-        ]);
-
-        patterns.insert(TrustTier::Standard, vec![
-            r"^npm\s+install(\s+.*)?$".to_string(),
-            r"^npm\s+run\s+\w+$".to_string(),
-            r"^pnpm\s+install(\s+.*)?$".to_string(),
-            r"^pnpm\s+run\s+\w+$".to_string(),
-            r"^yarn\s+install(\s+.*)?$".to_string(),
-            r"^cargo\s+build(\s+.*)?$".to_string(),
-            r"^cargo\s+test(\s+.*)?$".to_string(),
-            r"^cargo\s+check(\s+.*)?$".to_string(),
-            r"^cargo\s+clippy(\s+.*)?$".to_string(),
-            r"^cargo\s+fmt(\s+.*)?$".to_string(),
-            r"^git\s+add(\s+.*)?$".to_string(),
-            r"^git\s+commit(\s+.*)?$".to_string(),
-            r"^git\s+checkout(\s+.*)?$".to_string(),
-            r"^git\s+branch(\s+.*)?$".to_string(),
-            r"^git\s+stash(\s+.*)?$".to_string(),
-            r"^git\s+pull(\s+.*)?$".to_string(),
-            r"^make(\s+.*)?$".to_string(),
-            r"^python(\s+.*)?$".to_string(),
-            r"^python3(\s+.*)?$".to_string(),
-            r"^node(\s+.*)?$".to_string(),
-        ]);
-        whitelists.insert(TrustTier::Standard, vec![
-            "write_file".to_string(),
-            "edit_file".to_string(),
-            "run_command".to_string(),
-        ]);
-
-        patterns.insert(TrustTier::Destructive, vec![
-            r"^rm\s+-rf".to_string(),
-            r"^rm\s+-r".to_string(),
-            r"^sudo\s+".to_string(),
-            r"^curl.*\|\s*sh".to_string(),
-            r"^wget.*\|\s*sh".to_string(),
-            r"^chmod\s+777".to_string(),
-            r"^chown\s+".to_string(),
-            r"^kill\s+-9".to_string(),
-            r"^pkill\s+".to_string(),
-            r"^git\s+push\s+--force".to_string(),
-            r"^git\s+push\s+-f".to_string(),
-            r"^git\s+reset\s+--hard".to_string(),
-            r"^git\s+clean\s+-fd".to_string(),
-            r"^git\s+checkout\s+--\s+\.".to_string(),
-            r"^docker\s+rm\s+".to_string(),
-            r"^docker\s+rmi\s+".to_string(),
-            r"^dropdb\s+".to_string(),
-            r"^drop\s+database".to_string(),
-        ]);
-        whitelists.insert(TrustTier::Destructive, vec![
-            "git_push_force".to_string(),
-            "delete_database".to_string(),
-        ]);
-
-        Self { patterns, whitelists }
+fn compile_tier_patterns(config: &TrustTierConfig) -> HashMap<TrustTier, Vec<Regex>> {
+    let mut compiled = HashMap::new();
+    for (tier, patterns) in &config.patterns {
+        let regexes: Vec<Regex> = patterns
+            .iter()
+            .filter_map(|p| Regex::new(p).ok())
+            .collect();
+        compiled.insert(*tier, regexes);
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct SessionMemory {
-    approved_commands: HashSet<(String, String)>,
-    approval_timestamps: HashMap<(String, String), Instant>,
-    ttl: Duration,
-}
-
-impl SessionMemory {
-    pub fn new() -> Self {
-        Self {
-            approved_commands: HashSet::new(),
-            approval_timestamps: HashMap::new(),
-            ttl: Duration::from_secs(3600),
-        }
-    }
-
-    pub fn with_ttl(ttl: Duration) -> Self {
-        Self {
-            approved_commands: HashSet::new(),
-            approval_timestamps: HashMap::new(),
-            ttl,
-        }
-    }
-
-    pub fn approve(&mut self, tool_name: &str, args: &str) {
-        let key = (tool_name.to_string(), self.hash_args(args));
-        self.approval_timestamps.insert(key.clone(), Instant::now());
-        self.approved_commands.insert(key);
-    }
-
-    pub fn is_approved(&mut self, tool_name: &str, args: &str) -> bool {
-        let key = (tool_name.to_string(), self.hash_args(args));
-        if let Some(approved_at) = self.approval_timestamps.get(&key) {
-            if approved_at.elapsed() < self.ttl {
-                return true;
-            }
-            self.approved_commands.remove(&key);
-            self.approval_timestamps.remove(&key);
-        }
-        false
-    }
-
-    pub fn clear(&mut self) {
-        self.approved_commands.clear();
-        self.approval_timestamps.clear();
-    }
-
-    pub fn count(&self) -> usize {
-        self.approved_commands.len()
-    }
-
-    fn hash_args(&self, args: &str) -> String {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        args.hash(&mut hasher);
-        format!("{:x}", hasher.finish())
-    }
-}
-
-impl Default for SessionMemory {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AutonomyModeConfig {
-    pub enabled: bool,
-    pub tier_behavior: HashMap<TrustTier, TierBehavior>,
-    pub log_commands: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TierBehavior {
-    Allow,
-    AskOnce,
-    AlwaysAsk,
-    Deny,
-}
-
-impl Default for AutonomyModeConfig {
-    fn default() -> Self {
-        let mut tier_behavior = HashMap::new();
-        tier_behavior.insert(TrustTier::Safe, TierBehavior::Allow);
-        tier_behavior.insert(TrustTier::Standard, TierBehavior::AskOnce);
-        tier_behavior.insert(TrustTier::Destructive, TierBehavior::AlwaysAsk);
-
-        Self {
-            enabled: false,
-            tier_behavior,
-            log_commands: true,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum PermissionProfile {
-    Full,
-    ReadOnly,
-    Guided,
-    Smart,
-    Custom(HashMap<String, ToolPermission>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToolPermission {
-    pub requires_approval: bool,
-    pub allowed_patterns: Vec<String>,
-    pub denied_patterns: Vec<String>,
-    pub rate_limit: Option<u32>,
-}
-
-impl Default for ToolPermission {
-    fn default() -> Self {
-        Self {
-            requires_approval: false,
-            allowed_patterns: vec![],
-            denied_patterns: vec![],
-            rate_limit: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandLogEntry {
-    pub timestamp: String,
-    pub tool_name: String,
-    pub args_hash: String,
-    pub trust_tier: TrustTier,
-    pub approved: bool,
-    pub approval_method: String,
-}
-
-pub struct PermissionSystem {
-    profile: PermissionProfile,
-    tool_permissions: HashMap<String, ToolPermission>,
-    compiled_denied: HashMap<String, Vec<Regex>>,
-    compiled_allowed: HashMap<String, Vec<Regex>>,
-    trust_tier_config: TrustTierConfig,
-    compiled_tier_patterns: HashMap<TrustTier, Vec<Regex>>,
-    session_memory: SessionMemory,
-    autonomy_config: AutonomyModeConfig,
-    command_log: Vec<CommandLogEntry>,
+    compiled
 }
 
 impl PermissionSystem {
     pub fn new(profile: PermissionProfile) -> Self {
-        let tool_permissions = Self::default_permissions_for_profile(&profile);
+        let tool_permissions = default_permissions_for_profile(&profile);
         let trust_tier_config = TrustTierConfig::default();
-        let compiled_tier_patterns = Self::compile_tier_patterns(&trust_tier_config);
+        let compiled_tier_patterns = compile_tier_patterns(&trust_tier_config);
         let mut system = Self {
             profile,
             tool_permissions,
@@ -280,121 +47,6 @@ impl PermissionSystem {
         system
     }
 
-    fn compile_tier_patterns(config: &TrustTierConfig) -> HashMap<TrustTier, Vec<Regex>> {
-        let mut compiled = HashMap::new();
-        for (tier, patterns) in &config.patterns {
-            let regexes: Vec<Regex> = patterns
-                .iter()
-                .filter_map(|p| Regex::new(p).ok())
-                .collect();
-            compiled.insert(*tier, regexes);
-        }
-        compiled
-    }
-
-    fn default_permissions_for_profile(profile: &PermissionProfile) -> HashMap<String, ToolPermission> {
-        match profile {
-            PermissionProfile::Full => HashMap::new(),
-            PermissionProfile::ReadOnly => {
-                let mut perms = HashMap::new();
-                let denied = vec![".*".to_string()];
-                perms.insert("write_file".to_string(), ToolPermission {
-                    requires_approval: false,
-                    allowed_patterns: vec![],
-                    denied_patterns: denied.clone(),
-                    rate_limit: None,
-                });
-                perms.insert("edit_file".to_string(), ToolPermission {
-                    requires_approval: false,
-                    allowed_patterns: vec![],
-                    denied_patterns: denied.clone(),
-                    rate_limit: None,
-                });
-                perms.insert("run_command".to_string(), ToolPermission {
-                    requires_approval: false,
-                    allowed_patterns: vec![],
-                    denied_patterns: denied.clone(),
-                    rate_limit: None,
-                });
-                perms.insert("git_commit".to_string(), ToolPermission {
-                    requires_approval: false,
-                    allowed_patterns: vec![],
-                    denied_patterns: denied,
-                    rate_limit: None,
-                });
-                perms
-            }
-            PermissionProfile::Guided => {
-                let mut perms = HashMap::new();
-                perms.insert("write_file".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![],
-                    rate_limit: Some(10),
-                });
-                perms.insert("edit_file".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![],
-                    rate_limit: Some(15),
-                });
-                perms.insert("run_command".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![],
-                    rate_limit: Some(5),
-                });
-                perms.insert("git_commit".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![],
-                    rate_limit: Some(3),
-                });
-                perms
-            }
-            PermissionProfile::Smart => {
-                let mut perms = HashMap::new();
-                perms.insert("write_file".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![
-                        r"^\..*".to_string(),
-                        r".*\.lock$".to_string(),
-                        r".*\.env$".to_string(),
-                    ],
-                    rate_limit: Some(10),
-                });
-                perms.insert("edit_file".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![
-                        r"^\..*".to_string(),
-                        r".*\.lock$".to_string(),
-                    ],
-                    rate_limit: Some(15),
-                });
-                perms.insert("run_command".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![
-                        r"rm\s+-rf\s+/".to_string(),
-                        r"sudo\s+".to_string(),
-                        r"curl.*\|\s*sh".to_string(),
-                    ],
-                    rate_limit: Some(5),
-                });
-                perms.insert("git_commit".to_string(), ToolPermission {
-                    requires_approval: true,
-                    allowed_patterns: vec![],
-                    denied_patterns: vec![],
-                    rate_limit: Some(3),
-                });
-                perms
-            }
-            PermissionProfile::Custom(perms) => perms.clone(),
-        }
-    }
-
     fn compile_patterns(&mut self) {
         for (tool, perm) in &self.tool_permissions {
             let denied: Vec<Regex> = perm
@@ -413,8 +65,6 @@ impl PermissionSystem {
     }
 
     pub fn get_trust_tier(&self, tool_name: &str, args: &str) -> TrustTier {
-        // For run_command, check the actual command patterns first
-        // This allows "ls -la" to be classified as Safe even though run_command is in Standard whitelist
         if tool_name == "run_command" {
             for (tier, patterns) in &self.compiled_tier_patterns {
                 for pattern in patterns {
@@ -425,19 +75,16 @@ impl PermissionSystem {
             }
         }
 
-        // For other tools, check the tool name whitelist first
         for (tier, whitelist) in &self.trust_tier_config.whitelists {
             if whitelist.contains(&tool_name.to_string()) {
                 return *tier;
             }
         }
 
-        // For run_command, if no pattern matched, fall back to Standard
         if tool_name == "run_command" {
             return TrustTier::Standard;
         }
 
-        // For other tools, check patterns against args
         for (tier, patterns) in &self.compiled_tier_patterns {
             for pattern in patterns {
                 if pattern.is_match(args) {
@@ -500,9 +147,7 @@ impl PermissionSystem {
     }
 
     pub fn check(&self, tool: &str, args: &str) -> PermissionResult {
-        let perm = self.tool_permissions.get(tool);
-
-        let perm = match perm {
+        let perm = match self.tool_permissions.get(tool) {
             Some(p) => p,
             None => return PermissionResult::Allowed,
         };
