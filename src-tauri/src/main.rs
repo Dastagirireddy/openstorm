@@ -13,6 +13,7 @@ mod lsp;
 mod lsp_installer;
 mod process;
 mod run_config;
+mod session;
 mod terminal;
 mod templates;
 mod theme;
@@ -594,6 +595,12 @@ fn main() {
             commands::project::load_recent_projects,
             commands::project::save_recent_project,
             commands::project::remove_recent_project,
+
+            // === Session Persistence ===
+            session::save_session,
+            session::load_session,
+            session::delete_session,
+            session::list_sessions,
 
             // === AI / LLM ===
             ai::commands::ai_get_config,

@@ -151,6 +151,53 @@ export class OpenStormApp extends TailwindElement() {
     loadMcpTools();
     // Check for updates on startup (non-blocking)
     this.checkUpdatesOnStartup();
+    // Save session on app exit
+    this.setupSessionSaveOnExit();
+  }
+
+  private setupSessionSaveOnExit(): void {
+    // Save session when window is about to unload
+    window.addEventListener('beforeunload', () => {
+      if (this.projectPath) {
+        // Use synchronous save for beforeunload
+        this.saveSessionSync();
+      }
+    });
+  }
+
+  private saveSessionSync(): void {
+    if (!this.projectPath) return;
+
+    try {
+      const sessionTabs = this.tabs.map(t => ({
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content,
+        tabType: t.tabType,
+        pinned: t.pinned,
+        lastUsed: t.lastUsed,
+      }));
+
+      // Use fetch with sendBeacon for synchronous save
+      const payload = JSON.stringify({
+        project_path: this.projectPath,
+        tabs: sessionTabs,
+        active_tab_id: this.activeTabId,
+        panels: {
+          git_panel_visible: this.gitPanelVisible,
+          commit_panel_visible: this.commitPanelVisible,
+          active_status_bar_panel: this.activeStatusBarPanel,
+        },
+      });
+
+      // Store in localStorage as backup
+      localStorage.setItem(`session_${this.projectPath}`, payload);
+      console.log('[Session] Saved session to localStorage for:', this.projectPath);
+    } catch (err) {
+      console.error('[Session] Failed to save session sync:', err);
+    }
   }
 
   private async checkUpdatesOnStartup(): Promise<void> {
@@ -689,6 +736,9 @@ export class OpenStormApp extends TailwindElement() {
 
     console.log('[CloseProject] Closing project:', this.projectPath);
 
+    // Save session before closing
+    await this.saveSession();
+
     // Stop file watcher
     try {
       await invoke("stop_watching");
@@ -782,19 +832,24 @@ export class OpenStormApp extends TailwindElement() {
     this.activeTabId = "";
     this.terminalCreated = false;
 
-    // Create AI tab by default
-    const aiTab: EditorTab = {
-      id: `openstorm-${Date.now()}`,
-      name: 'OpenStorm',
-      path: '',
-      modified: false,
-      content: '',
-      tabType: 'openstorm',
-      pinned: false,
-      lastUsed: Date.now(),
-    };
-    this.tabs = [aiTab];
-    this.activeTabId = aiTab.id;
+    // Try to restore session
+    const sessionRestored = await this.loadSession(path);
+
+    if (!sessionRestored) {
+      // No session found, create default AI tab
+      const aiTab: EditorTab = {
+        id: `openstorm-${Date.now()}`,
+        name: 'OpenStorm',
+        path: '',
+        modified: false,
+        content: '',
+        tabType: 'openstorm',
+        pinned: false,
+        lastUsed: Date.now(),
+      };
+      this.tabs = [aiTab];
+      this.activeTabId = aiTab.id;
+    }
 
     // Call handleFolderOpened to start file watcher and create terminal
     await this.handleFolderOpened({
@@ -802,6 +857,128 @@ export class OpenStormApp extends TailwindElement() {
     } as CustomEvent<{ path: string }>);
 
     dispatch("project-opened", { path: this.projectPath });
+  };
+
+  private saveSession = async (): Promise<void> => {
+    if (!this.projectPath) return;
+
+    try {
+      const sessionTabs = this.tabs.map(t => ({
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content,
+        tabType: t.tabType,
+        pinned: t.pinned,
+        lastUsed: t.lastUsed,
+      }));
+
+      await invoke("save_session", {
+        projectPath: this.projectPath,
+        tabs: sessionTabs,
+        activeTabId: this.activeTabId,
+        panels: {
+          git_panel_visible: this.gitPanelVisible,
+          commit_panel_visible: this.commitPanelVisible,
+          active_status_bar_panel: this.activeStatusBarPanel,
+        },
+      });
+      console.log('[Session] Saved session for:', this.projectPath);
+    } catch (err) {
+      console.error('[Session] Failed to save session:', err);
+    }
+  };
+
+  private loadSession = async (projectPath: string): Promise<boolean> => {
+    try {
+      // Try backend first
+      const session = await invoke<{
+        project_path: string;
+        tabs: Array<{
+          id: string;
+          name: string;
+          path: string;
+          modified: boolean;
+          content?: string;
+          tab_type?: string;
+          pinned: boolean;
+          last_used?: number;
+        }>;
+        active_tab_id?: string;
+        panels?: {
+          git_panel_visible: boolean;
+          commit_panel_visible: boolean;
+          active_status_bar_panel?: string;
+        };
+      } | null>("load_session", { projectPath });
+
+      if (session && session.tabs && session.tabs.length > 0) {
+        return this.restoreSession(session);
+      }
+
+      // Try localStorage as backup
+      const localData = localStorage.getItem(`session_${projectPath}`);
+      if (localData) {
+        const localSession = JSON.parse(localData);
+        if (localSession.tabs && localSession.tabs.length > 0) {
+          console.log('[Session] Restoring from localStorage');
+          return this.restoreSession(localSession);
+        }
+      }
+
+      console.log('[Session] No session found for:', projectPath);
+      return false;
+    } catch (err) {
+      console.error('[Session] Failed to load session:', err);
+      return false;
+    }
+  };
+
+  private restoreSession = (session: {
+    tabs: Array<{
+      id: string;
+      name: string;
+      path: string;
+      modified: boolean;
+      content?: string;
+      tab_type?: string;
+      pinned: boolean;
+      last_used?: number;
+    }>;
+    active_tab_id?: string;
+    panels?: {
+      git_panel_visible: boolean;
+      commit_panel_visible: boolean;
+      active_status_bar_panel?: string;
+    };
+  }): boolean => {
+    console.log('[Session] Restoring session');
+
+    // Restore tabs
+    this.tabs = session.tabs.map(t => ({
+      ...t,
+      tabType: t.tab_type as EditorTab['tabType'],
+      lastUsed: t.last_used,
+    }));
+
+    // Restore active tab
+    if (session.active_tab_id) {
+      this.activeTabId = session.active_tab_id;
+    } else if (this.tabs.length > 0) {
+      this.activeTabId = this.tabs[0].id;
+    }
+
+    // Restore panel state
+    if (session.panels) {
+      this.gitPanelVisible = session.panels.git_panel_visible;
+      this.commitPanelVisible = session.panels.commit_panel_visible;
+      if (session.panels.active_status_bar_panel) {
+        this.activeStatusBarPanel = session.panels.active_status_bar_panel as 'terminal' | 'app-console';
+      }
+    }
+
+    return true;
   };
 
   private handleOpenSingleFile = async (): Promise<void> => {
