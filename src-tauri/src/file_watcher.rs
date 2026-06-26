@@ -105,13 +105,24 @@ impl FileWatcher {
 
     pub fn unwatch_current(&self) -> Result<(), String> {
         if let Ok(mut watcher) = self.watcher.lock() {
-            if let Ok(prev_path) = self.watched_path.lock() {
-                if let Some(ref p) = *prev_path {
-                    watcher.unwatch(p).map_err(|e| e.to_string())?;
-                    *self.watched_path.lock().unwrap() = None;
-                    return Ok(());
+            // Get the path to unwatch, then drop the lock before updating
+            let path_to_unwatch = {
+                if let Ok(prev_path) = self.watched_path.lock() {
+                    prev_path.clone()
+                } else {
+                    return Err("Failed to lock watched path".to_string());
                 }
+            };
+
+            if let Some(ref p) = path_to_unwatch {
+                watcher.unwatch(p).map_err(|e| e.to_string())?;
             }
+
+            // Now update the watched path
+            if let Ok(mut watched) = self.watched_path.lock() {
+                *watched = None;
+            }
+
             Ok(())
         } else {
             Err("Failed to lock watcher".to_string())
