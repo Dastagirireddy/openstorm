@@ -133,11 +133,9 @@ export class AiHtmlPreview extends LitElement {
   }
 
   private openInNewTab() {
-    const win = window.open('', '_blank');
-    if (win) {
-      win.document.write(this.code);
-      win.document.close();
-    }
+    const blob = new Blob([this.code], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
   }
 
   render() {
