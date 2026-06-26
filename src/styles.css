@@ -212,6 +212,10 @@
   --ai-assistant-background: transparent;
   --ai-assistant-background-hover: transparent;
 
+  /* AI Panel - Provider cards */
+  --ai-surface: #f0f1fe;
+  --ai-surface-hover: #eceeff;
+
   /* AI Panel - Status colors */
   --ai-primary: #6366f1;
   --ai-secondary: #8b5cf6;
@@ -387,6 +391,10 @@
     --ai-user-background-hover: #1c2128;
     --ai-assistant-background: transparent;
     --ai-assistant-background-hover: transparent;
+
+    /* AI Panel - Provider cards (dark) */
+    --ai-surface: #1d2033;
+    --ai-surface-hover: #1f2338;
 
     /* AI Panel - Status colors (dark) */
     --ai-primary: #58a6ff;

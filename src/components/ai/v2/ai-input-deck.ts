@@ -260,6 +260,7 @@ export class AiInputDeck extends LitElement {
   @state() private fileFilter = '';
   private searchFilesRequestId = 0;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private _handleSettingsClosed: (() => void) | null = null;
 
   @query('textarea') private ta!: HTMLTextAreaElement;
 
@@ -272,7 +273,7 @@ export class AiInputDeck extends LitElement {
     this._unsub.push(
       aiState.on('model-selected', (m: { id: string; name: string; provider: string }) => { 
         this.model = m.name; 
-        this.provider = m.provider; 
+        if (m.provider) this.provider = m.provider;
       }),
       aiState.on('streaming-status', (s: boolean) => { this.streaming = s; }),
       aiState.on('thinking-status', (t: boolean) => { this.thinking = t; }),
@@ -280,18 +281,27 @@ export class AiInputDeck extends LitElement {
         this.tokens = `${(data.prompt_tokens || 0).toLocaleString()} in  ${(data.completion_tokens || 0).toLocaleString()} out`;
       }),
     );
+    this._handleSettingsClosed = () => this._loadFromConfig();
+    document.addEventListener('settings-closed', this._handleSettingsClosed);
   }
 
   private async _loadFromConfig() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const c = await invoke<{ provider: string; model: string; model_name: string }>('ai_get_config');
-      this.provider = c.provider || 'Ollama';
+      this.provider = c.provider || '';
       this.model = c.model_name || c.model || '';
     } catch (e) { console.debug('Failed to load AI config for input deck:', e); }
   }
 
-  disconnectedCallback(): void { super.disconnectedCallback(); this._unsub.forEach(u => u()); this._unsub = []; }
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._unsub.forEach(u => u());
+    this._unsub = [];
+    if (this._handleSettingsClosed) {
+      document.removeEventListener('settings-closed', this._handleSettingsClosed);
+    }
+  }
 
   private onInput(e: Event) {
     const t = e.target as HTMLTextAreaElement;
@@ -487,7 +497,7 @@ export class AiInputDeck extends LitElement {
         <div class="status-bar">
           <div class="status-left">
             <span class="status-dot"></span>
-            <span class="status-provider">${this.provider || 'Ollama'}</span>
+            <span class="status-provider">${this.provider}</span>
             <span class="status-model">${this.model || 'No model selected'}</span>
             ${(this.streaming || this.thinking) ? html`
               <div class="streaming-indicator">

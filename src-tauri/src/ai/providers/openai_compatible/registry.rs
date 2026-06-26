@@ -23,12 +23,11 @@ impl ProviderRegistry {
         match config.provider.as_str() {
             // ── Existing local providers (backward compat) ──
             "ollama" => {
-                let base_url = if config.base_url.is_empty() {
-                    None
-                } else {
-                    Some(config.base_url.clone())
-                };
-                Ok(Arc::new(crate::ai::providers::OllamaProvider::new(base_url)))
+                Ok(Arc::new(crate::ai::providers::OllamaProvider::new(None)))
+            }
+            // ── LM Studio ──
+            "lmstudio" => {
+                Ok(Arc::new(crate::ai::providers::LmStudioProvider::new(None)))
             }
             // ── Anthropic (different API format) ──────────
             "anthropic" => {
@@ -41,11 +40,7 @@ impl ProviderRegistry {
             }
             // ── All OpenAI-compatible providers ────────────
             provider_id => {
-                let base_url = if config.base_url.is_empty() {
-                    presets::default_base_url(provider_id)
-                } else {
-                    config.base_url.clone()
-                };
+                let base_url = presets::default_base_url(provider_id);
 
                 Ok(Arc::new(OpenAICompatibleProvider::new(
                     provider_id,
@@ -66,12 +61,10 @@ impl ProviderRegistry {
     ) -> Result<Arc<dyn LlmProvider>, ProviderError> {
         match provider_id {
             "ollama" => {
-                let base_url = if config.base_url.is_empty() {
-                    None
-                } else {
-                    Some(config.base_url.clone())
-                };
-                Ok(Arc::new(crate::ai::providers::OllamaProvider::new(base_url)))
+                Ok(Arc::new(crate::ai::providers::OllamaProvider::new(None)))
+            }
+            "lmstudio" => {
+                Ok(Arc::new(crate::ai::providers::LmStudioProvider::new(None)))
             }
             "anthropic" => {
                 if config.api_key.is_empty() {
@@ -82,11 +75,7 @@ impl ProviderRegistry {
                 Ok(Arc::new(AnthropicProvider::new(&config.api_key)))
             }
             provider_id => {
-                let base_url = if config.base_url.is_empty() {
-                    presets::default_base_url(provider_id)
-                } else {
-                    config.base_url.clone()
-                };
+                let base_url = presets::default_base_url(provider_id);
 
                 Ok(Arc::new(OpenAICompatibleProvider::new(
                     provider_id,

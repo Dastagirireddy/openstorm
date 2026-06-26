@@ -103,8 +103,8 @@ const PANEL_STYLES = `
     display: flex;
     align-items: center;
     gap: 6px;
-    background: var(--ai-tool-background, #f9fafb);
-    border: 1px solid var(--ai-panel-border, #e5e7eb);
+    background: transparent;
+    border: none;
     color: var(--ai-text, #1f2937);
     font-family: 'SF Mono', 'Fira Code', monospace;
     font-size: 11px;
@@ -115,8 +115,8 @@ const PANEL_STYLES = `
     outline: none;
     max-width: 200px;
   }
-  .model-trigger:hover { border-color: var(--ai-primary, #3574f0); }
-  .model-trigger:focus { border-color: var(--ai-primary, #3574f0); box-shadow: 0 0 0 1px var(--ai-primary, #3574f0); }
+  .model-trigger:hover { background: var(--ai-tool-background, #f9fafb); }
+  .model-trigger:focus { background: var(--ai-tool-background, #f9fafb); }
   .model-trigger-text {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -132,8 +132,7 @@ const PANEL_STYLES = `
     transform: rotate(180deg);
   }
   .model-dropdown.open .model-trigger {
-    border-color: var(--ai-primary, #3574f0);
-    box-shadow: 0 0 0 1px var(--ai-primary, #3574f0);
+    background: var(--ai-tool-background, #f9fafb);
   }
   .model-list {
     position: absolute;
@@ -183,6 +182,36 @@ const PANEL_STYLES = `
     font-size: 12px;
     font-style: italic;
   }
+  .model-search-wrap {
+    position: relative;
+    padding: 4px;
+    margin-bottom: 2px;
+  }
+  .model-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ai-text-dim, #9ca3af);
+    pointer-events: none;
+  }
+  .model-search-input {
+    width: 100%;
+    padding: 6px 8px 6px 26px;
+    font-size: 11px;
+    border: 1px solid var(--ai-panel-border, #e5e7eb);
+    border-radius: 4px;
+    background: var(--ai-panel-background, #ffffff);
+    color: var(--ai-text, #1f2937);
+    outline: none;
+    box-sizing: border-box;
+  }
+  .model-search-input:focus {
+    border-color: var(--ai-primary, #3574f0);
+  }
+  .model-search-input::placeholder {
+    color: var(--ai-text-dim, #9ca3af);
+  }
   
   .body { display: flex; flex: 1; overflow: hidden; }
   .center { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
@@ -207,22 +236,26 @@ export class AiPanelV2 extends LitElement {
   @state() private modelId = '';
   @state() private modelName = '';
   @state() private provider = '';
+  @state() private apiKey = '';
+  @state() private baseUrl = '';
   @state() private models: Array<{ id: string; name: string }> = [];
   @state() private showModelDropdown = false;
+  @state() private modelSearch = '';
   @state() private hasContent = false;
 
   private _handle: ((e: { type: string; [k: string]: unknown }) => void) | null = null;
   private _resetContext: (() => void) | null = null;
   private _unsub: (() => void)[] = [];
   private _listenUnsub: (() => void) | null = null;
+  private _handleSettingsClosed: (() => void) | null = null;
 
   async connectedCallback(): Promise<void> {
     super.connectedCallback();
     // Reset backend agent state on mount to ensure a clean session
     // (prevents stale events from a previous session's running agent)
     await this._resetBackendState();
-    this._loadConfig();
-    this._loadModels();
+    await this._loadConfig();
+    await this._loadModels();
     // Ensure a session exists for storing messages
     if (!aiState.activeSessionId) {
       aiState.createSession('AI Conversation');
@@ -239,6 +272,12 @@ export class AiPanelV2 extends LitElement {
     );
     // Close dropdown on outside click
     document.addEventListener('click', this._handleOutsideClick);
+    // Reload config when settings close (provider may have changed)
+    this._handleSettingsClosed = async () => {
+      await this._loadConfig();
+      await this._loadModels();
+    };
+    document.addEventListener('settings-closed', this._handleSettingsClosed);
   }
 
   private async _resetBackendState() {
@@ -276,6 +315,9 @@ export class AiPanelV2 extends LitElement {
     this._listenUnsub?.();
     this._listenUnsub = null;
     document.removeEventListener('click', this._handleOutsideClick);
+    if (this._handleSettingsClosed) {
+      document.removeEventListener('settings-closed', this._handleSettingsClosed);
+    }
   }
 
   private _handleOutsideClick = (e: MouseEvent) => {
@@ -289,10 +331,12 @@ export class AiPanelV2 extends LitElement {
   private async _loadConfig() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const c = await invoke<{ provider: string; model: string; model_name: string }>('ai_get_config');
+      const c = await invoke<{ provider: string; model: string; model_name: string; api_key: string }>('ai_get_config');
       this.provider = c.provider;
       this.modelId = c.model || '';
       this.modelName = c.model_name || '';
+      this.apiKey = c.api_key || '';
+      this.baseUrl = '';
       // Emit to other components
       if (this.modelId) {
         aiState.setSelectedModel(this.modelId);
@@ -303,7 +347,11 @@ export class AiPanelV2 extends LitElement {
   private async _loadModels() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const models = await invoke<Array<{ id: string; name: string }>>('ai_list_models', { providerId: this.provider });
+      const models = await invoke<Array<{ id: string; name: string }>>('ai_list_models', {
+        providerId: this.provider,
+        apiKey: this.apiKey || null,
+        baseUrl: this.baseUrl || null,
+      });
       this.models = models;
       // Set model name from loaded models if not already set
       if (this.modelId && !this.modelName) {
@@ -314,7 +362,8 @@ export class AiPanelV2 extends LitElement {
         this.modelId = models[0].id;
         this.modelName = models[0].name;
         aiState.setSelectedModel(models[0].id);
-        await invoke('ai_set_config', { config: { provider: this.provider, base_url: '', api_key: '', model: models[0].id, model_name: models[0].name } });
+        const current = await invoke<{ provider: string; api_key: string; base_url: string; model: string; model_name: string }>('ai_get_config');
+        await invoke('ai_set_config', { config: { ...current, model: models[0].id, model_name: models[0].name } });
       }
     } catch (e) { console.error('Failed to load models:', e); }
   }
@@ -327,12 +376,14 @@ export class AiPanelV2 extends LitElement {
     aiState.setSelectedModel(modelId);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('ai_set_config', { config: { provider: this.provider, base_url: '', api_key: '', model: modelId, model_name: model ? model.name : modelId } });
+      const current = await invoke<{ provider: string; api_key: string; base_url: string; model: string; model_name: string }>('ai_get_config');
+      await invoke('ai_set_config', { config: { ...current, model: modelId, model_name: model ? model.name : modelId } });
     } catch (e) { console.error('Failed to save model:', e); }
   }
 
   private toggleModelDropdown() {
     this.showModelDropdown = !this.showModelDropdown;
+    if (!this.showModelDropdown) this.modelSearch = '';
   }
 
   private async clearAndReset() {
@@ -424,6 +475,8 @@ export class AiPanelV2 extends LitElement {
         message: msg,
         projectPath: this.projectPath,
         history,
+        apiKey: this.apiKey || null,
+        baseUrl: this.baseUrl || null,
       });
     } catch (err) {
       console.error('Failed to send:', err);
@@ -459,7 +512,7 @@ export class AiPanelV2 extends LitElement {
             <iconify-icon class="hdr-avatar" icon="mdi:robot-outline" width="18"></iconify-icon>
             <span class="hdr-label">AI</span>
             <span class="hdr-dot ${this.connected === 'connected' ? 'on' : 'off'}"></span>
-            <span class="hdr-provider">${this.provider || 'Ollama'}</span>
+            <span class="hdr-provider">${this.provider}</span>
             <!-- Custom model dropdown -->
             <div class="model-dropdown ${this.showModelDropdown ? 'open' : ''}">
               <button class="model-trigger" @click=${this.toggleModelDropdown}>
@@ -468,15 +521,33 @@ export class AiPanelV2 extends LitElement {
               </button>
               ${this.showModelDropdown ? html`
                 <div class="model-list">
-                  ${this.models.length === 0 ? html`
-                    <div class="model-list-empty">No models available</div>
-                  ` : this.models.map(m => html`
-                    <div class="model-list-item ${m.id === this.modelId ? 'selected' : ''}"
-                         @click=${() => this.selectModel(m.id)}>
-                      <span class="model-list-item-icon">${m.id === this.modelId ? html`<iconify-icon icon="mdi:check" width="14"></iconify-icon>` : html`<iconify-icon icon="mdi:circle-outline" width="14"></iconify-icon>`}</span>
-                      <span>${m.name}</span>
+                  ${this.models.length > 2 ? html`
+                    <div class="model-search-wrap">
+                      <iconify-icon icon="mdi:magnify" width="13" class="model-search-icon"></iconify-icon>
+                      <input
+                        type="text"
+                        class="model-search-input"
+                        placeholder="Search models..."
+                        .value=${this.modelSearch}
+                        @input=${(e: Event) => { this.modelSearch = (e.target as HTMLInputElement).value; }}
+                        @click=${(e: Event) => e.stopPropagation()}
+                      />
                     </div>
-                  `)}
+                  ` : ''}
+                  ${(() => {
+                    const filtered = this.modelSearch
+                      ? this.models.filter(m => m.name.toLowerCase().includes(this.modelSearch.toLowerCase()) || m.id.toLowerCase().includes(this.modelSearch.toLowerCase()))
+                      : this.models;
+                    return filtered.length === 0 ? html`
+                      <div class="model-list-empty">No models found</div>
+                    ` : filtered.map(m => html`
+                      <div class="model-list-item ${m.id === this.modelId ? 'selected' : ''}"
+                           @click=${() => this.selectModel(m.id)}>
+                        <span class="model-list-item-icon">${m.id === this.modelId ? html`<iconify-icon icon="mdi:check" width="14"></iconify-icon>` : html`<iconify-icon icon="mdi:circle-outline" width="14"></iconify-icon>`}</span>
+                        <span>${m.name}</span>
+                      </div>
+                    `);
+                  })()}
                 </div>
               ` : ''}
             </div>

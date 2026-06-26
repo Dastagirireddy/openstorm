@@ -18,6 +18,8 @@ pub async fn ai_chat(
     message: String,
     project_path: String,
     history: Vec<serde_json::Value>,
+    api_key: Option<String>,
+    base_url: Option<String>,
 ) -> Result<String, String> {
     // Log project path for debugging
     if project_path.is_empty() {
@@ -29,6 +31,12 @@ pub async fn ai_chat(
     let mut config = AiProviderConfig::load();
     // Override provider_id from the request
     config.provider = provider_id;
+    if let Some(key) = api_key {
+        config.api_key = key;
+    }
+    if let Some(url) = base_url {
+        config.base_url = url;
+    }
 
     let provider: Arc<dyn LlmProvider> = ProviderRegistry::create(&config)
         .map_err(|e| format!("Failed to create provider: {}", e))?;
