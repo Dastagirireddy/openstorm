@@ -10,6 +10,7 @@ use tauri::command;
 
 /// A single tab in the session
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionTab {
     pub id: String,
     pub name: String,
@@ -17,31 +18,33 @@ pub struct SessionTab {
     pub modified: bool,
     #[serde(default)]
     pub content: Option<String>,
-    #[serde(default, alias = "tabType")]
+    #[serde(default)]
     pub tab_type: Option<String>,
     #[serde(default)]
     pub pinned: bool,
-    #[serde(default, alias = "lastUsed")]
+    #[serde(default)]
     pub last_used: Option<u64>,
 }
 
 /// Panel visibility state
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 pub struct PanelState {
-    #[serde(default, alias = "git_panel_visible")]
+    #[serde(default)]
     pub git_panel_visible: bool,
-    #[serde(default, alias = "commit_panel_visible")]
+    #[serde(default)]
     pub commit_panel_visible: bool,
-    #[serde(default, alias = "active_status_bar_panel")]
+    #[serde(default)]
     pub active_status_bar_panel: Option<String>,
-    #[serde(default, alias = "sidebarWidth")]
+    #[serde(default)]
     pub sidebar_width: Option<u32>,
-    #[serde(default, alias = "terminalHeight")]
+    #[serde(default)]
     pub terminal_height: Option<u32>,
 }
 
 /// Project session state
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProjectSession {
     pub project_path: String,
     #[serde(default)]
