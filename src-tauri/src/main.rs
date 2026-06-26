@@ -359,6 +359,8 @@ fn main() {
                     &MenuItem::with_id(app, "open-file", "Open File...", true, Some("Cmd+O")).unwrap(),
                     &MenuItem::with_id(app, "open-folder", "Open Folder...", true, Some("Cmd+Shift+O")).unwrap(),
                     &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "close-project", "Close Project", true, Some("Cmd+Shift+W")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
                     &MenuItem::with_id(app, "save", "Save", true, Some("Cmd+S")).unwrap(),
                     &MenuItem::with_id(app, "save-as", "Save As...", true, Some("Cmd+Shift+S")).unwrap(),
                     &MenuItem::with_id(app, "save-all", "Save All", true, Some("Cmd+Option+S")).unwrap(),
@@ -498,6 +500,7 @@ fn main() {
 
             // === File Watcher ===
             file_watcher::start_watching,
+            file_watcher::stop_watching,
 
             // === Templates & Project Generation ===
             templates::list_templates,

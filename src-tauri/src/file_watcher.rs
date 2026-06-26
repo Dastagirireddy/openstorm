@@ -102,9 +102,29 @@ impl FileWatcher {
             Err(notify::Error::new(notify::ErrorKind::Generic("Failed to lock watcher".to_string())))
         }
     }
+
+    pub fn unwatch_current(&self) -> Result<(), String> {
+        if let Ok(mut watcher) = self.watcher.lock() {
+            if let Ok(prev_path) = self.watched_path.lock() {
+                if let Some(ref p) = *prev_path {
+                    watcher.unwatch(p).map_err(|e| e.to_string())?;
+                    *self.watched_path.lock().unwrap() = None;
+                    return Ok(());
+                }
+            }
+            Ok(())
+        } else {
+            Err("Failed to lock watcher".to_string())
+        }
+    }
 }
 
 #[tauri::command]
 pub fn start_watching(state: State<FileWatcher>, path: String) -> Result<(), String> {
     state.watch(PathBuf::from(path)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn stop_watching(state: State<FileWatcher>) -> Result<(), String> {
+    state.unwatch_current()
 }

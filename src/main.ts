@@ -280,6 +280,9 @@ export class OpenStormApp extends TailwindElement() {
         case "open-file":
           dispatch("open-file-dialog");
           break;
+        case "close-project":
+          this.handleCloseProject();
+          break;
         case "save":
           if (this.tabs.length > 0) {
             dispatch("save-file");
@@ -704,6 +707,46 @@ export class OpenStormApp extends TailwindElement() {
     }
   };
 
+  private handleCloseProject = async (): Promise<void> => {
+    if (!this.projectPath) {
+      console.log('[CloseProject] No project is open');
+      return;
+    }
+
+    console.log('[CloseProject] Closing project:', this.projectPath);
+
+    // Stop file watcher
+    try {
+      await invoke("stop_watching");
+      console.log('[CloseProject] File watcher stopped');
+    } catch (err) {
+      console.error('[CloseProject] Failed to stop file watcher:', err);
+    }
+
+    // Clear all tabs
+    this.tabs = [];
+    this.activeTabId = "";
+    this.activeFilePath = "";
+    this.saveStatus = "saved";
+
+    // Reset project state
+    this.projectPath = "";
+    this.terminalCreated = false;
+    this.activeActivity = "ai";
+    this.activeRightActivity = "";
+    this.activeStatusBarPanel = null;
+    this.gitBranch = "main";
+    this.gitPanelVisible = false;
+    this.commitPanelVisible = false;
+    this.isDebugging = false;
+    this.debugSessionState = "terminated";
+
+    // Dispatch project-closed event
+    dispatch("project-closed");
+
+    console.log('[CloseProject] Project closed, returning to welcome screen');
+  };
+
   private handleOpenSingleFile = async (): Promise<void> => {
     try {
       const selected = await open({
@@ -799,6 +842,11 @@ export class OpenStormApp extends TailwindElement() {
       if ((e.ctrlKey || e.metaKey) && e.key === "`") {
         e.preventDefault();
         this.toggleTerminal();
+      }
+      // Ctrl+Shift+W for close project
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        this.handleCloseProject();
       }
     });
   }
