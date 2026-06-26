@@ -436,13 +436,14 @@ fn main() {
             // Start process output listener
             spawn_process_output_listener(handle.clone());
 
-            Ok(())
-        })
-        .on_menu_event(|app, event| {
             // Handle menu item clicks
-            log_debug!("[Menu] Event: {}", event.id.0);
-            // Forward menu events to frontend via custom events
-            app.emit("menu-item-clicked", event.id.0.to_string()).ok();
+            app.on_menu_event(|app, event| {
+                log_debug!("[Menu] Event: {}", event.id.0);
+                // Forward menu events to frontend via custom events
+                app.emit("menu-item-clicked", event.id.0.to_string()).ok();
+            });
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             // === File Operations ===
