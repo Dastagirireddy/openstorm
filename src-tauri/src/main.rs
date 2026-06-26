@@ -599,6 +599,7 @@ fn main() {
             ai::commands::ai_check_connection,
             ai::commands::ai_chat,
             ai::commands::ai_abort,
+            ai::commands::ai_reset,
             ai::commands::ai_approve_tool,
             ai::commands::ai_search_files,
             ai::commands::ai_read_file,

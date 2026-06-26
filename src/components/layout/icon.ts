@@ -2,7 +2,7 @@ import { customElement, property } from 'lit/decorators.js';
 import { LitElement, svg, css, html } from 'lit';
 
 // Import icons individually (tree-shakeable)
-import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, RotateCcw, RotateCw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle, GitMerge, PanelLeft, Copy, SlidersHorizontal, Palette, Keyboard, Info, Code, LayoutGrid, Zap, Sparkles, Key, Command, Hash, Type, Save, HardDrive, Cpu, Braces, TextCursorInput, WandSparkles, AppWindow } from 'lucide';
+import { Play, Bug, Square, GitBranch, ChevronDown, ChevronRight, ChevronUp, RotateCcw, RotateCw, Clock, ListFilter, ArrowDownToLine, ArrowUpFromLine, Cloud, Folder, FolderOpen, Check, Gauge, CircleDot, File, FileJson, FileCode, FileText, FilePlus, FolderPlus, Locate, ChevronsDownUp, ChevronsUpDown, Presentation, ExternalLink, FolderInput, Package, Box, Layers, Database, Globe, Server, Terminal, X, Plus, Sun, Moon, Monitor, GitPullRequest, FolderSearch, GitCommitVertical, Search, FolderCheck, Settings, PlayCircle, GitMerge, PanelLeft, Copy, SlidersHorizontal, Palette, Keyboard, Info, Code, LayoutGrid, Zap, Sparkles, Key, Command, Hash, Type, Save, HardDrive, Cpu, Braces, TextCursorInput, WandSparkles, AppWindow, Eye, EyeOff, Loader, LoaderCircle } from 'lucide';
 
 const iconMap: Record<string, any> = {
   'play': Play,
@@ -78,6 +78,11 @@ const iconMap: Record<string, any> = {
   'text-cursor-input': TextCursorInput,
   'wand-sparkles': WandSparkles,
   'app-window': AppWindow,
+  'chevron-up': ChevronUp,
+  'eye': Eye,
+  'eye-off': EyeOff,
+  'loader': Loader,
+  'loader-circle': LoaderCircle,
 };
 
 // OpenStorm brand logo - blue rhombus on dark background

@@ -34,22 +34,25 @@ export const AI_TIPS = [
 export interface CommandContext {
   clearSession: () => void;
   createSession: () => void;
+  resetBackend: () => Promise<void>;
   addSystemMessage: (content: string) => void;
   activeSessionId: string | null;
   focusModelSelector: () => void;
 }
 
-export function handleCommand(
+export async function handleCommand(
   text: string,
   ctx: CommandContext
-): void {
+): Promise<void> {
   const cmd = text.split(/\s+/)[0].toLowerCase();
 
   switch (cmd) {
     case '/clear':
+      await ctx.resetBackend();
       ctx.clearSession();
       break;
     case '/reset':
+      await ctx.resetBackend();
       ctx.clearSession();
       ctx.createSession();
       break;

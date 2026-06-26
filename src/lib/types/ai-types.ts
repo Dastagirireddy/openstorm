@@ -67,6 +67,8 @@ export interface AiProviderConfig {
   api_key: string;
   base_url: string;
   model: string;
+  model_name?: string;
+  provider_keys?: Record<string, string>;
 }
 
 export interface AIState {
@@ -74,7 +76,7 @@ export interface AIState {
   activeSessionId: string | null;
   models: ModelInfo[];
   selectedModel: string;
-  ollamaConnected: boolean;
+  providerConnected: boolean;
   isThinking: boolean;
   isStreaming: boolean;
 }

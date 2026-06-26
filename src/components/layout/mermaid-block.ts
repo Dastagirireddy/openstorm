@@ -5,7 +5,30 @@ import mermaid from 'mermaid';
 
 let mermaidInitialized = false;
 
-async function tryRender(code: string, component: MermaidBlock): Promise<boolean> {
+// Shared queue to limit concurrent mermaid renders
+const MAX_CONCURRENT_RENDERS = 1;
+let activeRenders = 0;
+const renderQueue: Array<() => void> = [];
+
+function enqueueRender(renderFn: () => void): void {
+  if (activeRenders < MAX_CONCURRENT_RENDERS) {
+    activeRenders++;
+    renderFn();
+  } else {
+    renderQueue.push(renderFn);
+  }
+}
+
+function onRenderComplete(): void {
+  activeRenders--;
+  if (renderQueue.length > 0) {
+    const next = renderQueue.shift()!;
+    activeRenders++;
+    next();
+  }
+}
+
+async function tryRender(code: string, component: AiMermaid): Promise<boolean> {
   try {
     const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const { svg } = await mermaid.render(id, code);
@@ -14,6 +37,8 @@ async function tryRender(code: string, component: MermaidBlock): Promise<boolean
     return true;
   } catch {
     return false;
+  } finally {
+    onRenderComplete();
   }
 }
 
@@ -42,8 +67,8 @@ function fixMermaidSyntax(code: string): string {
   return fixed;
 }
 
-@customElement('mermaid-block')
-export class MermaidBlock extends LitElement {
+@customElement('ai-mermaid')
+export class AiMermaid extends LitElement {
   static styles = css`
     :host {
       display: block;
@@ -128,6 +153,13 @@ export class MermaidBlock extends LitElement {
       color: var(--code-text, #e6edf3);
       white-space: pre;
     }
+
+    .mermaid-placeholder {
+      padding: 2em;
+      text-align: center;
+      color: var(--code-text-dim, #8b949e);
+      font-size: 12px;
+    }
   `;
 
   @property({ type: String })
@@ -139,7 +171,15 @@ export class MermaidBlock extends LitElement {
   @state()
   private error = '';
 
-  async connectedCallback() {
+  @state()
+  private isVisible = false;
+
+  @state()
+  private hasRendered = false;
+
+  private observer: IntersectionObserver | null = null;
+
+  connectedCallback() {
     super.connectedCallback();
     if (!mermaidInitialized) {
       mermaid.initialize({
@@ -156,12 +196,47 @@ export class MermaidBlock extends LitElement {
         this.code = script.textContent || '';
       }
     }
-    await this.renderMermaid();
+    // Setup intersection observer for lazy rendering
+    this.setupIntersectionObserver();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.observer?.disconnect();
+    this.observer = null;
+  }
+
+  private setupIntersectionObserver() {
+    this.observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && !this.isVisible) {
+            this.isVisible = true;
+            // Start rendering when visible
+            if (this.code && !this.hasRendered) {
+              this.scheduleRender();
+            }
+          }
+        }
+      },
+      { rootMargin: '200px' } // Start rendering 200px before visible
+    );
+    this.observer.observe(this);
+  }
+
+  private scheduleRender() {
+    if (this.hasRendered) return;
+    this.hasRendered = true;
+    
+    enqueueRender(async () => {
+      await this.renderMermaid();
+    });
   }
 
   updated(changedProperties: Map<string, unknown>) {
-    if (changedProperties.has('code')) {
-      this.renderMermaid();
+    if (changedProperties.has('code') && this.isVisible) {
+      this.hasRendered = false;
+      this.scheduleRender();
     }
   }
 
@@ -220,9 +295,13 @@ export class MermaidBlock extends LitElement {
         <div class="mermaid-content">
           ${this.renderedSvg
             ? unsafeHTML(this.renderedSvg)
-            : this.code
+            : this.error
               ? html`<div class="mermaid-raw"><pre>${this.code}</pre></div>`
-              : ''}
+              : !this.isVisible
+                ? html`<div class="mermaid-placeholder">Loading diagram...</div>`
+                : this.code
+                  ? html`<div class="mermaid-raw"><pre>${this.code}</pre></div>`
+                  : ''}
         </div>
       </div>
     `;
@@ -231,6 +310,6 @@ export class MermaidBlock extends LitElement {
 
 declare global {
   interface HTMLElementTagNameMap {
-    'mermaid-block': MermaidBlock;
+    'ai-mermaid': AiMermaid;
   }
 }

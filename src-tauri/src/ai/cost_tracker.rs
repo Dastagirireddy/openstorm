@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::provider::Usage;
+use super::Usage;
 
 /// Cost per token for different models
 #[derive(Debug, Clone)]

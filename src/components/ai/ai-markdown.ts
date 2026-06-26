@@ -1,10 +1,21 @@
 import MarkdownIt from 'markdown-it';
+import { markdownItTable } from 'markdown-it-table';
+import markdownItTaskLists from 'markdown-it-task-lists';
+import markdownItKatex from '@traptitech/markdown-it-katex';
 import hljs from 'highlight.js';
+import '../ai/elements/index.js';
 
 const md = new MarkdownIt({
   html: false,
   linkify: true,
   typographer: true,
+});
+
+md.use(markdownItTable);
+md.use(markdownItTaskLists, { disabled: false });
+md.use(markdownItKatex, {
+  throwOnError: false,
+  displayMode: false,
 });
 
 md.renderer.rules.code_inline = (tokens, idx) => {
@@ -18,14 +29,48 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   const lang = token.info ? token.info.trim().split(/\s+/)[0] : '';
   const code = token.content;
   
-  // Render mermaid diagrams as interactive components
   if (lang === 'mermaid') {
-    return `<mermaid-block><script type="text/template">${code}</script></mermaid-block>`;
+    return `<ai-mermaid><script type="text/template">${code}</script></ai-mermaid>`;
   }
   
-  const escapedCode = code.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (lang === 'latex' || lang === 'tex') {
+    return `<ai-math latex="${code.replace(/"/g, '&quot;')}"></ai-math>`;
+  }
+
+  const escapedCode = code
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
   
-  return `<code-block language="${lang}" code="${escapedCode}"></code-block>`;
+  return `<ai-code-block language="${lang}" code="${escapedCode}"></ai-code-block>`;
+};
+
+md.renderer.rules.image = (tokens, idx) => {
+  const token = tokens[idx];
+  const src = token.attrGet('src') || '';
+  const alt = token.children?.map(t => t.content).join('') || token.content;
+  return `<ai-image src="${src}" alt="${alt}"></ai-image>`;
+};
+
+md.renderer.rules.blockquote_open = () => {
+  return '<ai-blockquote>';
+};
+
+md.renderer.rules.blockquote_close = () => {
+  return '</ai-blockquote>';
+};
+
+md.renderer.rules.hr = () => {
+  return '<ai-divider></ai-divider>';
+};
+
+md.renderer.rules.bullet_list_open = () => {
+  return '<ul class="ai-list">';
+};
+
+md.renderer.rules.ordered_list_open = () => {
+  return '<ol class="ai-list">';
 };
 
 export function highlightKeywords(text: string): string {
@@ -55,7 +100,6 @@ export function highlightRenderedHtml(html: string): string {
   
   return parts.map((part, i) => {
     if (i % 2 === 1) {
-      // This is a tag
       if (part.toLowerCase().startsWith('<script')) {
         insideScript = true;
       } else if (part.toLowerCase().startsWith('</script')) {
@@ -63,7 +107,6 @@ export function highlightRenderedHtml(html: string): string {
       }
       return part;
     }
-    // This is text content - skip highlighting inside script tags
     if (insideScript) {
       return part;
     }
