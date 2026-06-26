@@ -959,11 +959,21 @@ export class OpenStormApp extends TailwindElement() {
     console.log('[Session] Restoring session');
 
     // Restore tabs - handle both camelCase (localStorage) and snake_case (backend)
-    this.tabs = session.tabs.map(t => ({
-      ...t,
-      tabType: (t.tabType || t.tab_type) as EditorTab['tabType'],
-      lastUsed: t.lastUsed || t.last_used,
-    }));
+    this.tabs = session.tabs.map(t => {
+      const tabType = t.tabType || t.tab_type;
+      console.log('[Session] Restoring tab:', t.name, 'tabType:', tabType);
+      return {
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content || '',
+        tabType: (tabType || 'file') as EditorTab['tabType'],
+        pinned: t.pinned,
+        lastUsed: t.lastUsed || t.last_used,
+        metadata: (t as any).metadata,
+      };
+    });
 
     // Restore active tab - handle both camelCase and snake_case
     const activeTabId = session.activeTabId || session.active_tab_id;
@@ -1429,11 +1439,11 @@ export class OpenStormApp extends TailwindElement() {
 
   private renderContentArea = () => {
     const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
-    const activeTabType = activeTab?.tabType || 'file';
+    const activeTabType = (activeTab?.tabType || (activeTab as any)?.tab_type || 'file') as string;
 
     // Get all terminal tabs
-    const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal');
-    const openstormTabs = this.tabs.filter(t => t.tabType === 'openstorm');
+    const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal' || (t as any).tab_type === 'terminal');
+    const openstormTabs = this.tabs.filter(t => t.tabType === 'openstorm' || (t as any).tab_type === 'openstorm');
     const hasTerminalTabs = terminalTabs.length > 0;
 
     // Always render all panes, show only the active one
