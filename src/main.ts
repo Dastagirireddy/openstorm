@@ -153,6 +153,32 @@ export class OpenStormApp extends TailwindElement() {
     this.checkUpdatesOnStartup();
     // Save session on app exit
     this.setupSessionSaveOnExit();
+    // Clear stale localStorage sessions
+    this.clearStaleSessions();
+  }
+
+  private clearStaleSessions(): void {
+    // Clear any old localStorage session data that might have wrong tabType
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.startsWith('session_')) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}');
+          if (data.tabs) {
+            for (const tab of data.tabs) {
+              // If any tab is missing tabType, remove the stale session
+              if (!tab.tabType && !tab.tab_type) {
+                console.log('[Session] Clearing stale session:', key);
+                localStorage.removeItem(key);
+                break;
+              }
+            }
+          }
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }
+    }
   }
 
   private setupSessionSaveOnExit(): void {
