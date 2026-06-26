@@ -16,8 +16,18 @@ pub struct AiSessionLog {
 
 impl AiSessionLog {
     pub fn start(user_message: &str, model: &str, project_path: &str) -> Self {
+        // Validate project_path is not empty
+        if project_path.is_empty() {
+            eprintln!("[AiSessionLog] WARNING: project_path is empty, session log will not be created");
+            // Return a no-op logger that writes to stderr
+            return Self::noop();
+        }
+
         let dir = PathBuf::from(project_path).join(".openstorm").join("ai-sessions");
-        fs::create_dir_all(&dir).ok();
+        if let Err(e) = fs::create_dir_all(&dir) {
+            eprintln!("[AiSessionLog] WARNING: Failed to create directory {}: {}", dir.display(), e);
+            return Self::noop();
+        }
 
         // Preserve previous session by renaming latest.log
         let latest = dir.join("latest.log");
@@ -30,7 +40,13 @@ impl AiSessionLog {
             fs::rename(&latest, &archived).ok();
         }
 
-        let file = BufWriter::new(File::create(&latest).expect("Failed to create AI session log"));
+        let file = match File::create(&latest) {
+            Ok(f) => BufWriter::new(f),
+            Err(e) => {
+                eprintln!("[AiSessionLog] WARNING: Failed to create {}: {}", latest.display(), e);
+                return Self::noop();
+            }
+        };
         let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis();
         let mut log = AiSessionLog { file, start_time: Instant::now(), session_id: ts.to_string(), model: model.into() };
         let div = "═".repeat(64);
@@ -215,6 +231,20 @@ impl AiSessionLog {
         self.line(&format!("SESSION END: {} iterations, {} tool calls, ~{} tokens, {:.1}s",
             iterations, tool_calls, tokens, self.start_time.elapsed().as_secs_f64()));
         self.line(&div); self.flush();
+    }
+
+    /// Create a no-op logger that discards all output (used when project_path is invalid)
+    fn noop() -> Self {
+        // Create a temp file, delete it immediately — handle stays valid for writes
+        let temp = std::env::temp_dir().join(format!("openstorm_null_{}.log", std::process::id()));
+        let file = File::create(&temp).expect("Failed to create null log file");
+        fs::remove_file(&temp).ok(); // Delete immediately — handle remains valid
+        Self {
+            file: BufWriter::new(file),
+            start_time: Instant::now(),
+            session_id: String::new(),
+            model: String::new(),
+        }
     }
 
     fn line(&mut self, line: &str) { writeln!(self.file, "{}", line).ok(); }

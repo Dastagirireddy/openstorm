@@ -310,6 +310,7 @@ impl Agent {
                                 usage,
                             })
                             .await;
+                        self.force_stop_pending_todos(tx).await;
                         let summary = self.build_execution_summary("failed", total_tool_calls).await;
                         let _ = tx.send(summary).await;
                         return Ok(());
@@ -406,6 +407,7 @@ impl Agent {
                         usage: usage.clone(),
                     })
                     .await;
+                self.force_stop_pending_todos(tx).await;
                 let summary = self.build_execution_summary("completed", total_tool_calls).await;
                 let _ = tx.send(summary).await;
                 let total_tokens = usage.as_ref().map_or(0, |u| u.total_tokens as u64);
@@ -545,6 +547,7 @@ impl Agent {
                 usage,
             })
             .await;
+        self.force_stop_pending_todos(tx).await;
         Ok(())
     }
 
@@ -709,6 +712,7 @@ impl Agent {
     }
 
     /// Auto-complete stale TODOs that have been pending for 2+ iterations.
+    /// Only auto-completes the FIRST pending todo in the plan (respects sequential ordering).
     async fn check_stale_todos(
         &self,
         todo_stale_iterations: &mut HashMap<String, u32>,
@@ -719,14 +723,22 @@ impl Agent {
     ) {
         let mut todos = self.todo_items.lock().await;
         let mut stale_ids: Vec<String> = Vec::new();
+        // Only auto-complete the first pending todo — later todos should wait
+        let mut found_first_pending = false;
         for todo in todos.iter_mut() {
             if todo.status == TodoStatus::Pending {
-                let count = todo_stale_iterations.entry(todo.id.clone()).or_insert(0);
-                *count += 1;
-                if *count >= 2 {
-                    stale_ids.push(todo.id.clone());
-                    todo.status = TodoStatus::Completed;
+                if !found_first_pending {
+                    found_first_pending = true;
+                    let count = todo_stale_iterations.entry(todo.id.clone()).or_insert(0);
+                    *count += 1;
+                    if *count >= 2 {
+                        stale_ids.push(todo.id.clone());
+                        todo.status = TodoStatus::Completed;
+                    }
                 }
+            } else {
+                // Non-pending todo resets the stale counter for subsequent todos
+                todo_stale_iterations.remove(&todo.id);
             }
         }
         if !stale_ids.is_empty() {

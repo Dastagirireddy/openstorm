@@ -19,6 +19,13 @@ pub async fn ai_chat(
     project_path: String,
     history: Vec<serde_json::Value>,
 ) -> Result<String, String> {
+    // Log project path for debugging
+    if project_path.is_empty() {
+        eprintln!("[ai_chat] WARNING: project_path is empty!");
+    } else {
+        eprintln!("[ai_chat] project_path: {}", project_path);
+    }
+
     let config = AiProviderConfig::load();
 
     let provider: Arc<dyn LlmProvider> = match provider_id.as_str() {
