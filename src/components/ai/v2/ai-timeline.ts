@@ -37,6 +37,7 @@ const TIMELINE_STYLES = `
     height: 100%; 
     overflow: hidden; 
     background: var(--ai-panel-background, #ffffff);
+    user-select: text;
   }
   .scroll { 
     flex: 1; 
@@ -45,6 +46,7 @@ const TIMELINE_STYLES = `
     display: flex; 
     flex-direction: column; 
     gap: 0; 
+    user-select: text;
   }
   .scroll::-webkit-scrollbar { width: 6px; }
   .scroll::-webkit-scrollbar-track { background: transparent; }
@@ -89,6 +91,7 @@ const TIMELINE_STYLES = `
     border-left: 3px solid var(--ai-primary, #3574f0);
     border-radius: 0 8px 8px 0; 
     font-weight: 600;
+    user-select: text;
   }
   .response-text { 
     font-size: 14px; 
@@ -97,6 +100,7 @@ const TIMELINE_STYLES = `
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid var(--ai-panel-border, #e5e7eb);
+    user-select: text;
   }
   .response-text h1, .response-text h2, .response-text h3, .response-text h4 { 
     color: var(--ai-text, #1f2937); 
@@ -193,6 +197,35 @@ export class AiTimeline extends LitElement {
   @state() headerText = '';
 
   @query('.scroll') private scrollEl!: HTMLDivElement;
+
+  connectedCallback(): void {
+    super.connectedCallback();
+    this.addEventListener('keydown', this._handleKeyDown as EventListener);
+  }
+
+  disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.removeEventListener('keydown', this._handleKeyDown as EventListener);
+  }
+
+  private _handleKeyDown = (e: KeyboardEvent): void => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'c') {
+      const selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        e.preventDefault();
+        navigator.clipboard.writeText(selection.toString()).catch(() => {});
+      }
+    }
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      const range = document.createRange();
+      range.selectNodeContents(this.scrollEl);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+  };
 
   private scrollToBottom() {
     requestAnimationFrame(() => {

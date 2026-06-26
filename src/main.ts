@@ -63,7 +63,6 @@ import "./components/navigation/activity-bar.js";
 import "./components/navigation/right-activity-bar.js";
 import "./components/explorer/project-explorer.js";
 import "./components/viewers/file-viewer-container.js";
-import "./components/editor/editor-tab-bar.js";
 import "./components/layout/status-bar.js";
 import "./components/layout/icon.js";
 import "./components/layout/resizable-container.js";

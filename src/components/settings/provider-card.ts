@@ -23,7 +23,7 @@ export class ProviderCard extends TailwindElement() {
         transition: background-color 0.15s ease;
       }
       .provider-header:hover {
-        background-color: var(--ai-surface-hover, var(--app-hover-background));
+        background-color: color-mix(in srgb, var(--ai-primary, var(--app-button-background)) 8%, var(--app-bg));
       }
     `
   ];
@@ -165,7 +165,7 @@ export class ProviderCard extends TailwindElement() {
         <!-- Header -->
         <button
           class="provider-header w-full flex items-center gap-3 px-4 py-3 text-left"
-          style="background-color: var(--ai-surface, var(--app-hover-background));"
+          style="background-color: color-mix(in srgb, var(--ai-primary, var(--app-button-background)) 5%, var(--app-bg));"
           @click=${() => {
             this.dispatchEvent(new CustomEvent('provider-expanded', {
               detail: { providerId: this.provider.id },

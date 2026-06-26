@@ -1,13 +1,12 @@
 import { html, type TemplateResult } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { ref, createRef } from 'lit/directives/ref.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import type { EditorTab } from '../../lib/types/file-types.js';
 import '../layout/file-icon.js';
 import '../layout/icon.js';
 
-@customElement('tab-bar')
-export class TabBar extends TailwindElement() {
+class TabBar extends TailwindElement() {
   @property({ type: Array }) tabs: EditorTab[] = [];
   @property({ type: String }) activeTab = '';
   @property({ type: Number }) tabLimit = 10;
@@ -285,5 +284,15 @@ export class TabBar extends TailwindElement() {
       bubbles: true,
       composed: true,
     }));
+  }
+}
+
+if (!customElements.get('tab-bar')) {
+  customElements.define('tab-bar', TabBar);
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'tab-bar': TabBar;
   }
 }

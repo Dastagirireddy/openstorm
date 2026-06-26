@@ -66,11 +66,27 @@ md.renderer.rules.hr = () => {
 };
 
 md.renderer.rules.bullet_list_open = () => {
-  return '<ul class="ai-list">';
+  return '<ai-list><ul>';
+};
+
+md.renderer.rules.bullet_list_close = () => {
+  return '</ul></ai-list>';
 };
 
 md.renderer.rules.ordered_list_open = () => {
-  return '<ol class="ai-list">';
+  return '<ai-list ordered><ol>';
+};
+
+md.renderer.rules.ordered_list_close = () => {
+  return '</ol></ai-list>';
+};
+
+md.renderer.rules.table_open = () => {
+  return '<table class="ai-table">';
+};
+
+md.renderer.rules.table_close = () => {
+  return '</table>';
 };
 
 export function highlightKeywords(text: string): string {
@@ -121,10 +137,18 @@ export function preprocessTodos(text: string): string {
     .replace(/\[ \]/g, '<span class="ai-todo-checkbox pending">○</span>');
 }
 
+export function wrapTaskLists(html: string): string {
+  return html.replace(
+    /<ul class="contains-task-list">([\s\S]*?)<\/ul>/g,
+    '<ai-task-list><ul class="contains-task-list">$1</ul></ai-task-list>'
+  );
+}
+
 export function renderMarkdown(content: string): string {
   const preprocessed = preprocessTodos(content);
   const renderedHtml = md.render(preprocessed);
-  return highlightRenderedHtml(renderedHtml);
+  const highlighted = highlightRenderedHtml(renderedHtml);
+  return wrapTaskLists(highlighted);
 }
 
 export function highlightDiffCode(code: string, lang?: string): string {

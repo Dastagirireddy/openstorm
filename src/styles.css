@@ -89,6 +89,15 @@
   --app-fold-guide: rgba(200, 200, 200, 0.4);
   --app-fold-guide-active: #3574f0;
 
+  /* Code blocks */
+  --code-bg: #f6f8fa;
+  --code-border: #d0d7de;
+  --code-header-bg: #f6f8fa;
+  --code-lang-color: #57606a;
+  --code-text: #24292f;
+  --code-text-dim: #57606a;
+  --code-success: #1a7f37;
+
   /* File icon colors */
   --file-rs: #dea584;
   --file-go: #00add8;
@@ -336,6 +345,15 @@
     --editor-selection: #33467c;
     --editor-line-numbers: #3b4261;
 
+    /* Code blocks */
+    --code-bg: #0d1117;
+    --code-border: #30363d;
+    --code-header-bg: #161b22;
+    --code-lang-color: #58a6ff;
+    --code-text: #e6edf3;
+    --code-text-dim: #8b949e;
+    --code-success: #3fb950;
+
     /* Additional UI surfaces */
     --app-workbench: #16161e;
 
@@ -470,6 +488,110 @@
 }
 .ai-todo-checkbox.pending {
   color: var(--ai-text-dim, #999);
+}
+
+/* AI Lists (used by markdown renderer) */
+.ai-list, .response-text ul, .response-text ol {
+  margin: 0.5em 0;
+  padding-left: 20px;
+  color: var(--ai-text, #111827);
+}
+.ai-list li, .response-text ul li, .response-text ol li {
+  padding: 3px 0;
+  line-height: 1.5;
+}
+.ai-list li::marker, .response-text ul li::marker, .response-text ol li::marker {
+  color: var(--ai-primary, #3574f0);
+}
+.ai-list ul li::marker, .response-text ul ul li::marker {
+  content: '•';
+}
+
+/* AI Tables (used by markdown renderer) */
+.response-text table, .ai-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 0.75em 0;
+  border: 1px solid var(--ai-panel-border, #e5e7eb);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.response-text thead, .ai-table thead {
+  background: var(--ai-tool-background, #f9fafb);
+}
+.response-text th, .ai-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--ai-text, #374151);
+  border-bottom: 2px solid var(--ai-panel-border, #e5e7eb);
+  border-right: 1px solid var(--ai-panel-border, #e5e7eb);
+  white-space: nowrap;
+}
+.response-text th:last-child, .ai-table th:last-child {
+  border-right: none;
+}
+.response-text td, .ai-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ai-panel-border, #e5e7eb);
+  border-right: 1px solid var(--ai-panel-border, #e5e7eb);
+  color: var(--ai-text, #374151);
+}
+.response-text td:last-child, .ai-table td:last-child {
+  border-right: none;
+}
+.response-text tbody tr:last-child td, .ai-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.response-text tbody tr:hover, .ai-table tbody tr:hover {
+  background: var(--ai-hover-background, rgba(0, 0, 0, 0.03));
+}
+
+/* Table status badges */
+.response-text td:has(iconify-icon), .ai-table td:has(iconify-icon) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* AI Task Lists (used by markdown renderer) */
+.ai-task-list, .response-text ul.task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5em 0;
+}
+.ai-task-list .task-item, .response-text ul.task-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+.ai-task-list .task-checkbox, .response-text ul.task-list li input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--ai-panel-border, #d1d5db);
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 2px;
+  accent-color: var(--ai-primary, #3574f0);
+}
+.ai-task-list .task-label, .response-text ul.task-list li {
+  color: var(--ai-text, #111827);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* AI Inline Code */
+.ai-inline-code {
+  background: var(--ai-tool-background, #f3f4f6);
+  border: 1px solid var(--ai-panel-border, #e5e7eb);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.9em;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace;
+  color: var(--ai-primary, #3574f0);
 }
 
 /* Global resets */

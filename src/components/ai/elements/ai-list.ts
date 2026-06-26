@@ -46,7 +46,6 @@ export class AiList extends LitElement {
   ordered = false;
 
   private renderItem(item: string) {
-    // Handle inline code
     const parts = item.split(/(`[^`]+`)/g);
     return parts.map(part => {
       if (part.startsWith('`') && part.endsWith('`')) {
@@ -57,15 +56,17 @@ export class AiList extends LitElement {
   }
 
   render() {
-    const listTag = this.ordered ? 'ol' : 'ul';
-    
-    return html`
-      <${listTag}>
-        ${this.items.map(item => html`
-          <li>${this.renderItem(item)}</li>
-        `)}
-      </${listTag}>
-    `;
+    if (this.items.length > 0) {
+      const listTag = this.ordered ? 'ol' : 'ul';
+      return html`
+        <${listTag}>
+          ${this.items.map(item => html`
+            <li>${this.renderItem(item)}</li>
+          `)}
+        </${listTag}>
+      `;
+    }
+    return html`<slot></slot>`;
   }
 }
 

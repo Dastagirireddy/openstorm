@@ -4,7 +4,7 @@ import { aiState } from '../../../lib/ai/ai-state.js';
 import { searchFiles, parseFileMentions, readMentionedFiles, buildContextMessage } from '../ai-file-utils.js';
 
 const INPUT_STYLES = `
-  :host { display: block; }
+  :host { display: block; user-select: text; }
   
   .input-container {
     background: var(--ai-tool-header-background, #f3f4f6);
@@ -362,6 +362,57 @@ export class AiInputDeck extends LitElement {
   }
 
   private onKey(e: KeyboardEvent) {
+    const mod = e.metaKey || e.ctrlKey;
+
+    // Explicitly handle standard editing shortcuts so they work in Shadow DOM / Tauri webview
+    if (mod && !e.shiftKey) {
+      switch (e.key.toLowerCase()) {
+        case 'a': // Select All
+          e.preventDefault();
+          this.ta?.select();
+          return;
+        case 'c': // Copy
+          if (this.ta && this.ta.selectionStart !== this.ta.selectionEnd) {
+            navigator.clipboard.writeText(this.ta.value.substring(this.ta.selectionStart, this.ta.selectionEnd)).catch(() => {});
+          }
+          return;
+        case 'v': // Paste — uses execCommand to preserve undo stack
+          navigator.clipboard.readText().then(text => {
+            if (!this.ta) return;
+            this.ta.focus();
+            document.execCommand('insertText', false, text);
+          }).catch(() => {});
+          return;
+        case 'x': // Cut — uses execCommand to preserve undo stack
+          if (this.ta && this.ta.selectionStart !== this.ta.selectionEnd) {
+            const selected = this.ta.value.substring(this.ta.selectionStart, this.ta.selectionEnd);
+            navigator.clipboard.writeText(selected).catch(() => {});
+            this.ta.focus();
+            document.execCommand('delete');
+          }
+          return;
+        case 'z': // Undo
+          e.preventDefault();
+          this.ta?.focus();
+          document.execCommand('undo');
+          return;
+      }
+    }
+
+    // Redo: Cmd+Shift+Z or Ctrl+Y
+    if (mod && e.shiftKey && e.key.toLowerCase() === 'z') {
+      e.preventDefault();
+      this.ta?.focus();
+      document.execCommand('redo');
+      return;
+    }
+    if (mod && e.key.toLowerCase() === 'y') {
+      e.preventDefault();
+      this.ta?.focus();
+      document.execCommand('redo');
+      return;
+    }
+
     if (this.showFileSuggestions) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();

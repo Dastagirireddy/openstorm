@@ -14,6 +14,29 @@ export class AiTaskList extends LitElement {
       margin: 0.5em 0;
     }
 
+    ::slotted(ul) {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    ::slotted(li) {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 0;
+    }
+
+    ::slotted(input[type="checkbox"]) {
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid var(--ai-panel-border, #d1d5db);
+      border-radius: 3px;
+      flex-shrink: 0;
+      margin-top: 2px;
+      accent-color: var(--ai-primary, #3574f0);
+    }
+
     .task-list {
       list-style: none;
       padding: 0;
@@ -72,16 +95,19 @@ export class AiTaskList extends LitElement {
   }
 
   render() {
-    return html`
-      <ul class="task-list">
-        ${this.tasks.map(task => html`
-          <li class="task-item">
-            ${this.renderCheckbox(task.completed)}
-            <span class="task-label ${task.completed ? 'completed' : ''}">${task.label}</span>
-          </li>
-        `)}
-      </ul>
-    `;
+    if (this.tasks.length > 0) {
+      return html`
+        <ul class="task-list">
+          ${this.tasks.map(task => html`
+            <li class="task-item">
+              ${this.renderCheckbox(task.completed)}
+              <span class="task-label ${task.completed ? 'completed' : ''}">${task.label}</span>
+            </li>
+          `)}
+        </ul>
+      `;
+    }
+    return html`<slot></slot>`;
   }
 }
 
