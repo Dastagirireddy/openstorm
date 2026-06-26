@@ -510,6 +510,7 @@ export class SettingsPanel extends TailwindElement() {
         cerebras: 'https://api.cerebras.ai/v1',
         fireworks: 'https://api.fireworks.ai/inference/v1',
         anthropic: 'https://api.anthropic.com',
+        google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
       };
 
       const configs: Record<string, { api_key: string; base_url: string; model: string }> = {};

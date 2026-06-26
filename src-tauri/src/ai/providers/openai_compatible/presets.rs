@@ -120,6 +120,14 @@ const ALL_PRESETS: &[ProviderPreset] = &[
         is_free: false,
         requires_api_key: true,
     },
+    // ── Google AI Studio ────────────────────────────────
+    ProviderPreset {
+        id: "google",
+        name: "Google AI Studio",
+        default_base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",
+        is_free: true,
+        requires_api_key: true,
+    },
     // ── Local ──────────────────────────────────────────────
     ProviderPreset {
         id: "lmstudio",

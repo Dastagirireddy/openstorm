@@ -175,4 +175,14 @@ export const PROVIDER_INFO: Record<string, ProviderInfoData> = {
       'accounts/fireworks/models/deepcoder-14b-preview',
     ],
   },
+  google: {
+    getApiKeyUrl: 'https://aistudio.google.com/apikey',
+    getApiKeyLabel: 'aistudio.google.com',
+    tip: 'Free tier includes Gemini 2.5 Flash with generous limits. No credit card required.',
+    freeModels: [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+    ],
+  },
 };
