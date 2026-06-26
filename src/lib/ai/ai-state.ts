@@ -8,7 +8,7 @@ export class AIStateManager {
   activeSessionId: string | null = null;
   models: ModelInfo[] = [];
   selectedModel: string = '';
-  ollamaConnected: boolean = false;
+  providerConnected: boolean = false;
   isThinking: boolean = false;
   isStreaming: boolean = false;
 
@@ -160,9 +160,9 @@ export class AIStateManager {
     });
   }
 
-  setOllamaConnected(connected: boolean): void {
-    this.ollamaConnected = connected;
-    this.emit('ollama-status', connected);
+  setProviderConnected(connected: boolean): void {
+    this.providerConnected = connected;
+    this.emit('provider-status', connected);
   }
 
   setThinking(thinking: boolean): void {

@@ -228,7 +228,7 @@ export class AiPanelV2 extends LitElement {
       aiState.createSession('AI Conversation');
     }
     this._unsub.push(
-      aiState.on('ollama-status', (s: string) => { this.connected = s; }),
+      aiState.on('provider-status', (s: string) => { this.connected = s; }),
       aiState.on('model-selected', (m: { id: string; name: string; provider: string }) => { 
         this.modelId = m.id;
         this.modelName = m.name;
@@ -290,7 +290,7 @@ export class AiPanelV2 extends LitElement {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const c = await invoke<{ provider: string; model: string; model_name: string }>('ai_get_config');
-      this.provider = c.provider || 'ollama';
+      this.provider = c.provider;
       this.modelId = c.model || '';
       this.modelName = c.model_name || '';
       // Emit to other components
@@ -303,7 +303,7 @@ export class AiPanelV2 extends LitElement {
   private async _loadModels() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const models = await invoke<Array<{ id: string; name: string }>>('ai_list_models', { providerId: this.provider || 'ollama' });
+      const models = await invoke<Array<{ id: string; name: string }>>('ai_list_models', { providerId: this.provider });
       this.models = models;
       // Set model name from loaded models if not already set
       if (this.modelId && !this.modelName) {
@@ -419,7 +419,7 @@ export class AiPanelV2 extends LitElement {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('ai_chat', {
-        providerId: this.provider || 'ollama',
+        providerId: this.provider,
         model: this.modelId || 'minimax-m3:cloud',
         message: msg,
         projectPath: this.projectPath,

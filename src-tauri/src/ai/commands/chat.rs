@@ -5,7 +5,7 @@ use tokio::sync::mpsc;
 use super::AiState;
 use super::super::agent::{Agent, AgentEvent};
 use super::super::orchestrator::Orchestrator;
-use super::super::providers::{LlmProvider, Message};
+use super::super::providers::{LlmProvider, Message, ProviderRegistry};
 use super::super::permissions::PermissionProfile;
 use crate::config::AiProviderConfig;
 
@@ -26,27 +26,12 @@ pub async fn ai_chat(
         eprintln!("[ai_chat] project_path: {}", project_path);
     }
 
-    let config = AiProviderConfig::load();
+    let mut config = AiProviderConfig::load();
+    // Override provider_id from the request
+    config.provider = provider_id;
 
-    let provider: Arc<dyn LlmProvider> = match provider_id.as_str() {
-        "ollama" => {
-            let base_url = if config.base_url.is_empty() {
-                None
-            } else {
-                Some(config.base_url.clone())
-            };
-            Arc::new(super::super::providers::OllamaProvider::new(base_url))
-        }
-        "lmstudio" => {
-            let base_url = if config.base_url.is_empty() {
-                None
-            } else {
-                Some(config.base_url.clone())
-            };
-            Arc::new(super::super::providers::LmStudioProvider::new(base_url))
-        }
-        _ => return Err(format!("Unknown provider: {}", provider_id)),
-    };
+    let provider: Arc<dyn LlmProvider> = ProviderRegistry::create(&config)
+        .map_err(|e| format!("Failed to create provider: {}", e))?;
 
     provider
         .check_connection()

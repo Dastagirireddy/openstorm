@@ -528,7 +528,22 @@ export class SettingsPanel extends TailwindElement() {
     const providerDefaults: Record<string, string> = {
       ollama: 'http://localhost:11434',
       lmstudio: 'http://localhost:1234/v1',
+      nvidia: 'https://integrate.api.nvidia.com/v1',
+      openai: 'https://api.openai.com/v1',
+      openrouter: 'https://openrouter.ai/api/v1',
+      deepseek: 'https://api.deepseek.com',
+      qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      groq: 'https://api.groq.com/openai/v1',
+      sambanova: 'https://api.sambanova.ai/v1',
+      together: 'https://api.together.xyz/v1',
+      mistral: 'https://api.mistral.ai/v1',
+      cerebras: 'https://api.cerebras.ai/v1',
+      fireworks: 'https://api.fireworks.ai/inference/v1',
+      anthropic: 'https://api.anthropic.com',
     };
+
+    const activeProvider = this.aiProviders.find(p => p.id === this.aiConfig.provider);
+    const showApiKey = activeProvider?.requires_api_key ?? false;
 
     return html`
       <div class="space-y-7">
@@ -584,6 +599,23 @@ export class SettingsPanel extends TailwindElement() {
             }}
           />
         </div>
+
+        <!-- API Key -->
+        ${showApiKey ? html`
+          <div>
+            <label class="text-sm font-semibold mb-2 block" style="color: var(--app-disabled-foreground);">API Key</label>
+            <input
+              type="password"
+              class="w-full px-3 py-2 text-sm rounded-lg outline-none font-mono"
+              style="background: var(--app-input-background, var(--app-hover-background)); border: 1px solid var(--app-border); color: var(--app-foreground);"
+              placeholder="Enter your API key..."
+              .value=${this.aiConfig.api_key}
+              @input=${(e: Event) => {
+                this.aiConfig = { ...this.aiConfig, api_key: (e.target as HTMLInputElement).value };
+              }}
+            />
+          </div>
+        ` : ''}
 
         <!-- Model -->
         ${this.aiConnectionStatus && this.aiModels.length > 0 ? html`

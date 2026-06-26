@@ -74,7 +74,7 @@ export interface AIState {
   activeSessionId: string | null;
   models: ModelInfo[];
   selectedModel: string;
-  ollamaConnected: boolean;
+  providerConnected: boolean;
   isThinking: boolean;
   isStreaming: boolean;
 }
