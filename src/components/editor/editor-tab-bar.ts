@@ -129,6 +129,7 @@ class TabBar extends TailwindElement() {
 
   private renderTab(tab: EditorTab): TemplateResult {
     const isActive = this.activeTab === tab.id;
+    const isUnclosable = tab.tabType === 'openstorm';
 
     return html`
       <div
@@ -145,19 +146,21 @@ class TabBar extends TailwindElement() {
         }}>
         ${this.renderTabIcon(tab)}
         <span class="flex-1 text-[11px] truncate select-none font-medium">${tab.name}</span>
-        ${tab.modified
-          ? html`<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background-color: var(--app-tab-active-border);"></span>`
-          : html`
-              <button
-                class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity duration-100 flex-shrink-0 flex items-center justify-center hover:bg-[var(--app-toolbar-hover)]"
-                style="color: var(--app-disabled-foreground);"
-                @click=${(e: MouseEvent) => {
-                  e.stopPropagation();
-                  this.closeTab(tab.id);
-                }}>
-                <os-icon name="x" size="10"></os-icon>
-              </button>
-            `}
+        ${isUnclosable
+          ? html``
+          : tab.modified
+            ? html`<span class="w-1.5 h-1.5 rounded-full flex-shrink-0" style="background-color: var(--app-tab-active-border);"></span>`
+            : html`
+                <button
+                  class="opacity-0 group-hover:opacity-100 p-0.5 rounded transition-opacity duration-100 flex-shrink-0 flex items-center justify-center hover:bg-[var(--app-toolbar-hover)]"
+                  style="color: var(--app-disabled-foreground);"
+                  @click=${(e: MouseEvent) => {
+                    e.stopPropagation();
+                    this.closeTab(tab.id);
+                  }}>
+                  <os-icon name="x" size="10"></os-icon>
+                </button>
+              `}
       </div>
     `;
   }

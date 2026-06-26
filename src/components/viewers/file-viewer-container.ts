@@ -156,6 +156,12 @@ export class FileViewerContainer extends TailwindElement() {
       if (this.activeTabId) {
         const tab = this.tabs.find(t => t.id === this.activeTabId);
         if (tab) {
+          // Skip non-file tabs (terminal, openstorm)
+          const tabType = tab.tabType || (tab as any).tab_type || 'file';
+          if (tabType !== 'file') {
+            return;
+          }
+
           // Check if this is a query editor tab
           if (tab.id.startsWith('query:')) {
             // Get connection info from metadata (not from parsing tab ID to avoid issues with colons in file paths)

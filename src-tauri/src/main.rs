@@ -13,6 +13,7 @@ mod lsp;
 mod lsp_installer;
 mod process;
 mod run_config;
+mod session;
 mod terminal;
 mod templates;
 mod theme;
@@ -359,6 +360,8 @@ fn main() {
                     &MenuItem::with_id(app, "open-file", "Open File...", true, Some("Cmd+O")).unwrap(),
                     &MenuItem::with_id(app, "open-folder", "Open Folder...", true, Some("Cmd+Shift+O")).unwrap(),
                     &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &MenuItem::with_id(app, "close-project", "Close Project", true, Some("Cmd+Shift+W")).unwrap(),
+                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
                     &MenuItem::with_id(app, "save", "Save", true, Some("Cmd+S")).unwrap(),
                     &MenuItem::with_id(app, "save-as", "Save As...", true, Some("Cmd+Shift+S")).unwrap(),
                     &MenuItem::with_id(app, "save-all", "Save All", true, Some("Cmd+Option+S")).unwrap(),
@@ -434,13 +437,14 @@ fn main() {
             // Start process output listener
             spawn_process_output_listener(handle.clone());
 
-            Ok(())
-        })
-        .on_menu_event(|app, event| {
             // Handle menu item clicks
-            log_debug!("[Menu] Event: {}", event.id.0);
-            // Forward menu events to frontend via custom events
-            app.emit("menu-item-clicked", event.id.0.to_string()).ok();
+            app.on_menu_event(|app, event| {
+                log_debug!("[Menu] Event: {}", event.id.0);
+                // Forward menu events to frontend via custom events
+                app.emit("menu-item-clicked", event.id.0.to_string()).ok();
+            });
+
+            Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             // === File Operations ===
@@ -498,6 +502,7 @@ fn main() {
 
             // === File Watcher ===
             file_watcher::start_watching,
+            file_watcher::stop_watching,
 
             // === Templates & Project Generation ===
             templates::list_templates,
@@ -590,6 +595,12 @@ fn main() {
             commands::project::load_recent_projects,
             commands::project::save_recent_project,
             commands::project::remove_recent_project,
+
+            // === Session Persistence ===
+            session::save_session,
+            session::load_session,
+            session::delete_session,
+            session::list_sessions,
 
             // === AI / LLM ===
             ai::commands::ai_get_config,

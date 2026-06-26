@@ -72,6 +72,7 @@ import "./components/dialogs/file-create-dialog.js";
 import "./components/dialogs/context-menu.js";
 import "./components/dialogs/rename-dialog.js";
 import "./components/dialogs/delete-dialog.js";
+import "./components/dialogs/unsaved-changes-dialog.js";
 import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/overlays/settings-panel.js";
@@ -124,6 +125,9 @@ export class OpenStormApp extends TailwindElement() {
   @state() private commitPanelWidth = 400;
   @state() private showTerminalNotification = false;
   @state() private showConsoleNotification = false;
+  @state() private showUnsavedChangesDialog = false;
+  private pendingCloseAction: 'close-project' | 'open-project' | null = null;
+  private pendingProjectPath: string | null = null;
 
   private _boundHandleOpenQueryEditor!: (e: CustomEvent<{ connectionId: string; connectionName: string; dialect: string; tableName: string }>) => void;
   private debugOutputBuffer: Array<{ category: string; output: string }> = [];
@@ -147,6 +151,79 @@ export class OpenStormApp extends TailwindElement() {
     loadMcpTools();
     // Check for updates on startup (non-blocking)
     this.checkUpdatesOnStartup();
+    // Save session on app exit
+    this.setupSessionSaveOnExit();
+    // Clear stale localStorage sessions
+    this.clearStaleSessions();
+  }
+
+  private clearStaleSessions(): void {
+    // Clear any old localStorage session data that might have wrong tabType
+    const keys = Object.keys(localStorage);
+    for (const key of keys) {
+      if (key.startsWith('session_')) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}');
+          if (data.tabs) {
+            for (const tab of data.tabs) {
+              // If any tab is missing tabType, remove the stale session
+              if (!tab.tabType && !tab.tab_type) {
+                console.log('[Session] Clearing stale session:', key);
+                localStorage.removeItem(key);
+                break;
+              }
+            }
+          }
+        } catch {
+          localStorage.removeItem(key);
+        }
+      }
+    }
+  }
+
+  private setupSessionSaveOnExit(): void {
+    // Save session when window is about to unload
+    window.addEventListener('beforeunload', () => {
+      if (this.projectPath) {
+        // Use synchronous save for beforeunload
+        this.saveSessionSync();
+      }
+    });
+  }
+
+  private saveSessionSync(): void {
+    if (!this.projectPath) return;
+
+    try {
+      const sessionTabs = this.tabs.map(t => ({
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content,
+        tabType: t.tabType,
+        pinned: t.pinned,
+        lastUsed: t.lastUsed,
+      }));
+
+      // Use fetch with sendBeacon for synchronous save
+      const payload = JSON.stringify({
+        project_path: this.projectPath,
+        tabs: sessionTabs,
+        active_tab_id: this.activeTabId,
+        panels: {
+          git_panel_visible: this.gitPanelVisible,
+          commit_panel_visible: this.commitPanelVisible,
+          active_status_bar_panel: this.activeStatusBarPanel,
+        },
+      });
+
+      // Store in localStorage as backup
+      localStorage.setItem(`session_${this.projectPath}`, payload);
+      console.log('[Session] Saved session to localStorage for:', this.projectPath);
+    } catch (err) {
+      console.error('[Session] Failed to save session sync:', err);
+    }
   }
 
   private async checkUpdatesOnStartup(): Promise<void> {
@@ -279,6 +356,9 @@ export class OpenStormApp extends TailwindElement() {
           break;
         case "open-file":
           dispatch("open-file-dialog");
+          break;
+        case "close-project":
+          this.handleCloseProject();
           break;
         case "save":
           if (this.tabs.length > 0) {
@@ -614,10 +694,157 @@ export class OpenStormApp extends TailwindElement() {
 
   private handleOpenRecentProject = async (e: CustomEvent<{ path: string }>): Promise<void> => {
     const { path } = e.detail;
-    const projectName = path.split("/").pop() || "";
     console.log('Opening recent project:', path);
 
-    // Save to recent projects (updates timestamp)
+    // Check for unsaved changes before opening new project
+    const unsavedTabs = this.tabs.filter(t => t.modified);
+    if (unsavedTabs.length > 0 && this.projectPath) {
+      console.log('[OpenRecent] Found unsaved changes, showing dialog');
+      this.pendingCloseAction = 'open-project';
+      this.pendingProjectPath = path;
+      this.showUnsavedChangesDialog = true;
+      return;
+    }
+
+    await this.openProject(path);
+  };
+
+  private handleOpenFolder = async (): Promise<void> => {
+    try {
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: "Select Project Folder",
+      });
+      if (selected) {
+        const newProjectPath = selected as string;
+
+        // Check for unsaved changes before opening new project
+        const unsavedTabs = this.tabs.filter(t => t.modified);
+        if (unsavedTabs.length > 0 && this.projectPath) {
+          console.log('[OpenFolder] Found unsaved changes, showing dialog');
+          this.pendingCloseAction = 'open-project';
+          this.pendingProjectPath = newProjectPath;
+          this.showUnsavedChangesDialog = true;
+          return;
+        }
+
+        await this.openProject(newProjectPath);
+      }
+    } catch (error) {
+      console.error("Failed to open folder:", error);
+    }
+  };
+
+  private handleCloseProject = async (): Promise<void> => {
+    if (!this.projectPath) {
+      console.log('[CloseProject] No project is open');
+      return;
+    }
+
+    // Check for unsaved changes
+    const unsavedTabs = this.tabs.filter(t => t.modified);
+    if (unsavedTabs.length > 0) {
+      console.log('[CloseProject] Found unsaved changes, showing dialog');
+      this.pendingCloseAction = 'close-project';
+      this.showUnsavedChangesDialog = true;
+      return;
+    }
+
+    await this.closeProject();
+  };
+
+  private closeProject = async (): Promise<void> => {
+    if (!this.projectPath) {
+      console.log('[CloseProject] No project is open');
+      return;
+    }
+
+    console.log('[CloseProject] Closing project:', this.projectPath);
+
+    // Save session before closing
+    await this.saveSession();
+
+    // Stop file watcher
+    try {
+      await invoke("stop_watching");
+      console.log('[CloseProject] File watcher stopped');
+    } catch (err) {
+      console.error('[CloseProject] Failed to stop file watcher:', err);
+    }
+
+    // Clear all tabs
+    this.tabs = [];
+    this.activeTabId = "";
+    this.activeFilePath = "";
+    this.saveStatus = "saved";
+
+    // Reset project state
+    this.projectPath = "";
+    this.terminalCreated = false;
+    this.activeActivity = "ai";
+    this.activeRightActivity = "";
+    this.activeStatusBarPanel = null;
+    this.gitBranch = "main";
+    this.gitPanelVisible = false;
+    this.commitPanelVisible = false;
+    this.isDebugging = false;
+    this.debugSessionState = "terminated";
+
+    // Dispatch project-closed event
+    dispatch("project-closed");
+
+    console.log('[CloseProject] Project closed, returning to welcome screen');
+  };
+
+  private handleUnsavedSaveAndClose = async (): Promise<void> => {
+    console.log('[CloseProject] Saving all files before closing');
+    // Save all modified files
+    for (const tab of this.tabs.filter(t => t.modified)) {
+      try {
+        await invoke("write_file", { path: tab.path, content: tab.content });
+        console.log('[CloseProject] Saved:', tab.path);
+      } catch (err) {
+        console.error('[CloseProject] Failed to save:', tab.path, err);
+      }
+    }
+
+    this.showUnsavedChangesDialog = false;
+
+    if (this.pendingCloseAction === 'close-project') {
+      await this.closeProject();
+    } else if (this.pendingCloseAction === 'open-project' && this.pendingProjectPath) {
+      await this.openProject(this.pendingProjectPath);
+    }
+
+    this.pendingCloseAction = null;
+    this.pendingProjectPath = null;
+  };
+
+  private handleUnsavedCloseWithoutSaving = async (): Promise<void> => {
+    console.log('[CloseProject] Closing without saving');
+    this.showUnsavedChangesDialog = false;
+
+    if (this.pendingCloseAction === 'close-project') {
+      await this.closeProject();
+    } else if (this.pendingCloseAction === 'open-project' && this.pendingProjectPath) {
+      await this.openProject(this.pendingProjectPath);
+    }
+
+    this.pendingCloseAction = null;
+    this.pendingProjectPath = null;
+  };
+
+  private handleUnsavedChangesCancel = (): void => {
+    this.showUnsavedChangesDialog = false;
+    this.pendingCloseAction = null;
+    this.pendingProjectPath = null;
+  };
+
+  private openProject = async (path: string): Promise<void> => {
+    const projectName = path.split("/").pop() || "";
+
+    // Save to recent projects
     try {
       await invoke("save_recent_project", { path, name: projectName, projectType: null });
     } catch (err) {
@@ -631,19 +858,24 @@ export class OpenStormApp extends TailwindElement() {
     this.activeTabId = "";
     this.terminalCreated = false;
 
-    // Create AI tab by default
-    const aiTab: EditorTab = {
-      id: `openstorm-${Date.now()}`,
-      name: 'OpenStorm',
-      path: '',
-      modified: false,
-      content: '',
-      tabType: 'openstorm',
-      pinned: false,
-      lastUsed: Date.now(),
-    };
-    this.tabs = [aiTab];
-    this.activeTabId = aiTab.id;
+    // Try to restore session
+    const sessionRestored = await this.loadSession(path);
+
+    if (!sessionRestored) {
+      // No session found, create default AI tab
+      const aiTab: EditorTab = {
+        id: `openstorm-${Date.now()}`,
+        name: 'OpenStorm',
+        path: '',
+        modified: false,
+        content: '',
+        tabType: 'openstorm',
+        pinned: false,
+        lastUsed: Date.now(),
+      };
+      this.tabs = [aiTab];
+      this.activeTabId = aiTab.id;
+    }
 
     // Call handleFolderOpened to start file watcher and create terminal
     await this.handleFolderOpened({
@@ -653,55 +885,140 @@ export class OpenStormApp extends TailwindElement() {
     dispatch("project-opened", { path: this.projectPath });
   };
 
-  private handleOpenFolder = async (): Promise<void> => {
+  private saveSession = async (): Promise<void> => {
+    if (!this.projectPath) return;
+
     try {
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: "Select Project Folder",
+      const sessionTabs = this.tabs.map(t => ({
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content,
+        tabType: t.tabType,
+        pinned: t.pinned,
+        lastUsed: t.lastUsed,
+      }));
+
+      await invoke("save_session", {
+        projectPath: this.projectPath,
+        tabs: sessionTabs,
+        activeTabId: this.activeTabId,
+        panels: {
+          git_panel_visible: this.gitPanelVisible,
+          commit_panel_visible: this.commitPanelVisible,
+          active_status_bar_panel: this.activeStatusBarPanel,
+        },
       });
-      if (selected) {
-        const newProjectPath = selected as string;
-        const projectName = newProjectPath.split("/").pop() || "";
-
-        // Save to recent projects
-        try {
-          await invoke("save_recent_project", { path: newProjectPath, name: projectName, projectType: null });
-        } catch (err) {
-          console.error("Failed to save recent project:", err);
-        }
-
-        // Reset state for new project
-        this.projectPath = newProjectPath;
-        this.activeActivity = "ai";
-        this.tabs = [];
-        this.activeTabId = "";
-        this.terminalCreated = false; // Will be set to true by handleFolderOpened
-
-        // Create AI tab by default
-        const aiTab: EditorTab = {
-          id: `openstorm-${Date.now()}`,
-          name: 'OpenStorm',
-          path: '',
-          modified: false,
-          content: '',
-          tabType: 'openstorm',
-          pinned: false,
-          lastUsed: Date.now(),
-        };
-        this.tabs = [aiTab];
-        this.activeTabId = aiTab.id;
-
-        // Call handleFolderOpened to start file watcher and create terminal
-        await this.handleFolderOpened({
-          detail: { path: newProjectPath },
-        } as CustomEvent<{ path: string }>);
-
-        dispatch("project-opened", { path: this.projectPath });
-      }
-    } catch (error) {
-      console.error("Failed to open folder:", error);
+      console.log('[Session] Saved session for:', this.projectPath);
+    } catch (err) {
+      console.error('[Session] Failed to save session:', err);
     }
+  };
+
+  private loadSession = async (projectPath: string): Promise<boolean> => {
+    try {
+      // Try backend first
+      const session = await invoke<{
+        project_path: string;
+        tabs: Array<{
+          id: string;
+          name: string;
+          path: string;
+          modified: boolean;
+          content?: string;
+          tab_type?: string;
+          pinned: boolean;
+          last_used?: number;
+        }>;
+        active_tab_id?: string;
+        panels?: {
+          git_panel_visible: boolean;
+          commit_panel_visible: boolean;
+          active_status_bar_panel?: string;
+        };
+      } | null>("load_session", { projectPath });
+
+      if (session && session.tabs && session.tabs.length > 0) {
+        return this.restoreSession(session);
+      }
+
+      // Try localStorage as backup
+      const localData = localStorage.getItem(`session_${projectPath}`);
+      if (localData) {
+        const localSession = JSON.parse(localData);
+        if (localSession.tabs && localSession.tabs.length > 0) {
+          console.log('[Session] Restoring from localStorage');
+          return this.restoreSession(localSession);
+        }
+      }
+
+      console.log('[Session] No session found for:', projectPath);
+      return false;
+    } catch (err) {
+      console.error('[Session] Failed to load session:', err);
+      return false;
+    }
+  };
+
+  private restoreSession = (session: {
+    tabs: Array<{
+      id: string;
+      name: string;
+      path: string;
+      modified: boolean;
+      content?: string;
+      tab_type?: string;
+      tabType?: string;
+      pinned: boolean;
+      last_used?: number;
+      lastUsed?: number;
+    }>;
+    active_tab_id?: string;
+    activeTabId?: string;
+    panels?: {
+      git_panel_visible: boolean;
+      commit_panel_visible: boolean;
+      active_status_bar_panel?: string;
+    };
+  }): boolean => {
+    console.log('[Session] Restoring session');
+
+    // Restore tabs - handle both camelCase (localStorage) and snake_case (backend)
+    this.tabs = session.tabs.map(t => {
+      const tabType = t.tabType || t.tab_type;
+      console.log('[Session] Restoring tab:', t.name, 'tabType:', tabType);
+      return {
+        id: t.id,
+        name: t.name,
+        path: t.path,
+        modified: t.modified,
+        content: t.content || '',
+        tabType: (tabType || 'file') as EditorTab['tabType'],
+        pinned: t.pinned,
+        lastUsed: t.lastUsed || t.last_used,
+        metadata: (t as any).metadata,
+      };
+    });
+
+    // Restore active tab - handle both camelCase and snake_case
+    const activeTabId = session.activeTabId || session.active_tab_id;
+    if (activeTabId) {
+      this.activeTabId = activeTabId;
+    } else if (this.tabs.length > 0) {
+      this.activeTabId = this.tabs[0].id;
+    }
+
+    // Restore panel state
+    if (session.panels) {
+      this.gitPanelVisible = session.panels.git_panel_visible;
+      this.commitPanelVisible = session.panels.commit_panel_visible;
+      if (session.panels.active_status_bar_panel) {
+        this.activeStatusBarPanel = session.panels.active_status_bar_panel as 'terminal' | 'app-console';
+      }
+    }
+
+    return true;
   };
 
   private handleOpenSingleFile = async (): Promise<void> => {
@@ -799,6 +1116,11 @@ export class OpenStormApp extends TailwindElement() {
       if ((e.ctrlKey || e.metaKey) && e.key === "`") {
         e.preventDefault();
         this.toggleTerminal();
+      }
+      // Ctrl+Shift+W for close project
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'w') {
+        e.preventDefault();
+        this.handleCloseProject();
       }
     });
   }
@@ -1143,11 +1465,11 @@ export class OpenStormApp extends TailwindElement() {
 
   private renderContentArea = () => {
     const activeTab = this.tabs.find((t) => t.id === this.activeTabId);
-    const activeTabType = activeTab?.tabType || 'file';
+    const activeTabType = (activeTab?.tabType || (activeTab as any)?.tab_type || 'file') as string;
 
     // Get all terminal tabs
-    const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal');
-    const openstormTabs = this.tabs.filter(t => t.tabType === 'openstorm');
+    const terminalTabs = this.tabs.filter(t => t.tabType === 'terminal' || (t as any).tab_type === 'terminal');
+    const openstormTabs = this.tabs.filter(t => t.tabType === 'openstorm' || (t as any).tab_type === 'openstorm');
     const hasTerminalTabs = terminalTabs.length > 0;
 
     // Always render all panes, show only the active one
@@ -1564,6 +1886,16 @@ export class OpenStormApp extends TailwindElement() {
 
         <!-- Database Connection Picker -->
         <database-connection-picker .projectPath=${this.projectPath}></database-connection-picker>
+
+        <!-- Unsaved Changes Dialog -->
+        <unsaved-changes-dialog
+          .open=${this.showUnsavedChangesDialog}
+          .projectName=${this.projectPath?.split('/').pop() || ''}
+          .unsavedCount=${this.tabs.filter(t => t.modified).length}
+          @save-and-close=${this.handleUnsavedSaveAndClose}
+          @close-without-saving=${this.handleUnsavedCloseWithoutSaving}
+          @cancel=${this.handleUnsavedChangesCancel}
+        ></unsaved-changes-dialog>
 
         <!-- Hover Tooltip -->
         <hover-tooltip></hover-tooltip>
