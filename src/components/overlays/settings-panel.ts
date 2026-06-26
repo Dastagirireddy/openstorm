@@ -514,9 +514,10 @@ export class SettingsPanel extends TailwindElement() {
       };
 
       const configs: Record<string, { api_key: string; base_url: string; model: string }> = {};
+      const providerKeys = config.provider_keys || {};
       for (const p of providers) {
         configs[p.id] = {
-          api_key: p.id === config.provider ? (config.api_key || '') : '',
+          api_key: providerKeys[p.id] || (p.id === config.provider ? (config.api_key || '') : ''),
           base_url: providerDefaults[p.id] || '',
           model: p.id === config.provider ? config.model : '',
         };
@@ -569,12 +570,13 @@ export class SettingsPanel extends TailwindElement() {
     if (!this.providerConfigs[providerId]) return;
     this.providerConfigs[providerId] = { ...this.providerConfigs[providerId], [field]: value };
 
-    // Save api_key to global config (needed by ai panel for model loading)
-    // Don't save base_url — each provider uses its own default from providerDefaults
+    // Save api_key to per-provider store in global config
+    const providerKeys = { ...(this.aiConfig.provider_keys || {}), [providerId]: this.providerConfigs[providerId].api_key };
     this.aiConfig = {
       ...this.aiConfig,
       provider: providerId,
       api_key: this.providerConfigs[providerId].api_key,
+      provider_keys: providerKeys,
     };
     this.saveAiConfig();
   }

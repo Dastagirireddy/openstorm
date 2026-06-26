@@ -23,9 +23,9 @@ pub async fn ai_list_models(
     base_url: Option<String>,
 ) -> Result<Vec<ModelInfo>, String> {
     let mut config = AiProviderConfig::load();
-    if let Some(key) = api_key {
-        config.api_key = key;
-    }
+    // Use provided key, or resolve from per-provider store
+    config.api_key = api_key.filter(|k| !k.is_empty())
+        .unwrap_or_else(|| config.api_key_for(&provider_id));
     if let Some(url) = base_url {
         config.base_url = url;
     }
@@ -41,9 +41,9 @@ pub async fn ai_check_connection(
     base_url: Option<String>,
 ) -> Result<bool, String> {
     let mut config = AiProviderConfig::load();
-    if let Some(key) = api_key {
-        config.api_key = key;
-    }
+    // Use provided key, or resolve from per-provider store
+    config.api_key = api_key.filter(|k| !k.is_empty())
+        .unwrap_or_else(|| config.api_key_for(&provider_id));
     if let Some(url) = base_url {
         config.base_url = url;
     }

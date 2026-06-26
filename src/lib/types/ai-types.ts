@@ -67,6 +67,8 @@ export interface AiProviderConfig {
   api_key: string;
   base_url: string;
   model: string;
+  model_name?: string;
+  provider_keys?: Record<string, string>;
 }
 
 export interface AIState {

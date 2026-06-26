@@ -331,11 +331,13 @@ export class AiPanelV2 extends LitElement {
   private async _loadConfig() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const c = await invoke<{ provider: string; model: string; model_name: string; api_key: string }>('ai_get_config');
+      const c = await invoke<{ provider: string; model: string; model_name: string; api_key: string; provider_keys: Record<string, string> }>('ai_get_config');
       this.provider = c.provider;
       this.modelId = c.model || '';
       this.modelName = c.model_name || '';
-      this.apiKey = c.api_key || '';
+      // Resolve API key from per-provider store
+      const providerKeys = c.provider_keys || {};
+      this.apiKey = providerKeys[c.provider] || c.api_key || '';
       this.baseUrl = '';
       // Emit to other components
       if (this.modelId) {

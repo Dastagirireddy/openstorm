@@ -277,6 +277,8 @@ impl Default for DebugpyConfig {
     }
 }
 
+use std::collections::HashMap;
+
 // ── AI Provider Configuration ────────────────────────────────
 
 /// AI provider configuration (stored as plaintext JSON)
@@ -284,7 +286,7 @@ impl Default for DebugpyConfig {
 pub struct AiProviderConfig {
     /// Provider ID: "ollama", "openai", "anthropic", etc.
     pub provider: String,
-    /// API key (empty for Ollama)
+    /// API key for the active provider (kept for backward compat)
     pub api_key: String,
     /// Base URL for the provider API
     pub base_url: String,
@@ -293,6 +295,9 @@ pub struct AiProviderConfig {
     /// Model display name (cached for display)
     #[serde(default)]
     pub model_name: String,
+    /// Per-provider API keys (persisted across provider switches)
+    #[serde(default)]
+    pub provider_keys: HashMap<String, String>,
 }
 
 impl Default for AiProviderConfig {
@@ -303,6 +308,7 @@ impl Default for AiProviderConfig {
             base_url: "http://localhost:11434".to_string(),
             model: String::new(),
             model_name: String::new(),
+            provider_keys: HashMap::new(),
         }
     }
 }
@@ -313,6 +319,32 @@ impl AiProviderConfig {
         let proj_dirs = ProjectDirs::from("com", "OpenStorm", "OpenStorm")
             .expect("no valid home directory");
         proj_dirs.config_dir().join("ai-providers.json")
+    }
+
+    /// Resolve the API key for a given provider.
+    /// Checks provider_keys map first, falls back to the legacy api_key field.
+    pub fn api_key_for(&self, provider_id: &str) -> String {
+        self.provider_keys
+            .get(provider_id)
+            .cloned()
+            .filter(|k| !k.is_empty())
+            .or_else(|| {
+                if self.provider == provider_id && !self.api_key.is_empty() {
+                    Some(self.api_key.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default()
+    }
+
+    /// Save an API key for a specific provider.
+    pub fn set_api_key(&mut self, provider_id: &str, key: String) {
+        self.provider_keys.insert(provider_id.to_string(), key.clone());
+        // Keep legacy field in sync for the active provider
+        if self.provider == provider_id {
+            self.api_key = key;
+        }
     }
 
     /// Load config from disk, or return defaults

@@ -31,9 +31,9 @@ pub async fn ai_chat(
     let mut config = AiProviderConfig::load();
     // Override provider_id from the request
     config.provider = provider_id;
-    if let Some(key) = api_key {
-        config.api_key = key;
-    }
+    // Use provided key, or resolve from per-provider store
+    config.api_key = api_key.filter(|k| !k.is_empty())
+        .unwrap_or_else(|| config.api_key_for(&config.provider));
     if let Some(url) = base_url {
         config.base_url = url;
     }
