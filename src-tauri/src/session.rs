@@ -17,26 +17,26 @@ pub struct SessionTab {
     pub modified: bool,
     #[serde(default)]
     pub content: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "tabType")]
     pub tab_type: Option<String>,
     #[serde(default)]
     pub pinned: bool,
-    #[serde(default)]
+    #[serde(default, alias = "lastUsed")]
     pub last_used: Option<u64>,
 }
 
 /// Panel visibility state
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PanelState {
-    #[serde(default)]
+    #[serde(default, alias = "git_panel_visible")]
     pub git_panel_visible: bool,
-    #[serde(default)]
+    #[serde(default, alias = "commit_panel_visible")]
     pub commit_panel_visible: bool,
-    #[serde(default)]
+    #[serde(default, alias = "active_status_bar_panel")]
     pub active_status_bar_panel: Option<String>,
-    #[serde(default)]
+    #[serde(default, alias = "sidebarWidth")]
     pub sidebar_width: Option<u32>,
-    #[serde(default)]
+    #[serde(default, alias = "terminalHeight")]
     pub terminal_height: Option<u32>,
 }
 

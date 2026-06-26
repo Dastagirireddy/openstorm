@@ -943,10 +943,13 @@ export class OpenStormApp extends TailwindElement() {
       modified: boolean;
       content?: string;
       tab_type?: string;
+      tabType?: string;
       pinned: boolean;
       last_used?: number;
+      lastUsed?: number;
     }>;
     active_tab_id?: string;
+    activeTabId?: string;
     panels?: {
       git_panel_visible: boolean;
       commit_panel_visible: boolean;
@@ -955,16 +958,17 @@ export class OpenStormApp extends TailwindElement() {
   }): boolean => {
     console.log('[Session] Restoring session');
 
-    // Restore tabs
+    // Restore tabs - handle both camelCase (localStorage) and snake_case (backend)
     this.tabs = session.tabs.map(t => ({
       ...t,
-      tabType: t.tab_type as EditorTab['tabType'],
-      lastUsed: t.last_used,
+      tabType: (t.tabType || t.tab_type) as EditorTab['tabType'],
+      lastUsed: t.lastUsed || t.last_used,
     }));
 
-    // Restore active tab
-    if (session.active_tab_id) {
-      this.activeTabId = session.active_tab_id;
+    // Restore active tab - handle both camelCase and snake_case
+    const activeTabId = session.activeTabId || session.active_tab_id;
+    if (activeTabId) {
+      this.activeTabId = activeTabId;
     } else if (this.tabs.length > 0) {
       this.activeTabId = this.tabs[0].id;
     }
