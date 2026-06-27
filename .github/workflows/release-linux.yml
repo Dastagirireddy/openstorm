@@ -74,7 +74,15 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
       - name: List bundle directory
-        run: find src-tauri/target/release/bundle -type f | sort
+        run: |
+          echo "=== Bundle files ==="
+          find src-tauri/target/release/bundle -type f | sort
+          echo ""
+          echo "=== Searching for latest.json anywhere ==="
+          find src-tauri/target -name "latest.json" 2>/dev/null
+          echo ""
+          echo "=== Searching for .sig files ==="
+          find src-tauri/target -name "*.sig" 2>/dev/null
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
