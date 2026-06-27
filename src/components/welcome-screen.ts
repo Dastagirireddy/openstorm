@@ -3,6 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { TailwindElement } from "../tailwind-element.js";
 import { dispatch } from "../lib/types/events.js";
 import { invoke } from "@tauri-apps/api/core";
+import { loadTemplatePicker } from "../lib/utils/lazy-loader.js";
 
 export type GitStatus = 'synced' | 'modified' | 'behind' | 'ahead' | 'untracked';
 export type ProjectType = 'rust' | 'node' | 'python' | 'go' | 'java' | 'typescript' | 'react' | 'vue' | 'angular' | 'docker' | 'database' | 'generic';
@@ -27,9 +28,12 @@ export class WelcomeScreen extends TailwindElement() {
   @state() private selectedIndex = -1;
   @state() private templatePickerOpen = false;
 
-  async connectedCallback(): void {
+  async connectedCallback(): Promise<void> {
     super.connectedCallback();
     this.setupKeyboardNavigation();
+    document.addEventListener("open-new-project", () => {
+      this.handleNewProject();
+    });
     await this.loadRecentProjects();
   }
 
@@ -117,7 +121,8 @@ export class WelcomeScreen extends TailwindElement() {
     dispatch("open-file", {});
   };
 
-  private handleNewProject = (): void => {
+  private handleNewProject = async (): Promise<void> => {
+    await loadTemplatePicker();
     this.templatePickerOpen = true;
   };
 
@@ -289,8 +294,8 @@ export class WelcomeScreen extends TailwindElement() {
 
           return html`
             <div
-              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-all rounded-lg group border-l-2"
-              style="border-color: ${isSelected ? 'var(--brand-primary)' : 'transparent'}; background-color: ${isSelected ? 'var(--app-surface)' : 'transparent'};"
+              class="flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors rounded-lg group hover:bg-[var(--app-surface)]"
+              style="background-color: ${isSelected ? 'var(--app-surface)' : 'transparent'};"
               @click=${() => this.handleProjectClick(project)}
               @mouseenter=${() => { if (!this.filterText) this.selectedIndex = index; }}
             >

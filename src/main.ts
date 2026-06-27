@@ -351,6 +351,9 @@ export class OpenStormApp extends TailwindElement() {
         case "toggle-debug":
           dispatch("set-active-activity", { activity: "debug" });
           break;
+        case "new-project":
+          dispatch("open-new-project");
+          break;
         case "new-file":
           dispatch("new-file");
           break;

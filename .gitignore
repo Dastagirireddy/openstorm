@@ -36,3 +36,6 @@ graphify-out
 
 # AI agent config (per-developer)
 opencode.json
+
+# Documentation (local only)
+*.md
