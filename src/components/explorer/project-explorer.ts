@@ -762,7 +762,7 @@ export class ProjectExplorer extends TailwindElement() {
     try {
       const result = await invoke('list_directory', { path: node.path });
       node.children = result as FileNode[];
-      this.requestUpdate();
+      this.files = [...this.files];
     } catch (error) {
       console.error('Failed to load children:', error);
     }
