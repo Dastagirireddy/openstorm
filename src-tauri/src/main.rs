@@ -686,10 +686,8 @@ fn main() {
             if let RunEvent::WindowEvent { label, event, .. } = event {
                 if label == "main" {
                     match event {
-                        tauri::WindowEvent::CloseRequested { api, .. } => {
-                            // Save state before closing
+                        tauri::WindowEvent::CloseRequested { .. } => {
                             log_info!("Window closing, saving state...");
-                            api.prevent_close();
                         }
                         _ => {}
                     }
