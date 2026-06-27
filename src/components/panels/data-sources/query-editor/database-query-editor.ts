@@ -742,8 +742,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
     return html`
       <div
-        class="border rounded-lg overflow-hidden transition-all ${isActive ? 'ring-2 ring-indigo-500 shadow-lg' : 'hover:shadow-md'}"
-        style="background: var(--app-bg); border-color: var(--app-border);"
+        class="border rounded-lg overflow-hidden transition-all ${isActive ? 'ring-2 shadow-lg' : 'hover:shadow-md'}"
+        style="background: var(--app-bg); border-color: var(--app-border); ${isActive ? 'ring-color: var(--brand-primary);' : ''}"
       >
         <!-- Card Header: Query on left, Actions on right -->
         <div
@@ -1372,8 +1372,8 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
               <div class="p-4">
                 <input
                   type="text"
-                  class="w-full text-sm px-3 py-2 rounded border focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                  style="background: var(--app-bg); border-color: var(--app-border); color: var(--app-foreground);"
+                  class="w-full text-sm px-3 py-2 rounded border focus:outline-none focus:ring-1"
+                  style="background: var(--app-bg); border-color: var(--app-border); color: var(--app-foreground); --tw-ring-color: var(--brand-primary);"
                   placeholder="e.g., Get all users"
                   id="save-query-name"
                   @keydown=${(e: KeyboardEvent) => {

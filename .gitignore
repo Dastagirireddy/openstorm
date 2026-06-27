@@ -39,3 +39,4 @@ opencode.json
 
 # Documentation (local only)
 *.md
+!README.md
