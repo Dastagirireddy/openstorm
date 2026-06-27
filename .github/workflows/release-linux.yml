@@ -61,28 +61,77 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install
 
-      - name: Debug signing key
-        run: |
-          echo "TAURI_SIGNING_PRIVATE_KEY length: ${#TAURI_SIGNING_PRIVATE_KEY}"
-          echo "First 20 chars: ${TAURI_SIGNING_PRIVATE_KEY:0:20}"
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      - name: Build frontend
+        run: pnpm build
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2"
 
       - name: Build Tauri app
-        run: pnpm tauri build -- ${{ matrix.args }}
+        run: cargo tauri build -- ${{ matrix.args }}
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: List bundle directory
+      - name: Sign AppImage and generate updater manifest
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          echo "=== Searching for AppImage ==="
+          APPIMAGE=$(find src-tauri/target -name "*.AppImage" -type f | head -1)
+          echo "AppImage: $APPIMAGE"
+
+          if [ -n "$APPIMAGE" ]; then
+            echo "=== Signing AppImage ==="
+            cargo tauri signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" "$APPIMAGE"
+
+            echo "=== Searching for .sig file ==="
+            SIG_FILE="${APPIMAGE}.sig"
+            if [ -f "$SIG_FILE" ]; then
+              echo "Signature: $SIG_FILE"
+              SIG_CONTENT=$(cat "$SIG_FILE")
+            else
+              echo ".sig not found, trying alternate location"
+              ALT_SIG=$(find src-tauri/target -name "*.sig" -type f | head -1)
+              if [ -n "$ALT_SIG" ]; then
+                SIG_CONTENT=$(cat "$ALT_SIG")
+                SIG_FILE="$ALT_SIG"
+              fi
+            fi
+
+            echo "=== Generating latest.json ==="
+            VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
+            DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+            DOWNLOAD_URL="https://github.com/Dastagirireddy/openstorm/releases/download/v${VERSION}/$(basename "$APPIMAGE")"
+            BUNDLE_DIR=$(dirname "$APPIMAGE")
+
+            cat > "${BUNDLE_DIR}/latest.json" << EOFLATEST
+            {
+              "version": "v${VERSION}",
+              "notes": "Update to v${VERSION}",
+              "pub_date": "${DATE}",
+              "platforms": {
+                "linux-x86_64": {
+                  "signature": "${SIG_CONTENT}",
+                  "url": "${DOWNLOAD_URL}"
+                }
+              }
+            }
+            EOFLATEST
+            echo "Created ${BUNDLE_DIR}/latest.json"
+          else
+            echo "No AppImage found - skipping updater manifest"
+          fi
+
+      - name: List all bundle files
         run: |
           echo "=== Bundle files ==="
           find src-tauri/target/release/bundle -type f | sort
           echo ""
-          echo "=== Searching for latest.json anywhere ==="
-          find src-tauri/target -name "latest.json" 2>/dev/null
-          echo ""
-          echo "=== Searching for .sig files ==="
+          echo "=== .sig files ==="
           find src-tauri/target -name "*.sig" 2>/dev/null
+          echo ""
+          echo "=== latest.json ==="
+          find src-tauri/target -name "latest.json" 2>/dev/null
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
