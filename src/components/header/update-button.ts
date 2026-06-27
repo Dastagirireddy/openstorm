@@ -10,19 +10,139 @@ export class UpdateButton extends TailwindElement() {
   @state() private dismissed = false;
 
   private unsubscribe?: () => void;
-
   private errorTimeout?: ReturnType<typeof setTimeout>;
+
+  static styles = css`
+    :host {
+      display: inline-flex;
+      align-items: center;
+      height: 100%;
+    }
+
+    .update-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      height: 18px;
+      padding: 0 8px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background 0.15s ease, color 0.15s ease;
+      position: relative;
+    }
+
+    /* Idle — hidden */
+    .state-idle {
+      display: none;
+    }
+
+    /* Checking — subtle text with spinner */
+    .state-checking {
+      background: transparent;
+      color: var(--app-foreground);
+      opacity: 0.7;
+    }
+
+    /* Update Available — brand indigo background, white text */
+    .state-available {
+      background: var(--app-button-background);
+      color: var(--app-button-foreground);
+    }
+    .state-available:hover {
+      background: var(--app-button-hover);
+    }
+
+    /* Downloading — brand indigo with lower opacity */
+    .state-downloading {
+      background: color-mix(in srgb, var(--app-button-background) 80%, transparent);
+      color: var(--app-button-foreground);
+    }
+
+    /* Installing — brand indigo with even lower opacity, pulsing */
+    .state-installing {
+      background: color-mix(in srgb, var(--app-button-background) 60%, transparent);
+      color: var(--app-button-foreground);
+      animation: pulse-opacity 1.2s ease-in-out infinite;
+    }
+
+    /* Completed — success green */
+    .state-completed {
+      background: var(--app-continue-color);
+      color: #fff;
+    }
+    .state-completed:hover {
+      background: color-mix(in srgb, var(--app-continue-color) 85%, #000);
+    }
+
+    /* Error — error red */
+    .state-error {
+      background: var(--app-breakpoint);
+      color: #fff;
+    }
+
+    .icon-wrap {
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      line-height: 0;
+    }
+
+    .label {
+      line-height: 1;
+    }
+
+    .dismiss-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.2);
+      border: none;
+      cursor: pointer;
+      padding: 0;
+      margin-left: 2px;
+      transition: background 0.15s ease;
+      flex-shrink: 0;
+    }
+    .dismiss-btn:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse-opacity {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+  `;
 
   connectedCallback(): void {
     super.connectedCallback();
     updater.initialize();
     this.unsubscribe = updater.subscribe((state) => {
       this.updateState = state;
-      // Reset dismissed when state changes to something new
       if (state.status !== "idle" && state.status !== "error") {
         this.dismissed = false;
       }
-      // Auto-dismiss errors after 3 seconds
       if (state.status === "error") {
         clearTimeout(this.errorTimeout);
         this.errorTimeout = setTimeout(() => {
@@ -41,11 +161,9 @@ export class UpdateButton extends TailwindElement() {
   private handleClick(): void {
     switch (this.updateState.status) {
       case "update-available":
-        // Start download
         updater.downloadAndInstall();
         break;
       case "completed":
-        // Restart the app
         updater.restart();
         break;
     }
@@ -64,14 +182,15 @@ export class UpdateButton extends TailwindElement() {
   private getIcon(): string {
     switch (this.updateState.status) {
       case "checking":
+        return "loader";
       case "installing":
         return "loader";
       case "downloading":
-        return "download";
+        return "arrow-down-to-line";
       case "update-available":
-        return "download";
+        return "arrow-down-to-line";
       case "completed":
-        return "download";
+        return "rotate-ccw";
       case "error":
         return "alert-triangle";
       default:
@@ -79,18 +198,30 @@ export class UpdateButton extends TailwindElement() {
     }
   }
 
+  private getStateClass(): string {
+    switch (this.updateState.status) {
+      case "checking": return "state-checking";
+      case "downloading": return "state-downloading";
+      case "installing": return "state-installing";
+      case "update-available": return "state-available";
+      case "completed": return "state-completed";
+      case "error": return "state-error";
+      default: return "state-idle";
+    }
+  }
+
   private getLabel(): string {
     switch (this.updateState.status) {
       case "checking":
-        return "Checking...";
+        return "Checking";
       case "downloading":
-        return "Downloading...";
+        return "Downloading";
       case "installing":
-        return "Installing...";
+        return "Installing";
       case "update-available":
-        return `Update v${this.updateState.version}`;
+        return "Update available";
       case "completed":
-        return "Restart to Update";
+        return "Restart";
       case "error":
         return "Failed";
       default:
@@ -101,9 +232,9 @@ export class UpdateButton extends TailwindElement() {
   private getTooltip(): string {
     switch (this.updateState.status) {
       case "update-available":
-        return `Update to version ${this.updateState.version}`;
+        return `Update available: v${this.updateState.version}`;
       case "completed":
-        return `Restart to apply update v${this.updateState.version}`;
+        return `Click to restart and apply v${this.updateState.version}`;
       case "error":
         return this.updateState.message;
       default:
@@ -130,7 +261,8 @@ export class UpdateButton extends TailwindElement() {
   private isSpinning(): boolean {
     return (
       this.updateState.status === "checking" ||
-      this.updateState.status === "installing"
+      this.updateState.status === "installing" ||
+      this.updateState.status === "downloading"
     );
   }
 
@@ -144,34 +276,32 @@ export class UpdateButton extends TailwindElement() {
     const tooltip = this.getTooltip();
     const disabled = this.isDisabled();
     const spinning = this.isSpinning();
+    const stateClass = this.getStateClass();
     const showDismiss =
       this.updateState.status === "completed" ||
       this.updateState.status === "error";
 
     return html`
       <button
-        class="flex items-center gap-1.5 h-[24px] px-2 rounded bg-transparent border-none cursor-pointer transition-colors duration-150 hover:bg-[var(--app-toolbar-hover)] disabled:cursor-not-allowed disabled:opacity-50"
-        ?disabled=${disabled}
+        class="update-btn ${stateClass} ${disabled ? "disabled" : ""}"
         title="${tooltip}"
         @click=${this.handleClick}>
-        <os-icon
-          name="${icon}"
-          color="var(--app-disabled-foreground)"
-          width="12"
-          class="${spinning ? "animate-spin" : ""}"></os-icon>
-        <span
-          class="text-[11px] font-medium whitespace-nowrap"
-          style="color: var(--app-foreground);">
-          ${label}
+        <span class="icon-wrap">
+          <os-icon
+            name="${icon}"
+            color="currentColor"
+            width="12"
+            class="${spinning ? "spin" : ""}"></os-icon>
         </span>
+        <span class="label">${label}</span>
         ${showDismiss
           ? html`
-              <os-icon
-                name="x"
-                color="var(--app-disabled-foreground)"
-                width="10"
-                class="ml-1 cursor-pointer hover:opacity-80"
-                @click=${this.handleDismiss}></os-icon>
+              <button
+                class="dismiss-btn"
+                title="Dismiss"
+                @click=${this.handleDismiss}>
+                <os-icon name="x" color="currentColor" width="8"></os-icon>
+              </button>
             `
           : ""}
       </button>

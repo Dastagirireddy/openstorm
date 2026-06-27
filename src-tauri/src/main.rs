@@ -22,8 +22,21 @@ mod theme;
 use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
 use tauri_plugin_updater::UpdaterExt;
 
+/// Mock update check for dev mode - always reports an update available
+#[tauri::command]
+#[cfg(debug_assertions)]
+async fn check_for_update() -> Result<UpdateCheckResult, String> {
+    println!("[updater:mock] Returning mock update available");
+    Ok(UpdateCheckResult {
+        available: true,
+        version: "99.0.0".into(),
+        notes: "Mock update for local testing — this is not a real update.".into(),
+    })
+}
+
 /// Check for updates (non-blocking, returns version info only)
 #[tauri::command]
+#[cfg(not(debug_assertions))]
 async fn check_for_update(app: tauri::AppHandle) -> Result<UpdateCheckResult, String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
     
@@ -53,8 +66,48 @@ struct UpdateCheckResult {
     notes: String,
 }
 
+/// Mock download and install for dev mode - simulates progress events
+#[tauri::command]
+#[cfg(debug_assertions)]
+async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
+    println!("[updater:mock] Simulating download and install...");
+    let version = "99.0.0";
+
+    // Simulate downloading
+    let _ = app.emit("update-status", serde_json::json!({
+        "status": "downloading",
+        "version": version
+    }));
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Simulate progress
+    for i in 0..=4 {
+        let _ = app.emit("update-download-progress", serde_json::json!({
+            "chunk": (i + 1) * 256 * 1024,
+            "total": 5 * 256 * 1024
+        }));
+        tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
+    }
+
+    // Simulate installing
+    let _ = app.emit("update-status", serde_json::json!({
+        "status": "installing",
+        "version": version
+    }));
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Completed
+    let _ = app.emit("update-status", serde_json::json!({
+        "status": "completed",
+        "version": version
+    }));
+    println!("[updater:mock] Mock install completed");
+    Ok(())
+}
+
 /// Download and install update with progress events
 #[tauri::command]
+#[cfg(not(debug_assertions))]
 async fn download_and_install_update(app: tauri::AppHandle) -> Result<(), String> {
     let updater = app.updater().map_err(|e| e.to_string())?;
     
@@ -553,6 +606,7 @@ fn main() {
             check_for_update,
             download_and_install_update,
             restart_app,
+            #[cfg(not(debug_assertions))]
             check_for_updates,
 
             // === Git ===

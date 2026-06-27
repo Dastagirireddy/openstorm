@@ -224,6 +224,8 @@ export class StatusBar extends TailwindElement() {
             : nothing}
           ${this._renderLspIndicator()}
 
+          <update-button></update-button>
+
           <div class="flex items-center gap-1 cursor-pointer hover:bg-[var(--statusbar-hover-background)] px-2 py-0.5 rounded">
             <os-icon name="git-branch" size="12"></os-icon>
             <span>${this.branch}</span>
@@ -240,7 +242,6 @@ export class StatusBar extends TailwindElement() {
             <span>${encoding.toUpperCase()}</span>
             <span>${lineEnding}</span>
           </div>
-          <update-button></update-button>
           <global-event-log></global-event-log>
         </div>
       </footer>
