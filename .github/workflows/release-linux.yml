@@ -72,12 +72,11 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Sign AppImage and generate updater manifest
+      - name: Generate updater manifest
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -e
-
           echo "=== Searching for AppImage ==="
           APPIMAGE=$(find src-tauri/target -name "*.AppImage" -type f | head -1)
           echo "AppImage: $APPIMAGE"
@@ -87,29 +86,14 @@ jobs:
             exit 0
           fi
 
-          echo "=== Check if Tauri already generated .sig ==="
           SIG_FILE="${APPIMAGE}.sig"
-          if [ ! -f "$SIG_FILE" ]; then
-            echo "No .sig from Tauri, building minisign from source..."
-            cd /tmp
-            curl -sL "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12.tar.gz" | tar xz
-            cd minisign-0.12
-            make
-            sudo cp minisign /usr/local/bin/minisign
-            cd -
-            minisign -v
-
-            echo "=== Writing private key ==="
-            KEYFILE=$(mktemp)
-            echo "$TAURI_SIGNING_PRIVATE_KEY" > "$KEYFILE"
-            echo "=== Signing AppImage ==="
-            minisign -Sm "$APPIMAGE" -s "$KEYFILE" -x "$SIG_FILE"
-            rm -f "$KEYFILE"
+          echo "=== Checking for .sig file ==="
+          if [ -f "$SIG_FILE" ]; then
+            echo "Found: $SIG_FILE"
+          else
+            echo "No .sig file found - checking bundle directory"
+            find src-tauri/target -name "*.sig" -type f
           fi
-
-          echo "=== Signature file ==="
-          ls -la "$SIG_FILE"
-          cat "$SIG_FILE"
 
           echo "=== Generating latest.json ==="
           VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
