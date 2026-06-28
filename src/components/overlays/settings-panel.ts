@@ -2,8 +2,10 @@ import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
+import { open } from '@tauri-apps/plugin-shell';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
+import { updater } from '../../services/updater.js';
 import { ThemeService } from '../../lib/services/theme-service.js';
 import { settingsStore } from '../../lib/services/settings-store.js';
 import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
@@ -60,6 +62,10 @@ export class SettingsPanel extends TailwindElement() {
   @state() private mcpNewCommand = 'npx';
   @state() private mcpNewArgs = '-y @playwright/mcp@latest';
   @state() private appVersion = '';
+  @state() private updateStatus: 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'completed' | 'none' | 'error' = 'idle';
+  @state() private updateVersion = '';
+  @state() private updateProgress = '';
+  private updateResetTimer: ReturnType<typeof setTimeout> | null = null;
 
   connectedCallback(): Promise<void> | void {
     super.connectedCallback();
@@ -99,10 +105,12 @@ export class SettingsPanel extends TailwindElement() {
     document.removeEventListener('open-theme-settings', this._handleOpen);
     if (this._themeDispose) this._themeDispose();
     if (this._settingsDispose) this._settingsDispose();
+    if (this._updateUnsubscribe) this._updateUnsubscribe();
   }
 
   private _themeDispose: (() => void) | null = null;
   private _settingsDispose: (() => void) | null = null;
+  private _updateUnsubscribe: (() => void) | null = null;
 
   private _handleKeyDown(e: KeyboardEvent): void {
     if (!this.isOpen) return;
@@ -867,6 +875,70 @@ export class SettingsPanel extends TailwindElement() {
     `;
   }
 
+  private async handleCheckForUpdate(): Promise<void> {
+    if (this.updateStatus === 'checking' || this.updateStatus === 'downloading' || this.updateStatus === 'installing') return;
+
+    if (this.updateResetTimer) {
+      clearTimeout(this.updateResetTimer);
+      this.updateResetTimer = null;
+    }
+
+    if (this.updateStatus === 'available') {
+      this.updateStatus = 'downloading';
+      await updater.downloadAndInstall();
+      return;
+    }
+
+    if (this.updateStatus === 'completed') {
+      await updater.restart();
+      return;
+    }
+
+    // Clean up any existing subscription
+    if (this._updateUnsubscribe) {
+      this._updateUnsubscribe();
+      this._updateUnsubscribe = null;
+    }
+
+    this.updateStatus = 'checking';
+
+    let initialized = false;
+    this._updateUnsubscribe = updater.subscribe((state) => {
+      if (!initialized) { initialized = true; return; }
+      switch (state.status) {
+        case 'update-available':
+          this.updateStatus = 'available';
+          this.updateVersion = state.version;
+          break;
+        case 'downloading':
+          this.updateStatus = 'downloading';
+          this.updateVersion = state.version;
+          break;
+        case 'installing':
+          this.updateStatus = 'installing';
+          this.updateVersion = state.version;
+          break;
+        case 'completed':
+          this.updateStatus = 'completed';
+          this.updateVersion = state.version;
+          break;
+        case 'idle':
+          if (this.updateStatus === 'checking') {
+            this.updateStatus = 'none';
+            this.updateResetTimer = setTimeout(() => { this.updateStatus = 'idle'; }, 3000);
+          }
+          break;
+        case 'error':
+          this.updateStatus = 'error';
+          this.updateProgress = state.message;
+          this.updateResetTimer = setTimeout(() => { this.updateStatus = 'idle'; }, 3000);
+          break;
+      }
+    });
+
+    await updater.checkForUpdate();
+  }
+
   private renderAboutTab() {
     return html`
       <div class="space-y-7">
@@ -904,15 +976,30 @@ export class SettingsPanel extends TailwindElement() {
 
         <div class="flex items-center gap-3">
           <button
-            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
-            style="border: 1px solid var(--app-border); color: var(--app-foreground);"
-            @click=${() => dispatch('check-updates')}>
-            Check for updates
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+            style="border: 1px solid var(--app-border); color: var(--app-foreground); ${this.updateStatus === 'available' ? 'border-color: var(--brand-primary); color: var(--brand-primary);' : ''} ${this.updateStatus === 'completed' ? 'border-color: #22c55e; color: #22c55e;' : ''} ${this.updateStatus === 'none' || this.updateStatus === 'error' ? 'opacity: 0.6;' : ''}"
+            ?disabled=${this.updateStatus === 'checking' || this.updateStatus === 'downloading' || this.updateStatus === 'installing'}
+            @click=${() => this.handleCheckForUpdate()}>
+            ${this.updateStatus === 'checking'
+              ? html`<os-icon name="loader" size="13" class="animate-spin"></os-icon> Checking...`
+              : this.updateStatus === 'downloading'
+                ? html`<os-icon name="loader" size="13" class="animate-spin"></os-icon> Downloading...`
+                : this.updateStatus === 'installing'
+                  ? html`<os-icon name="loader" size="13" class="animate-spin"></os-icon> Installing...`
+                  : this.updateStatus === 'available'
+                    ? html`<os-icon name="arrow-down-to-line" size="13"></os-icon> Download v${this.updateVersion}`
+                    : this.updateStatus === 'completed'
+                      ? html`<os-icon name="rotate-ccw" size="13"></os-icon> Restart to update`
+                      : this.updateStatus === 'none'
+                        ? html`No updates available`
+                        : this.updateStatus === 'error'
+                          ? html`Update check failed`
+                          : html`Check for updates`}
           </button>
           <button
-            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
+            class="px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
             style="border: 1px solid var(--app-border); color: var(--app-foreground);"
-            @click=${() => window.open('https://github.com/Dastagirireddy/openstorm', '_blank')}>
+            @click=${() => open('https://github.com/Dastagirireddy/openstorm')}>
             <os-icon name="git-branch" size="13"></os-icon>
             View on GitHub
           </button>
