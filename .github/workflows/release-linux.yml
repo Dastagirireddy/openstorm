@@ -72,19 +72,12 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Install minisign
-        run: |
-          sudo apt-get update && sudo apt-get install -y minisign || true
-          if ! command -v minisign &> /dev/null; then
-            curl -sL https://github.com/jedisct1/minisign/releases/latest/download/minisign--linux-x86_64.tar.gz | sudo tar xz -C /usr/local/bin --strip-components=1
-          fi
-          minisign -v
-
       - name: Sign AppImage and generate updater manifest
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           set -e
+
           echo "=== Searching for AppImage ==="
           APPIMAGE=$(find src-tauri/target -name "*.AppImage" -type f | head -1)
           echo "AppImage: $APPIMAGE"
@@ -94,23 +87,29 @@ jobs:
             exit 0
           fi
 
-          echo "=== Writing private key ==="
-          KEYFILE=$(mktemp)
-          echo "$TAURI_SIGNING_PRIVATE_KEY" > "$KEYFILE"
-
-          echo "=== Signing AppImage with minisign ==="
-          minisign -Sm "$APPIMAGE" -s "$KEYFILE" -x "${APPIMAGE}.sig"
-          rm -f "$KEYFILE"
+          echo "=== Check if Tauri already generated .sig ==="
+          SIG_FILE="${APPIMAGE}.sig"
+          if [ ! -f "$SIG_FILE" ]; then
+            echo "No .sig from Tauri, installing minisign via cargo..."
+            cargo install minisign
+            echo "=== Writing private key ==="
+            KEYFILE=$(mktemp)
+            echo "$TAURI_SIGNING_PRIVATE_KEY" > "$KEYFILE"
+            echo "=== Signing AppImage ==="
+            minisign -Sm "$APPIMAGE" -s "$KEYFILE" -x "$SIG_FILE"
+            rm -f "$KEYFILE"
+          fi
 
           echo "=== Signature file ==="
-          ls -la "${APPIMAGE}.sig"
+          ls -la "$SIG_FILE"
+          cat "$SIG_FILE"
 
           echo "=== Generating latest.json ==="
           VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           APPIMAGE_NAME=$(basename "$APPIMAGE")
           DOWNLOAD_URL="https://github.com/Dastagirireddy/openstorm/releases/download/v${VERSION}/${APPIMAGE_NAME}"
-          SIG_CONTENT=$(cat "${APPIMAGE}.sig")
+          SIG_CONTENT=$(cat "$SIG_FILE" | tr '\n' ' ' | sed 's/  */ /g')
           BUNDLE_DIR=$(dirname "$APPIMAGE")
 
           printf '{\n  "version": "v%s",\n  "notes": "Update to v%s",\n  "pub_date": "%s",\n  "platforms": {\n    "linux-x86_64": {\n      "signature": "%s",\n      "url": "%s"\n    }\n  }\n}\n' \
