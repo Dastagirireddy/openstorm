@@ -90,18 +90,13 @@ jobs:
           echo "=== Check if Tauri already generated .sig ==="
           SIG_FILE="${APPIMAGE}.sig"
           if [ ! -f "$SIG_FILE" ]; then
-            echo "No .sig from Tauri, installing minisign..."
-            ARCH=$(uname -m)
-            if [ "$ARCH" = "x86_64" ]; then
-              MINISIGN_URL="https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz"
-            elif [ "$ARCH" = "aarch64" ]; then
-              MINISIGN_URL="https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux-arm64.tar.gz"
-            else
-              echo "Unsupported arch: $ARCH"; exit 1
-            fi
-            curl -sL "$MINISIGN_URL" | tar xz
-            chmod +x minisign-*/minisign
-            sudo cp minisign-*/minisign /usr/local/bin/minisign
+            echo "No .sig from Tauri, building minisign from source..."
+            cd /tmp
+            curl -sL "https://github.com/jedisct1/minisign/releases/download/0.12/minisign-0.12.tar.gz" | tar xz
+            cd minisign-0.12
+            make
+            sudo cp minisign /usr/local/bin/minisign
+            cd -
             minisign -v
 
             echo "=== Writing private key ==="
