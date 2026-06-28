@@ -130,11 +130,10 @@ macro_rules! log_error {
     };
 }
 
-/// Log a debug message (only in debug builds)
+/// Log a debug message (enabled in all builds for production debugging)
 #[macro_export]
 macro_rules! log_debug {
     ($($arg:tt)*) => {
-        #[cfg(debug_assertions)]
         $crate::log::emit_log("debug", &format!($($arg)*))
     };
 }

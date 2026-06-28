@@ -1,6 +1,7 @@
 //! Directory operation commands
 
 use super::file::FileInfo;
+use crate::log_debug;
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -22,9 +23,16 @@ pub fn list_directory(path: String) -> Result<Vec<FileInfo>, String> {
     let mut files: Vec<FileInfo> = entries
         .filter_map(|entry| entry.ok())
         .filter_map(|entry| {
-            let metadata = entry.metadata().ok()?;
             let file_name = entry.file_name().to_string_lossy().to_string();
             let file_path = entry.path().to_string_lossy().to_string();
+
+            let metadata = match entry.metadata() {
+                Ok(m) => m,
+                Err(e) => {
+                    log_debug!("metadata failed for {:?}: {}", file_path, e);
+                    return None;
+                }
+            };
 
             // Filter out hidden files and folders (starting with '.')
             if file_name.starts_with('.') {
