@@ -1,6 +1,7 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
+import { getVersion } from '@tauri-apps/api/app';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
 import { ThemeService } from '../../lib/services/theme-service.js';
@@ -58,9 +59,12 @@ export class SettingsPanel extends TailwindElement() {
   @state() private mcpNewName = '';
   @state() private mcpNewCommand = 'npx';
   @state() private mcpNewArgs = '-y @playwright/mcp@latest';
+  @state() private appVersion = '';
 
   connectedCallback(): Promise<void> | void {
     super.connectedCallback();
+
+    getVersion().then(v => { this.appVersion = v; }).catch(() => {});
 
     this._handleKeyDown = this._handleKeyDown.bind(this);
     document.addEventListener('keydown', this._handleKeyDown);
@@ -876,16 +880,15 @@ export class SettingsPanel extends TailwindElement() {
           <div>
             <h2 class="text-base font-bold">OpenStorm</h2>
             <p class="text-xs" style="color: var(--app-disabled-foreground);">A high-performance, lightweight IDE</p>
-            <p class="text-xs font-mono mt-1" style="color: var(--app-disabled-foreground); opacity: 0.6;">v1.3.0</p>
+            <p class="text-xs font-mono mt-1" style="color: var(--app-disabled-foreground); opacity: 0.6;">v${this.appVersion}</p>
           </div>
         </div>
 
         <div class="space-y-0 rounded-lg overflow-hidden" style="border: 1px solid var(--app-border);">
           ${[
-            { label: 'Build', value: `macOS · ${navigator.platform} · v1.3.0` },
+            { label: 'Build', value: `${navigator.platform} · v${this.appVersion}` },
             { label: 'License', value: 'MIT' },
-            { label: 'Source code', value: 'github.com/openstorm/openstorm', icon: 'git-branch' },
-            { label: 'Website', value: 'openstorm.dev', icon: 'globe' },
+            { label: 'Source code', value: 'github.com/Dastagirireddy/openstorm', icon: 'git-branch' },
           ].map((item, i) => html`
             <div
               class="flex items-center gap-4 px-4 py-3"
@@ -909,12 +912,11 @@ export class SettingsPanel extends TailwindElement() {
           <button
             class="px-4 py-2 text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
             style="border: 1px solid var(--app-border); color: var(--app-foreground);"
-            @click=${() => window.open('https://github.com/openstorm/openstorm', '_blank')}>
+            @click=${() => window.open('https://github.com/Dastagirireddy/openstorm', '_blank')}>
             <os-icon name="git-branch" size="13"></os-icon>
             View on GitHub
           </button>
         </div>
-      </div>
       </div>
     `;
   }

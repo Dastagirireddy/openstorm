@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenStorm",
-  "version": "1.4.6",
+  "version": "1.4.7",
   "identifier": "com.openstorm.ide",
   "build": {
     "frontendDist": "../dist",
@@ -60,7 +60,7 @@
       "endpoints": [
         "https://github.com/Dastagirireddy/openstorm/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdEQzRGODk5MDkzQ0EzQTUKUldTbG96d0ptZmpFZlZReHBLSDNYNmZhc3VhditpNDBTMXBCNXJVNVU1SkZvN0wwQys4WitNK0kK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXkgRUZBM0IzM0M0N0U3MEZBNApSV1NrRCtkSFBMT2o3NHR6NUhIeDhqcGNmUG1iaDF6UkdzWlZndHJid1NYUDBVNFg1ZHdEdVNaKwo="
     }
   }
 }

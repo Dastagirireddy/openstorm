@@ -145,6 +145,8 @@ export class OpenStormApp extends TailwindElement() {
     this.setupDatabaseMenuHandlers();
     // Listen for open-query-editor events
     document.addEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
+    // Listen for check-updates event from Settings > About
+    document.addEventListener('check-updates', () => this.checkForUpdatesManual());
     // Pre-load app console panel on startup
     loadAppConsolePanel();
     // Load MCP tools on startup

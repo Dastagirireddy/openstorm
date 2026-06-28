@@ -761,7 +761,13 @@ export class ProjectExplorer extends TailwindElement() {
   private async loadChildren(node: FileNode): Promise<void> {
     try {
       const result = await invoke('list_directory', { path: node.path });
-      node.children = result as FileNode[];
+      const children = result as FileNode[];
+      const targetNode = this.findNodeByPath(node.path, this.files);
+      if (targetNode) {
+        targetNode.children = children;
+      } else {
+        node.children = children;
+      }
       this.files = [...this.files];
     } catch (error) {
       console.error('Failed to load children:', error);
