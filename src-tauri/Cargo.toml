@@ -1,7 +1,7 @@
 [package]
 name = "openstorm"
-version = "1.4.3"
-description = "A high-performance, lightweight IDE built to compete with JetBrains products"
+version = "1.4.4"
+description = "A high-performance, lightweight IDE built for modern development workflows"
 authors = ["OpenStorm Team"]
 edition = "2021"
 license = "MIT"
