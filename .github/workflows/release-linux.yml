@@ -72,22 +72,22 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Sign .deb packages for updater
+      - name: Sign AppImage for updater
         run: |
           sudo apt-get install -y minisign
 
           # Decode the minisign private key
           echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > /tmp/signing.key
 
-          echo "=== Signing .deb files ==="
-          for DEB in $(find src-tauri/target -name "*.deb" -type f); do
-            DEB_NAME=$(basename "$DEB")
-            echo "Signing: $DEB_NAME"
-            minisign -S -s /tmp/signing.key -x "${DEB}.sig" -m "$DEB" -q
-            if [ -f "${DEB}.sig" ]; then
-              echo "  Created: ${DEB_NAME}.sig"
+          echo "=== Signing AppImage files ==="
+          for APPIMAGE in $(find src-tauri/target -name "*.AppImage" -type f); do
+            AI_NAME=$(basename "$APPIMAGE")
+            echo "Signing: $AI_NAME"
+            minisign -S -s /tmp/signing.key -x "${APPIMAGE}.sig" -m "$APPIMAGE" -q
+            if [ -f "${APPIMAGE}.sig" ]; then
+              echo "  Created: ${AI_NAME}.sig"
             else
-              echo "  ERROR: Failed to sign $DEB_NAME"
+              echo "  ERROR: Failed to sign $AI_NAME"
             fi
           done
 
@@ -113,10 +113,7 @@ jobs:
           name: linux-${{ matrix.arch }}
           path: |
             src-tauri/target/**/release/bundle/**/*.AppImage
-            src-tauri/target/**/release/bundle/**/*.deb
-            src-tauri/target/**/release/bundle/**/*.rpm
             src-tauri/target/**/release/bundle/**/*.AppImage.sig
-            src-tauri/target/**/release/bundle/**/*.deb.sig
           if-no-files-found: warn
 
   release:
@@ -143,28 +140,28 @@ jobs:
           REPO="Dastagirireddy/openstorm"
           PLATFORM_ENTRIES=""
 
-          for DEB in $(find artifacts -name "*.deb" -type f | sort); do
-            DEB_NAME=$(basename "$DEB")
-            SIG_FILE="${DEB}.sig"
+          for APPIMAGE in $(find artifacts -name "*.AppImage" -type f | sort); do
+            AI_NAME=$(basename "$APPIMAGE")
+            SIG_FILE="${APPIMAGE}.sig"
 
-            if echo "$DEB_NAME" | grep -q "aarch64"; then
+            if echo "$AI_NAME" | grep -q "aarch64"; then
               PLATFORM_KEY="linux-aarch64"
-            elif echo "$DEB_NAME" | grep -q "amd64"; then
+            elif echo "$AI_NAME" | grep -q "x86_64"; then
               PLATFORM_KEY="linux-x86_64"
             else
-              echo "WARNING: Unknown arch for $DEB_NAME, skipping"
+              echo "WARNING: Unknown arch for $AI_NAME, skipping"
               continue
             fi
 
             if [ ! -f "$SIG_FILE" ]; then
-              echo "WARNING: No .sig file for $DEB_NAME, skipping"
+              echo "WARNING: No .sig file for $AI_NAME, skipping"
               continue
             fi
 
-            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${DEB_NAME}"
+            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${AI_NAME}"
             SIG_CONTENT=$(cat "$SIG_FILE" | tr -d '\n')
 
-            echo "Platform: $PLATFORM_KEY -> $DEB_NAME"
+            echo "Platform: $PLATFORM_KEY -> $AI_NAME"
 
             ENTRY=$(printf '"%s": {"signature": "%s", "url": "%s"}' \
               "$PLATFORM_KEY" "$SIG_CONTENT" "$DOWNLOAD_URL")
@@ -198,9 +195,6 @@ jobs:
             Auto-updates enabled — the app checks for new versions on startup.
           draft: false
           files: |
-            artifacts/**/*.deb
             artifacts/**/*.AppImage
-            artifacts/**/*.rpm
-            artifacts/**/*.sig
-            artifacts/**/*.deb.sig
+            artifacts/**/*.AppImage.sig
             artifacts/latest.json
