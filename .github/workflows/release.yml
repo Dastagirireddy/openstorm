@@ -1,4 +1,4 @@
-name: Release Linux
+name: Release
 
 on:
   push:
@@ -18,16 +18,27 @@ jobs:
       matrix:
         include:
           - platform: 'ubuntu-22.04'
+            os: 'linux'
             arch: 'x64'
             args: ''
           - platform: 'ubuntu-22.04-arm'
+            os: 'linux'
             arch: 'arm64'
             args: ''
+          - platform: 'macos-14'
+            os: 'macos'
+            arch: 'aarch64'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-13'
+            os: 'macos'
+            arch: 'x86_64'
+            args: '--target x86_64-apple-darwin'
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -52,6 +63,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.os == 'macos' && (matrix.arch == 'aarch64' && 'aarch64-apple-darwin' || 'x86_64-apple-darwin') || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -72,24 +85,44 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Sign AppImage for updater
-        run: |
-          sudo apt-get install -y minisign
+      - name: Install minisign (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y minisign
 
+      - name: Install minisign (macOS)
+        if: runner.os == 'macOS'
+        run: brew install minisign
+
+      - name: Sign updater files
+        run: |
           # Decode the minisign private key
           echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > /tmp/signing.key
 
-          echo "=== Signing AppImage files ==="
-          for APPIMAGE in $(find src-tauri/target -name "*.AppImage" -type f); do
-            AI_NAME=$(basename "$APPIMAGE")
-            echo "Signing: $AI_NAME"
-            minisign -S -s /tmp/signing.key -x "${APPIMAGE}.sig" -m "$APPIMAGE" -q
-            if [ -f "${APPIMAGE}.sig" ]; then
-              echo "  Created: ${AI_NAME}.sig"
-            else
-              echo "  ERROR: Failed to sign $AI_NAME"
-            fi
-          done
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            echo "=== Signing AppImage files ==="
+            for FILE in $(find src-tauri/target -name "*.AppImage" -type f); do
+              FILE_NAME=$(basename "$FILE")
+              echo "Signing: $FILE_NAME"
+              minisign -S -s /tmp/signing.key -x "${FILE}.sig" -m "$FILE" -q
+              if [ -f "${FILE}.sig" ]; then
+                echo "  Created: ${FILE_NAME}.sig"
+              else
+                echo "  ERROR: Failed to sign $FILE_NAME"
+              fi
+            done
+          elif [ "${{ runner.os }}" = "macOS" ]; then
+            echo "=== Signing DMG files ==="
+            for FILE in $(find src-tauri/target -name "*.dmg" -type f); do
+              FILE_NAME=$(basename "$FILE")
+              echo "Signing: $FILE_NAME"
+              minisign -S -s /tmp/signing.key -x "${FILE}.sig" -m "$FILE" -q
+              if [ -f "${FILE}.sig" ]; then
+                echo "  Created: ${FILE_NAME}.sig"
+              else
+                echo "  ERROR: Failed to sign $FILE_NAME"
+              fi
+            done
+          fi
 
           rm -f /tmp/signing.key
 
@@ -110,10 +143,12 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ matrix.arch }}
+          name: ${{ matrix.os }}-${{ matrix.arch }}
           path: |
             src-tauri/target/**/release/bundle/**/*.AppImage
+            src-tauri/target/**/release/bundle/**/*.dmg
             src-tauri/target/**/release/bundle/**/*.AppImage.sig
+            src-tauri/target/**/release/bundle/**/*.dmg.sig
           if-no-files-found: warn
 
   release:
@@ -140,6 +175,7 @@ jobs:
           REPO="Dastagirireddy/openstorm"
           PLATFORM_ENTRIES=""
 
+          # Process Linux AppImage files
           for APPIMAGE in $(find artifacts -name "*.AppImage" -type f | sort); do
             AI_NAME=$(basename "$APPIMAGE")
             SIG_FILE="${APPIMAGE}.sig"
@@ -172,6 +208,39 @@ jobs:
             PLATFORM_ENTRIES="${PLATFORM_ENTRIES}${ENTRY}"
           done
 
+          # Process macOS DMG files
+          for DMG in $(find artifacts -name "*.dmg" -type f | sort); do
+            DMG_NAME=$(basename "$DMG")
+            SIG_FILE="${DMG}.sig"
+
+            if echo "$DMG_NAME" | grep -q "aarch64"; then
+              PLATFORM_KEY="darwin-aarch64"
+            elif echo "$DMG_NAME" | grep -q "x86_64"; then
+              PLATFORM_KEY="darwin-x86_64"
+            else
+              echo "WARNING: Unknown arch for $DMG_NAME, skipping"
+              continue
+            fi
+
+            if [ ! -f "$SIG_FILE" ]; then
+              echo "WARNING: No .sig file for $DMG_NAME, skipping"
+              continue
+            fi
+
+            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${DMG_NAME}"
+            SIG_CONTENT=$(cat "$SIG_FILE" | tr -d '\n')
+
+            echo "Platform: $PLATFORM_KEY -> $DMG_NAME"
+
+            ENTRY=$(printf '"%s": {"signature": "%s", "url": "%s"}' \
+              "$PLATFORM_KEY" "$SIG_CONTENT" "$DOWNLOAD_URL")
+
+            if [ -n "$PLATFORM_ENTRIES" ]; then
+              PLATFORM_ENTRIES="${PLATFORM_ENTRIES}, "
+            fi
+            PLATFORM_ENTRIES="${PLATFORM_ENTRIES}${ENTRY}"
+          done
+
           if [ -z "$PLATFORM_ENTRIES" ]; then
             echo "ERROR: No platforms found"
             exit 1
@@ -190,11 +259,15 @@ jobs:
           name: OpenStorm ${{ github.ref_name }}
           body: |
             Download the installer for your platform below.
-            - **x64**: For Intel/AMD processors
-            - **arm64**: For ARM processors (Apple Silicon, Raspberry Pi, etc.)
+            - **Linux x64**: For Intel/AMD processors
+            - **Linux arm64**: For ARM processors (Raspberry Pi, etc.)
+            - **macOS Apple Silicon**: For M1/M2/M3/M4 processors
+            - **macOS Intel**: For Intel-based Macs
             Auto-updates enabled — the app checks for new versions on startup.
           draft: false
           files: |
             artifacts/**/*.AppImage
             artifacts/**/*.AppImage.sig
+            artifacts/**/*.dmg
+            artifacts/**/*.dmg.sig
             artifacts/latest.json
