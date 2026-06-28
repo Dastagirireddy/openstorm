@@ -167,7 +167,7 @@ jobs:
             - **x64**: For Intel/AMD processors
             - **arm64**: For ARM processors (Apple Silicon, Raspberry Pi, etc.)
             Auto-updates enabled — the app checks for new versions on startup.
-          draft: true
+          draft: false
           files: |
             artifacts/**/*.deb
             artifacts/**/*.AppImage
