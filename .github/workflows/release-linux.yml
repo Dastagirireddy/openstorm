@@ -72,44 +72,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Generate updater manifest
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        run: |
-          set -e
-          echo "=== Searching for AppImage ==="
-          APPIMAGE=$(find src-tauri/target -name "*.AppImage" -type f | head -1)
-          echo "AppImage: $APPIMAGE"
-
-          if [ -z "$APPIMAGE" ]; then
-            echo "No AppImage found - skipping"
-            exit 0
-          fi
-
-          SIG_FILE="${APPIMAGE}.sig"
-          echo "=== Checking for .sig file ==="
-          if [ -f "$SIG_FILE" ]; then
-            echo "Found: $SIG_FILE"
-          else
-            echo "No .sig file found - checking bundle directory"
-            find src-tauri/target -name "*.sig" -type f
-          fi
-
-          echo "=== Generating latest.json ==="
-          VERSION=$(grep '"version"' src-tauri/tauri.conf.json | head -1 | sed 's/.*"\([0-9.]*\)".*/\1/')
-          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          APPIMAGE_NAME=$(basename "$APPIMAGE")
-          DOWNLOAD_URL="https://github.com/Dastagirireddy/openstorm/releases/download/v${VERSION}/${APPIMAGE_NAME}"
-          SIG_CONTENT=$(cat "$SIG_FILE" | tr '\n' ' ' | sed 's/  */ /g')
-          BUNDLE_DIR=$(dirname "$APPIMAGE")
-
-          printf '{\n  "version": "v%s",\n  "notes": "Update to v%s",\n  "pub_date": "%s",\n  "platforms": {\n    "linux-x86_64": {\n      "signature": "%s",\n      "url": "%s"\n    }\n  }\n}\n' \
-            "$VERSION" "$VERSION" "$DATE" "$SIG_CONTENT" "$DOWNLOAD_URL" \
-            > "${BUNDLE_DIR}/latest.json"
-
-          echo "=== latest.json created ==="
-          cat "${BUNDLE_DIR}/latest.json"
-
       - name: List all bundle files
         run: |
           echo "=== Bundle files ==="
@@ -117,9 +79,6 @@ jobs:
           echo ""
           echo "=== .sig files ==="
           find src-tauri/target -name "*.sig" 2>/dev/null
-          echo ""
-          echo "=== latest.json ==="
-          find src-tauri/target -name "latest.json" 2>/dev/null
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -130,7 +89,6 @@ jobs:
             src-tauri/target/**/release/bundle/**/*.deb
             src-tauri/target/**/release/bundle/**/*.rpm
             src-tauri/target/**/release/bundle/**/*.AppImage.sig
-            src-tauri/target/**/release/bundle/**/latest.json
           if-no-files-found: warn
 
   release:
@@ -148,6 +106,58 @@ jobs:
       - name: List downloaded files
         run: find artifacts -type f | sort
 
+      - name: Generate unified updater manifest
+        run: |
+          set -e
+
+          VERSION="${GITHUB_REF_NAME#v}"
+          DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO="Dastagirireddy/openstorm"
+          PLATFORM_ENTRIES=""
+
+          for APPIMAGE in $(find artifacts -name "*.AppImage" -type f | sort); do
+            APPIMAGE_NAME=$(basename "$APPIMAGE")
+            SIG_FILE="${APPIMAGE}.sig"
+
+            if echo "$APPIMAGE_NAME" | grep -q "aarch64"; then
+              PLATFORM_KEY="linux-aarch64"
+            elif echo "$APPIMAGE_NAME" | grep -q "amd64"; then
+              PLATFORM_KEY="linux-x86_64"
+            else
+              echo "WARNING: Unknown arch for $APPIMAGE_NAME, skipping"
+              continue
+            fi
+
+            if [ ! -f "$SIG_FILE" ]; then
+              echo "WARNING: No .sig file for $APPIMAGE_NAME, skipping"
+              continue
+            fi
+
+            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${APPIMAGE_NAME}"
+            SIG_CONTENT=$(cat "$SIG_FILE" | tr -d '\n')
+
+            echo "Platform: $PLATFORM_KEY -> $APPIMAGE_NAME"
+
+            ENTRY=$(printf '"%s": {"signature": "%s", "url": "%s"}' \
+              "$PLATFORM_KEY" "$SIG_CONTENT" "$DOWNLOAD_URL")
+
+            if [ -n "$PLATFORM_ENTRIES" ]; then
+              PLATFORM_ENTRIES="${PLATFORM_ENTRIES}, "
+            fi
+            PLATFORM_ENTRIES="${PLATFORM_ENTRIES}${ENTRY}"
+          done
+
+          if [ -z "$PLATFORM_ENTRIES" ]; then
+            echo "ERROR: No platforms found"
+            exit 1
+          fi
+
+          printf '{\n  "version": "v%s",\n  "notes": "Update to v%s",\n  "pub_date": "%s",\n  "platforms": {%s}\n}\n' \
+            "$VERSION" "$VERSION" "$DATE" "$PLATFORM_ENTRIES" > artifacts/latest.json
+
+          echo "=== latest.json ==="
+          cat artifacts/latest.json
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -164,4 +174,4 @@ jobs:
             artifacts/**/*.AppImage
             artifacts/**/*.rpm
             artifacts/**/*.sig
-            artifacts/**/latest.json
+            artifacts/latest.json
