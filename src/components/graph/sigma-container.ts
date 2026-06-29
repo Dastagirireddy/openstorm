@@ -101,8 +101,8 @@ export class SigmaContainer extends LitElement {
     if (this.filters.kinds.length > 0 && !this.filters.kinds.includes(kind)) return false;
     if (this.filters.folders && this.filters.folders.length > 0) {
       const folder = file.split('/').slice(0, -1).join('/');
-      const rootFolder = folder.split('/')[0];
-      if (this.filters.folders.includes(folder) || this.filters.folders.includes(rootFolder)) return false;
+      const isChild = this.filters.folders.some(f => folder === f || folder.startsWith(f + '/'));
+      if (!isChild) return false;
     }
     if (this.filters.files.length > 0 && !this.filters.files.includes(file)) return false;
     return true;
