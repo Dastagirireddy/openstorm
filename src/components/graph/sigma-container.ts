@@ -66,6 +66,7 @@ export class SigmaContainer extends LitElement {
       overflow: hidden;
     }
     #sigma-container {
+      position: relative;
       width: 100%;
       height: 100%;
       background: var(--ai-panel-background, #1e1e2e);
@@ -201,8 +202,8 @@ export class SigmaContainer extends LitElement {
       this.initSigma();
     } else {
       this.sigmaInstance.refresh();
+      this.fitToScreen();
     }
-    requestAnimationFrame(() => this.fitToScreen());
   }
 
   private normalizePositions() {
@@ -269,13 +270,15 @@ export class SigmaContainer extends LitElement {
       },
     });
 
+    this.patchMouseCaptor();
+
     this.sigmaInstance.on('enterNode', ({ node }) => {
-      this.sigmaInstance!.setNodeAttribute(node, 'highlighted', true);
+      this.graph!.setNodeAttribute(node, 'highlighted', true);
       this.sigmaInstance!.refresh();
     });
 
     this.sigmaInstance.on('leaveNode', ({ node }) => {
-      this.sigmaInstance!.removeNodeAttribute(node, 'highlighted');
+      this.graph!.removeNodeAttribute(node, 'highlighted');
       this.sigmaInstance!.refresh();
     });
 
@@ -312,6 +315,21 @@ export class SigmaContainer extends LitElement {
       e.preventDefault();
       e.stopPropagation();
     });
+  }
+
+  private patchMouseCaptor() {
+    if (!this.sigmaInstance) return;
+    const captor = (this.sigmaInstance as any).mouseCaptor;
+    if (!captor || !captor.container) return;
+
+    // Sigma binds mousemove/mouseup on document, which breaks in Shadow DOM
+    // because event.target gets retargeted to the shadow host.
+    // Fix: rebind these handlers on the container instead.
+    const container = captor.container;
+    document.removeEventListener('mousemove', captor.handleMove);
+    document.removeEventListener('mouseup', captor.handleUp);
+    container.addEventListener('mousemove', captor.handleMove, false);
+    container.addEventListener('mouseup', captor.handleUp, false);
   }
 
   private applyDagre() {
@@ -355,7 +373,7 @@ export class SigmaContainer extends LitElement {
     if (!this.sigmaInstance || !this.graph || this.graph.order === 0) return;
 
     const camera = this.sigmaInstance.getCamera();
-    camera.setState({ x: 0, y: 0, ratio: 1.5, angle: 0 });
+    camera.setState({ x: 0.5, y: 0.5 });
     this.sigmaInstance.refresh();
   }
 

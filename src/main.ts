@@ -1567,7 +1567,10 @@ export class OpenStormApp extends TailwindElement() {
                 .projectPath=${this.projectPath}
                 @navigate-to-file=${(e: CustomEvent) => {
                   const { file_path, line } = e.detail;
-                  this.handleFileSelect({ detail: { path: file_path, line } } as CustomEvent);
+                  const absPath = file_path.startsWith('/')
+                    ? file_path
+                    : `${this.projectPath}/${file_path}`;
+                  this.handleFileSelect({ detail: { path: absPath, line } } as CustomEvent);
                 }}>
               </graph-panel>
             </div>
