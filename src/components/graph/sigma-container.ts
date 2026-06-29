@@ -127,8 +127,7 @@ export class SigmaContainer extends LitElement {
     if (graph.order < 3) return;
 
     graph.forEachNode((node) => {
-      const size = graph.getNodeAttribute(node, 'size') || 5;
-      graph.setNodeAttribute(node, 'size', Math.max(size, 8));
+      graph.setNodeAttribute(node, 'size', Math.max(graph.getNodeAttribute(node, 'size') || 5, 8));
     });
 
     const settings = forceAtlas2.inferSettings(graph);
@@ -137,11 +136,10 @@ export class SigmaContainer extends LitElement {
       settings: {
         ...settings,
         barnesHutOptimize: true,
-        barnesHutTheta: 0.5,
+        linLogMode: true,
         scalingRatio: 30,
         gravity: 0.15,
-        strongGravityMode: true,
-        slowDown: 1
+        strongGravityMode: true
       }
     });
   }
@@ -176,11 +174,22 @@ export class SigmaContainer extends LitElement {
       this.graphData,
       this.lodManager['expandedFolders'],
       this.lodManager['expandedFiles'],
-      this.communityPalette,
+      {},
       edgeColor,
     );
 
     if (hierarchicalGraph.order === 0) return;
+
+    // Detect communities with Louvain and assign colors
+    const communities = louvain(hierarchicalGraph);
+    const uniqueCommunities = Array.from(new Set(Object.values(communities)));
+    const colors = iwanthue(uniqueCommunities.length);
+
+    uniqueCommunities.forEach((c, i) => this.communityPalette[c] = colors[i]);
+
+    hierarchicalGraph.forEachNode((node) => {
+      hierarchicalGraph.setNodeAttribute(node, 'color', this.communityPalette[communities[node]]);
+    });
 
     this.runQuickLayout(hierarchicalGraph);
     this.normalizePositions(hierarchicalGraph, 200);
