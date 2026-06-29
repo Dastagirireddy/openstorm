@@ -4,6 +4,9 @@ import Graph from 'graphology';
 import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
 import * as dagre from 'dagre';
+import louvain from 'graphology-communities-louvain';
+import iwanthue from 'iwanthue';
+import { bindWebGLLayer, createContoursProgram } from '@sigma/layer-webgl';
 import { GraphData, GraphNode, LayoutType, GraphFilters } from './graph-types';
 
 const DARK_NODE_COLORS: Record<string, string> = {
@@ -58,6 +61,8 @@ export class SigmaContainer extends LitElement {
   private lastClickNode: string | null = null;
   private lastClickTime = 0;
   private buildQueued = false;
+  private contourCleanups: Array<() => void> = [];
+  private communityPalette: Record<string, string> = {};
 
   static styles = css`
     :host {
@@ -180,6 +185,17 @@ export class SigmaContainer extends LitElement {
     this.computeDegrees();
     this.graph.forEachNode((node) => {
       this.graph!.setNodeAttribute(node, 'size', this.getNodeSize(node));
+    });
+
+    louvain.assign(this.graph, { nodeCommunityAttribute: 'community' });
+    const communities = new Set<string>();
+    this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
+    const communitiesArray = Array.from(communities);
+    this.communityPalette = iwanthue(communitiesArray.length).reduce(
+      (iter, color, i) => ({ ...iter, [communitiesArray[i]]: color }), {} as Record<string, string>,
+    );
+    this.graph.forEachNode((node, attr) => {
+      this.graph!.setNodeAttribute(node, 'color', this.communityPalette[attr.community]);
     });
 
     if (this.graph.order === 0) return;
@@ -316,6 +332,31 @@ export class SigmaContainer extends LitElement {
       e.preventDefault();
       e.stopPropagation();
     });
+
+    this.bindContourLayers();
+  }
+
+  private bindContourLayers() {
+    if (!this.sigmaInstance || !this.graph) return;
+
+    const communities = new Set<string>();
+    this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
+
+    communities.forEach((community) => {
+      const clean = bindWebGLLayer(
+        `community-${community}`,
+        this.sigmaInstance!,
+        createContoursProgram(
+          this.graph!.filterNodes((_, attr) => attr.community === community),
+          {
+            radius: 150,
+            border: { color: this.communityPalette[community], thickness: 4 },
+            levels: [{ color: '#00000000', threshold: 0.5 }],
+          },
+        ),
+      );
+      this.contourCleanups.push(clean);
+    });
   }
 
   private patchMouseCaptor() {
@@ -360,6 +401,8 @@ export class SigmaContainer extends LitElement {
   }
 
   private cleanup() {
+    this.contourCleanups.forEach((clean) => clean());
+    this.contourCleanups = [];
     if (this.sigmaInstance) {
       this.sigmaInstance.kill();
       this.sigmaInstance = null;
