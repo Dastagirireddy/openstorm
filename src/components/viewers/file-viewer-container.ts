@@ -223,9 +223,9 @@ export class FileViewerContainer extends TailwindElement() {
     }
   }
 
-  private handleOpenFileExternal(e: CustomEvent<{ path: string; content: string }>): void {
-    const { path, content } = e.detail;
-    this.openFile(path, content);
+  private handleOpenFileExternal(e: CustomEvent<{ path: string; content: string; line?: number }>): void {
+    const { path, content, line } = e.detail;
+    this.openFile(path, content, line);
   }
 
   private handleOpenQueryEditor(e: CustomEvent<QueryEditorTabInfo>): void {
@@ -320,7 +320,7 @@ export class FileViewerContainer extends TailwindElement() {
   /**
    * Open a file in the appropriate viewer
    */
-  async openFile(path: string, content: string): Promise<void> {
+  async openFile(path: string, content: string, scrollToLine?: number): Promise<void> {
     const ext = getFileExtension(path);
     const viewerTag = registry.getViewerTagForExtension(ext);
 
@@ -371,6 +371,14 @@ export class FileViewerContainer extends TailwindElement() {
     }
 
     await viewer.loadFile(path, content);
+
+    // Scroll to specific line if requested
+    if (scrollToLine !== undefined && scrollToLine > 0) {
+      const textViewer = this.getTextViewer();
+      if (textViewer) {
+        textViewer.scrollToLine(scrollToLine);
+      }
+    }
 
     // Get toolbar actions from viewer
     this.toolbarActions = viewer.getToolbarActions?.() || [];

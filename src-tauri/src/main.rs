@@ -7,6 +7,7 @@ mod dap;
 pub mod dap_installer;
 mod database;
 mod file_watcher;
+pub mod graph;
 mod git;
 pub mod log;
 mod lsp;
@@ -217,6 +218,8 @@ struct UpdateResult {
 }
 use tokio::sync::Mutex;
 
+use graph::commands::GraphState;
+
 /// Poll DAP events and emit them to the frontend
 fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
     println!("[DAP event_poller] Starting event poller thread...");
@@ -371,8 +374,9 @@ fn main() {
         .manage(process::ProcessManager::new())
         .manage(Mutex::new(dap::DapClient::new()))
         .manage(dap_installer::DebugAdapterInstaller::new())
-        .manage(database::DatabaseManager::new())
-        .manage(ai::commands::AiState::new())
+            .manage(database::DatabaseManager::new())
+            .manage(ai::commands::AiState::new())
+            .manage(GraphState::new())
         .setup(|app| {
             let handle = app.handle().clone();
             log::init(handle.clone());
@@ -672,6 +676,13 @@ fn main() {
             // === AI Sub-agents ===
             ai::commands::ai_get_orchestrator_status,
             ai::commands::ai_abort_subagent,
+
+            // === Graph ===
+            graph::commands::build_project::graph_build_project,
+            graph::commands::get_graph::graph_get_all,
+            graph::commands::get_neighbors::graph_get_neighbors,
+            graph::commands::search::graph_search,
+            graph::commands::navigate::graph_navigate_to,
 
             // === MCP (Model Context Protocol) ===
             ai::commands::ai_mcp_list_servers,

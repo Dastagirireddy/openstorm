@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 import '../layout/icon.js';
 
-export type ActivityItem = 'explorer' | 'terminal' | 'ai';
+export type ActivityItem = 'explorer' | 'terminal' | 'ai' | 'graph';
 
 interface ActivityDefinition {
   id: ActivityItem;
@@ -34,6 +34,12 @@ export class ActivityBar extends TailwindElement() {
       label: 'AI',
       icon: html`<os-icon name="sparkles" size="16"></os-icon>`,
       filledIcon: html`<os-icon name="sparkles" size="16"></os-icon>`,
+    },
+    {
+      id: 'graph',
+      label: 'Graph',
+      icon: html`<os-icon name="git-branch" size="16"></os-icon>`,
+      filledIcon: html`<os-icon name="git-branch" size="16"></os-icon>`,
     },
   ];
 

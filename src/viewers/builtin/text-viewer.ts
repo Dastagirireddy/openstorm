@@ -285,6 +285,20 @@ export class TextViewer extends TailwindElement() {
     }
   }
 
+  scrollToLine(line: number): void {
+    if (!this.editorView) return;
+
+    const doc = this.editorView.state.doc;
+    const lineNum = Math.max(1, Math.min(line, doc.lines));
+    const lineObj = doc.line(lineNum);
+    const pos = lineObj.from;
+
+    this.editorView.dispatch({
+      selection: EditorSelection.create([EditorSelection.cursor(pos)]),
+      effects: EditorView.scrollIntoView(pos, { y: 'center' }),
+    });
+  }
+
   private handleUpdate(update: ViewUpdate): void {
     if (update.docChanged) {
       const newContent = update.state.doc.toString();

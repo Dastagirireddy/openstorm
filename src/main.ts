@@ -22,6 +22,10 @@ import {
 import "./components/dialogs/database-connection-picker.js";
 import "./components/layout/code-block.js";
 import "./components/layout/mermaid-block.js";
+import "./components/graph/graph-panel.js";
+import "./components/graph/graph-toolbar.js";
+import "./components/graph/sigma-container.js";
+import "./components/graph/graph-sidebar.js";
 
 // Initialize theme service early for CSS variable injection
 import { ThemeService } from "./lib/services/theme-service.js";
@@ -1273,6 +1277,29 @@ export class OpenStormApp extends TailwindElement() {
         this.activeTabId = aiTab.id;
         this.requestUpdate();
       }
+    } else if (newItem === 'graph') {
+      this.activeActivity = 'graph';
+      // Find existing Graph tab or create new one
+      const existingGraphTab = this.tabs.find(t => t.tabType === 'graph');
+      if (existingGraphTab) {
+        this.activeTabId = existingGraphTab.id;
+        this.handleTabSelect({ detail: { tabId: existingGraphTab.id } } as CustomEvent);
+      } else {
+        // Create new Graph tab
+        const graphTab: EditorTab = {
+          id: `graph-${Date.now()}`,
+          name: 'Project Graph',
+          path: '',
+          modified: false,
+          content: '',
+          tabType: 'graph',
+          pinned: false,
+          lastUsed: Date.now(),
+        };
+        this.tabs = [...this.tabs, graphTab];
+        this.activeTabId = graphTab.id;
+        this.requestUpdate();
+      }
     }
   };
 
@@ -1285,9 +1312,9 @@ export class OpenStormApp extends TailwindElement() {
   };
 
   private handleFileSelect = async (
-    e: CustomEvent<{ path: string }>,
+    e: CustomEvent<{ path: string; line?: number }>,
   ): Promise<void> => {
-    const { path } = e.detail;
+    const { path, line } = e.detail;
     const name = path.split("/").pop() || "";
     const ext = path.split(".").pop()?.toLowerCase() || "";
 
@@ -1317,7 +1344,7 @@ export class OpenStormApp extends TailwindElement() {
         t.id === existingTab.id ? { ...t, lastUsed: Date.now() } : t,
       );
       // Dispatch open-file-external to ensure the viewer updates its content
-      dispatch("open-file-external", { path, content: existingTab.content });
+      dispatch("open-file-external", { path, content: existingTab.content, line });
       return;
     }
 
@@ -1347,7 +1374,7 @@ export class OpenStormApp extends TailwindElement() {
 
       // Dispatch open-file for editor-pane to update its view
       // Use open-file-external instead to avoid triggering the global open-file handler
-      dispatch("open-file-external", { path, content });
+      dispatch("open-file-external", { path, content, line });
     } catch (error) {
       console.error("Failed to read file:", error);
     }
@@ -1529,6 +1556,23 @@ export class OpenStormApp extends TailwindElement() {
             </div>
           `;
         })}
+
+        <!-- Graph panes (one per graph tab) -->
+        ${this.tabs.filter(t => t.tabType === 'graph').map(graphTab => {
+          const isActive = activeTab?.id === graphTab.id;
+          return html`
+            <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
+              <graph-panel
+                class="flex-1 flex flex-col overflow-hidden min-h-0"
+                .projectPath=${this.projectPath}
+                @navigate-to-file=${(e: CustomEvent) => {
+                  const { file_path, line } = e.detail;
+                  this.handleFileSelect({ detail: { path: file_path, line } } as CustomEvent);
+                }}>
+              </graph-panel>
+            </div>
+          `;
+        })}
       </div>
     `;
   };
@@ -1577,6 +1621,19 @@ export class OpenStormApp extends TailwindElement() {
       };
       this.tabs = [...this.tabs, fileTab];
       this.activeTabId = fileTab.id;
+    } else if (tabType === 'graph') {
+      const graphTab: EditorTab = {
+        id: `graph-${Date.now()}`,
+        name: 'Project Graph',
+        path: '',
+        modified: false,
+        content: '',
+        tabType: 'graph',
+        pinned: false,
+        lastUsed: Date.now(),
+      };
+      this.tabs = [...this.tabs, graphTab];
+      this.activeTabId = graphTab.id;
     }
 
     this.requestUpdate();
