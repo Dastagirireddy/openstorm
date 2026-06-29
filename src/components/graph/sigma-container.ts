@@ -3,44 +3,27 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
-import FA2LayoutSupervisor from 'graphology-layout-forceatlas2/worker';
 import * as dagre from 'dagre';
 import louvain from 'graphology-communities-louvain';
 import iwanthue from 'iwanthue';
-import { bindWebGLLayer, createContoursProgram } from '@sigma/layer-webgl';
 import { GraphData, GraphNode, LayoutType, GraphFilters } from './graph-types';
+import { LODManager } from './lod-manager';
 
 const DARK_NODE_COLORS: Record<string, string> = {
-  Function: '#7c3aed',
-  Struct: '#2563eb',
-  Enum: '#0891b2',
-  Trait: '#d946ef',
-  Impl: '#f97316',
-  Module: '#059669',
-  Import: '#64748b',
-  File: '#475569',
-  Constant: '#e11d48',
-  Type: '#0d9488',
+  Function: '#7c3aed', Struct: '#2563eb', Enum: '#0891b2', Trait: '#d946ef',
+  Impl: '#f97316', Module: '#059669', Import: '#64748b', File: '#475569',
+  Constant: '#e11d48', Type: '#0d9488',
 };
-
 const LIGHT_NODE_COLORS: Record<string, string> = {
-  Function: '#6d28d9',
-  Struct: '#1d4ed8',
-  Enum: '#0e7490',
-  Trait: '#a21caf',
-  Impl: '#c2410c',
-  Module: '#047857',
-  Import: '#475569',
-  File: '#334155',
-  Constant: '#be123c',
-  Type: '#0f766e',
+  Function: '#6d28d9', Struct: '#1d4ed8', Enum: '#0e7490', Trait: '#a21caf',
+  Impl: '#c2410c', Module: '#047857', Import: '#475569', File: '#334155',
+  Constant: '#be123c', Type: '#0f766e',
 };
 
 function resolveCssVar(el: HTMLElement, varName: string, fallback: string): string {
   const val = getComputedStyle(el).getPropertyValue(varName).trim();
   return val || fallback;
 }
-
 function isLightTheme(el: HTMLElement): boolean {
   const bg = resolveCssVar(el, '--ai-panel-background', '#1e1e2e');
   const r = parseInt(bg.slice(1, 3), 16);
@@ -56,38 +39,36 @@ export class SigmaContainer extends LitElement {
   @property({ type: Object }) filters: GraphFilters = { kinds: [], languages: [], files: [], folders: [] };
   @query('#sigma-container') private container!: HTMLElement;
 
-  private graph: Graph | null = null;
   private sigmaInstance: Sigma | null = null;
-  private nodeDegrees: Map<string, number> = new Map();
-  private lastClickNode: string | null = null;
-  private lastClickTime = 0;
   private buildQueued = false;
-  private contourCleanups: Array<() => void> = [];
   private communityPalette: Record<string, string> = {};
-  private fa2Supervisor: FA2LayoutSupervisor | null = null;
-  private layoutRafId = 0;
+  private lodManager = new LODManager();
+  @state() private layoutStatus = '';
+  private currentGraph: Graph | null = null;
 
   static styles = css`
-    :host {
-      display: block;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-    }
-    #sigma-container {
-      position: relative;
-      width: 100%;
-      height: 100%;
+    :host { display: block; width: 100%; height: 100%; overflow: hidden; }
+    #sigma-container { position: relative; width: 100%; height: 100%; background: var(--ai-panel-background, #1e1e2e); }
+    .layout-status {
+      position: absolute; bottom: 8px; left: 8px; z-index: 10;
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 6px;
       background: var(--ai-panel-background, #1e1e2e);
+      border: 1px solid var(--ai-panel-border, #334155);
+      font-size: 11px; color: var(--ai-text-muted, #94a3b8);
+      pointer-events: none;
     }
+    .layout-status .dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--brand-primary, #7c3aed);
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
   `;
 
   updated(changed: Map<string, unknown>) {
     if (changed.has('graphData') && this.graphData && this.graphData.nodes.length > 0) {
       this.queueBuild();
-    }
-    if (changed.has('layout') && this.graph && !this.buildQueued) {
-      this.layoutGraph();
     }
     if (changed.has('filters') && this.sigmaInstance) {
       this.sigmaInstance.refresh();
@@ -107,378 +88,194 @@ export class SigmaContainer extends LitElement {
   }
 
   private tryBuild() {
-    if (!this.container) {
-      requestAnimationFrame(() => this.tryBuild());
-      return;
-    }
+    if (!this.container) { requestAnimationFrame(() => this.tryBuild()); return; }
     const rect = this.container.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) {
-      requestAnimationFrame(() => this.tryBuild());
-      return;
-    }
+    if (rect.width === 0 || rect.height === 0) { requestAnimationFrame(() => this.tryBuild()); return; }
     this.buildQueued = false;
     this.buildGraph();
   }
 
-  private computeDegrees() {
-    this.nodeDegrees.clear();
-    if (!this.graph) return;
-    this.graph.forEachNode((node) => {
-      this.nodeDegrees.set(node, this.graph!.degree(node));
-    });
-  }
-
-  private getNodeSize(node: string): number {
-    const degree = this.nodeDegrees.get(node) || 0;
-    if (degree > 20) return 24;
-    if (degree > 10) return 18;
-    if (degree > 5) return 14;
-    if (degree > 0) return 10;
-    return 7;
-  }
-
   private isNodeVisible(kind: string, file: string): boolean {
-    if (this.filters.kinds.length > 0 && !this.filters.kinds.includes(kind)) {
-      return false;
-    }
+    if (this.filters.kinds.length > 0 && !this.filters.kinds.includes(kind)) return false;
     if (this.filters.folders && this.filters.folders.length > 0) {
       const folder = file.split('/').slice(0, -1).join('/');
       const rootFolder = folder.split('/')[0];
-      if (this.filters.folders.includes(folder) || this.filters.folders.includes(rootFolder)) {
-        return false;
-      }
+      if (this.filters.folders.includes(folder) || this.filters.folders.includes(rootFolder)) return false;
     }
-    if (this.filters.files.length > 0 && !this.filters.files.includes(file)) {
-      return false;
-    }
+    if (this.filters.files.length > 0 && !this.filters.files.includes(file)) return false;
     return true;
   }
 
   private buildGraph() {
     this.cleanup();
-
-    const light = isLightTheme(this.container);
-    const nodeColors = light ? LIGHT_NODE_COLORS : DARK_NODE_COLORS;
-    const fallbackColor = light ? '#475569' : '#64748b';
-
-    this.graph = new Graph();
-    for (const node of this.graphData!.nodes) {
-      this.graph.addNode(node.id, {
-        label: node.name,
-        kind: node.kind,
-        language: node.language,
-        file: node.file_path,
-        startLine: node.start_line,
-        endLine: node.end_line,
-        color: nodeColors[node.kind] || fallbackColor,
-        x: (Math.random() - 0.5) * 200,
-        y: (Math.random() - 0.5) * 200,
-        size: 7,
-      });
-    }
-
-    for (const edge of this.graphData!.edges) {
-      if (this.graph.hasNode(edge.source) && this.graph.hasNode(edge.target)) {
-        if (!this.graph.hasEdge(edge.source, edge.target)) {
-          this.graph.addEdge(edge.source, edge.target, { label: edge.kind });
-        }
-      }
-    }
-
-    this.computeDegrees();
-    this.graph.forEachNode((node) => {
-      this.graph!.setNodeAttribute(node, 'size', this.getNodeSize(node));
-    });
-
-    if (this.graph.order === 0) return;
-
-    this.layoutGraph();
+    if (!this.graphData) return;
+    this.lodManager.setFullData(this.graphData);
+    this.renderHierarchicalView();
   }
 
-  private layoutGraph() {
-    if (!this.graph || this.graph.order === 0) return;
-
-    if (this.layout === 'force') {
-      this.runForceLayout();
-    } else {
-      this.applyDagre();
-      this.normalizePositions();
-      this.afterLayout();
-    }
+  private runQuickLayout(graph: Graph) {
+    if (graph.order < 3) return;
+    const settings = forceAtlas2.inferSettings(graph);
+    forceAtlas2.assign(graph, { iterations: 15, settings });
   }
 
-  private runForceLayout() {
-    if (!this.graph) return;
-
-    const settings = forceAtlas2.inferSettings(this.graph);
-
-    this.fa2Supervisor = new FA2LayoutSupervisor(this.graph, { settings });
-    this.fa2Supervisor.start();
-
-    const finishLayout = () => {
-      this.cancelLayoutLoop();
-      if (this.fa2Supervisor) {
-        this.fa2Supervisor.kill();
-        this.fa2Supervisor = null;
-      }
-      this.normalizePositions();
-      this.afterLayout();
-    };
-
-    const refresh = () => {
-      if (this.sigmaInstance) this.sigmaInstance.refresh();
-      this.layoutRafId = requestAnimationFrame(refresh);
-    };
-    this.layoutRafId = requestAnimationFrame(refresh);
-
-    setTimeout(finishLayout, 3000);
-  }
-
-  private cancelLayoutLoop() {
-    if (this.layoutRafId) {
-      cancelAnimationFrame(this.layoutRafId);
-      this.layoutRafId = 0;
-    }
-  }
-
-  private afterLayout() {
-    if (!this.sigmaInstance) {
-      this.initSigma();
-    } else {
-      this.sigmaInstance.refresh();
-      this.fitToScreen();
-    }
-
-    this.runCommunityDetection();
-
-    this.dispatchEvent(new CustomEvent('graph-ready', { bubbles: true, composed: true }));
-  }
-
-  private runCommunityDetection() {
-    if (!this.graph) return;
-
-    louvain.assign(this.graph, { nodeCommunityAttribute: 'community' });
-    const communities = new Set<string>();
-    this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
-    const communitiesArray = Array.from(communities);
-    this.communityPalette = iwanthue(communitiesArray.length).reduce(
-      (iter, color, i) => ({ ...iter, [communitiesArray[i]]: color }), {} as Record<string, string>,
-    );
-    this.graph.forEachNode((node, attr) => {
-      this.graph!.setNodeAttribute(node, 'color', this.communityPalette[attr.community]);
-    });
-
-    this.bindContourLayers();
-    if (this.sigmaInstance) this.sigmaInstance.refresh();
-  }
-
-  private normalizePositions() {
-    if (!this.graph || this.graph.order === 0) return;
-
+  private normalizePositions(graph: Graph, scale: number = 200) {
+    if (graph.order === 0) return;
     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    this.graph.forEachNode((node) => {
-      const x = this.graph!.getNodeAttribute(node, 'x');
-      const y = this.graph!.getNodeAttribute(node, 'y');
+    graph.forEachNode((node) => {
+      const x = graph.getNodeAttribute(node, 'x');
+      const y = graph.getNodeAttribute(node, 'y');
       minX = Math.min(minX, x); maxX = Math.max(maxX, x);
       minY = Math.min(minY, y); maxY = Math.max(maxY, y);
     });
-
     const rangeX = maxX - minX || 1;
     const rangeY = maxY - minY || 1;
-    const scale = 300;
-
-    this.graph.forEachNode((node) => {
-      const x = this.graph!.getNodeAttribute(node, 'x');
-      const y = this.graph!.getNodeAttribute(node, 'y');
-      this.graph!.setNodeAttribute(node, 'x', ((x - minX) / rangeX - 0.5) * scale);
-      this.graph!.setNodeAttribute(node, 'y', ((y - minY) / rangeY - 0.5) * scale);
+    graph.forEachNode((node) => {
+      const x = graph.getNodeAttribute(node, 'x');
+      const y = graph.getNodeAttribute(node, 'y');
+      graph.setNodeAttribute(node, 'x', ((x - minX) / rangeX - 0.5) * scale);
+      graph.setNodeAttribute(node, 'y', ((y - minY) / rangeY - 0.5) * scale);
     });
   }
 
-  private initSigma() {
-    if (!this.container || !this.graph || this.graph.order === 0) return;
+  private renderHierarchicalView() {
+    if (!this.container || !this.graphData) return;
 
-    const light = isLightTheme(this.container);
-    const labelColor = resolveCssVar(this.container, '--ai-text', light ? '#1f2937' : '#e6edf3');
-    const edgeColor = light ? '#94a3b8' : '#475569';
+    if (this.sigmaInstance) { this.sigmaInstance.kill(); this.sigmaInstance = null; }
 
-    this.sigmaInstance = new Sigma(this.graph, this.container, {
+    const edgeColor = isLightTheme(this.container) ? '#94a3b8' : '#475569';
+    const hierarchicalGraph = this.lodManager.buildHierarchicalGraph(
+      this.graphData,
+      this.lodManager['expandedFolders'],
+      this.lodManager['expandedFiles'],
+      this.communityPalette,
+      edgeColor,
+    );
+
+    if (hierarchicalGraph.order === 0) return;
+
+    this.runQuickLayout(hierarchicalGraph);
+    this.normalizePositions(hierarchicalGraph, 200);
+    this.currentGraph = hierarchicalGraph;
+
+    this.sigmaInstance = new Sigma(hierarchicalGraph, this.container, {
       renderLabels: true,
-      labelColor: { color: labelColor },
+      labelColor: { color: resolveCssVar(this.container, '--ai-text', isLightTheme(this.container) ? '#1f2937' : '#e6edf3') },
       labelFont: 'monospace',
       labelSize: 11,
-      labelThreshold: 6,
+      labelRenderedSizeThreshold: 8,
+      labelDensity: 0.5,
+      labelGridCellSize: 80,
+      hideEdgesOnMove: true,
+      hideLabelsOnMove: true,
       defaultEdgeType: 'arrow',
-      edgeReducer: (edge, data) => {
-        const res = { ...data };
-        const sourceNode = this.graph!.source(edge);
-        const targetNode = this.graph!.target(edge);
-        const sourceAttrs = this.graph!.getNodeAttributes(sourceNode);
-        const targetAttrs = this.graph!.getNodeAttributes(targetNode);
-        const sourceVisible = this.isNodeVisible(sourceAttrs.kind, sourceAttrs.file);
-        const targetVisible = this.isNodeVisible(targetAttrs.kind, targetAttrs.file);
-        if (!sourceVisible || !targetVisible) {
-          res.hidden = true;
-        } else {
-          res.color = edgeColor;
-          res.size = 1;
-        }
-        return res;
-      },
-      nodeReducer: (node, data) => {
+      nodeReducer: (node: string, data: Record<string, unknown>) => {
         const res = { ...data };
         const kind = data.kind as string;
         const file = data.file as string;
-        if (!this.isNodeVisible(kind, file)) {
+        if (kind && file && !this.isNodeVisible(kind, file)) {
           res.hidden = true;
+        }
+        return res;
+      },
+      edgeReducer: (edge: string, data: Record<string, unknown>) => {
+        const res = { ...data };
+        const graph = this.sigmaInstance?.getGraph();
+        if (graph) {
+          const sourceNode = graph.source(edge);
+          const targetNode = graph.target(edge);
+          const sourceAttrs = graph.getNodeAttributes(sourceNode);
+          const targetAttrs = graph.getNodeAttributes(targetNode);
+          if ((sourceAttrs.kind && sourceAttrs.file && !this.isNodeVisible(sourceAttrs.kind, sourceAttrs.file)) ||
+              (targetAttrs.kind && targetAttrs.file && !this.isNodeVisible(targetAttrs.kind, targetAttrs.file))) {
+            res.hidden = true;
+          } else {
+            res.color = edgeColor;
+            res.size = 1;
+          }
         }
         return res;
       },
     });
 
-    this.patchMouseCaptor();
-
-    this.sigmaInstance.on('enterNode', ({ node }) => {
-      this.graph!.setNodeAttribute(node, 'highlighted', true);
-      this.sigmaInstance!.refresh();
-    });
-
-    this.sigmaInstance.on('leaveNode', ({ node }) => {
-      this.graph!.removeNodeAttribute(node, 'highlighted');
-      this.sigmaInstance!.refresh();
-    });
-
     this.sigmaInstance.on('clickNode', ({ node }) => {
-      const now = Date.now();
-      const isDoubleClick = this.lastClickNode === node && (now - this.lastClickTime) < 350;
-      this.lastClickNode = node;
-      this.lastClickTime = now;
-
-      if (isDoubleClick) {
-        const attrs = this.graph!.getNodeAttributes(node);
-        this.dispatchEvent(new CustomEvent('node-navigate', {
-          detail: { id: node, file_path: attrs.file, start_line: attrs.startLine },
-          bubbles: true,
-          composed: true,
-        }));
-        return;
-      }
-
-      const attrs = this.graph!.getNodeAttributes(node);
-      const nodeData: GraphNode = {
-        id: node,
-        kind: attrs.kind,
-        name: attrs.label,
-        file_path: attrs.file,
-        start_line: attrs.startLine,
-        end_line: attrs.endLine,
-        language: attrs.language,
-      };
-      this.dispatchEvent(new CustomEvent('node-select', { detail: nodeData }));
+      this.handleNodeInteraction(node);
     });
 
-    this.container.addEventListener('dblclick', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    this.sigmaInstance.on('doubleClickNode', ({ node }) => {
+      this.handleDoubleClick(node);
     });
 
-    this.bindContourLayers();
+    this.container.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); });
+    this.patchMouseCaptor();
+    this.fitToScreen();
   }
 
-  private bindContourLayers() {
-    if (!this.sigmaInstance || !this.graph) return;
+  private handleNodeInteraction(nodeId: string) {
+    if (!this.sigmaInstance || !this.currentGraph) return;
 
-    const gl = this.container.querySelector('canvas')?.getContext('webgl2');
-    if (!gl) return;
+    const result = this.lodManager.handleNodeClick(nodeId);
+    if (!result) return;
 
-    const communities = new Set<string>();
-    this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
-
-    communities.forEach((community) => {
-      try {
-        const clean = bindWebGLLayer(
-          `community-${community}`,
-          this.sigmaInstance!,
-          createContoursProgram(
-            this.graph!.filterNodes((_, attr) => attr.community === community),
-            {
-              radius: 150,
-              border: { color: this.communityPalette[community], thickness: 4 },
-              levels: [{ color: '#00000000', threshold: 0.5 }],
-            },
-          ),
-        );
-        this.contourCleanups.push(clean);
-      } catch (e) {
-        console.warn('Contour layer skipped:', e);
-      }
-    });
+    if (result.action === 'expand-folder' || result.action === 'expand-file') {
+      this.layoutStatus = 'Expanding...';
+      requestAnimationFrame(() => {
+        this.renderHierarchicalView();
+        this.layoutStatus = '';
+      });
+    }
   }
 
-  private patchMouseCaptor() {
+  private handleDoubleClick(nodeId: string) {
     if (!this.sigmaInstance) return;
-    const captor = (this.sigmaInstance as any).mouseCaptor;
-    if (!captor || !captor.container) return;
+    const graph = this.sigmaInstance.getGraph();
+    if (!graph.hasNode(nodeId)) return;
 
-    // Sigma binds mousemove/mouseup on document, which breaks in Shadow DOM
-    // because event.target gets retargeted to the shadow host.
-    // Fix: rebind these handlers on the container instead.
-    const container = captor.container;
-    document.removeEventListener('mousemove', captor.handleMove);
-    document.removeEventListener('mouseup', captor.handleUp);
-    container.addEventListener('mousemove', captor.handleMove, false);
-    container.addEventListener('mouseup', captor.handleUp, false);
-  }
-
-  private applyDagre() {
-    if (!this.graph) return;
-
-    const g = new dagre.graphlib.Graph();
-    g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 60 });
-    g.setDefaultEdgeLabel(() => ({}));
-
-    this.graph.forEachNode((node) => {
-      g.setNode(node, { width: 120, height: 50 });
-    });
-
-    this.graph.forEachEdge((edge, attrs, source, target) => {
-      g.setEdge(source, target);
-    });
-
-    dagre.layout(g);
-
-    this.graph.forEachNode((node) => {
-      const pos = g.node(node);
-      if (pos) {
-        this.graph!.setNodeAttribute(node, 'x', pos.x);
-        this.graph!.setNodeAttribute(node, 'y', pos.y);
-      }
-    });
+    const attrs = graph.getNodeAttributes(nodeId);
+    if (attrs.file && attrs.startLine) {
+      this.dispatchEvent(new CustomEvent('node-navigate', {
+        detail: { id: nodeId, file_path: attrs.file, start_line: attrs.startLine },
+        bubbles: true,
+        composed: true,
+      }));
+    }
   }
 
   private cleanup() {
-    this.cancelLayoutLoop();
-    if (this.fa2Supervisor) {
-      this.fa2Supervisor.kill();
-      this.fa2Supervisor = null;
+    this.layoutStatus = '';
+    if (this.sigmaInstance) { this.sigmaInstance.kill(); this.sigmaInstance = null; }
+    this.currentGraph = null;
+    this.lodManager.cleanup();
+  }
+
+  private patchMouseCaptor() {
+    const sigma: any = this.sigmaInstance;
+    if (!sigma?.mouseCaptor) return;
+    const captor = sigma.mouseCaptor;
+    const container = this.container;
+    const doc = container.getRootNode()?.ownerDocument ?? document;
+    if (captor.handleMove) {
+      doc.removeEventListener('mousemove', captor.handleMove);
+      container.addEventListener('mousemove', captor.handleMove, { capture: false });
     }
-    this.contourCleanups.forEach((clean) => clean());
-    this.contourCleanups = [];
-    if (this.sigmaInstance) {
-      this.sigmaInstance.kill();
-      this.sigmaInstance = null;
+    if (captor.handleUp) {
+      doc.removeEventListener('mouseup', captor.handleUp);
+      container.addEventListener('mouseup', captor.handleUp, { capture: false });
     }
-    this.graph = null;
-    this.nodeDegrees.clear();
-    this.lastClickNode = null;
-    this.lastClickTime = 0;
   }
 
   public fitToScreen() {
-    if (!this.sigmaInstance || !this.graph || this.graph.order === 0) return;
-
+    if (!this.sigmaInstance) return;
     const camera = this.sigmaInstance.getCamera();
-    camera.setState({ x: 0.5, y: 0.5 });
+    const graph = this.sigmaInstance.getGraph();
+    const order = graph.order;
+
+    let ratio = 1.0;
+    if (order > 100) ratio = 2.0;
+    else if (order > 50) ratio = 1.5;
+    else if (order > 20) ratio = 1.2;
+
+    camera.setState({ x: 0.5, y: 0.5, ratio });
     this.sigmaInstance.refresh();
   }
 
@@ -497,6 +294,11 @@ export class SigmaContainer extends LitElement {
   }
 
   render() {
-    return html`<div id="sigma-container"></div>`;
+    return html`
+      <div id="sigma-container"></div>
+      ${this.layoutStatus
+        ? html`<div class="layout-status"><span class="dot"></span>${this.layoutStatus}</div>`
+        : ''}
+    `;
   }
 }

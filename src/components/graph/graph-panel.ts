@@ -13,7 +13,6 @@ export class GraphPanel extends LitElement {
   @state() private layout: LayoutType = 'force';
   @state() private filters: GraphFilters = { kinds: [], languages: [], files: [], folders: [] };
   @state() private loading = true;
-  @state() private rendering = false;
   @state() private error: string | null = null;
   @state() private phase = '';
   @state() private filesScanned = 0;
@@ -99,7 +98,6 @@ export class GraphPanel extends LitElement {
 
   async loadGraph() {
     this.loading = true;
-    this.rendering = false;
     this.error = null;
     this.phase = 'scanning';
     this.filesScanned = 0;
@@ -113,18 +111,15 @@ export class GraphPanel extends LitElement {
         this.filesScanned = result.files_scanned;
         this.totalNodes = result.node_count;
       }
-      this.loading = false;
-      this.rendering = true;
       this.graphData = await invoke('graph_get_all');
     } catch (e) {
       this.error = String(e);
+    } finally {
       this.loading = false;
-      this.rendering = false;
     }
   }
 
   private get phaseLabel(): string {
-    if (this.rendering) return 'Rendering graph...';
     switch (this.phase) {
       case 'scanning': return 'Scanning project files...';
       case 'storing': return 'Building graph...';
@@ -165,10 +160,6 @@ export class GraphPanel extends LitElement {
     }
   }
 
-  private handleGraphReady() {
-    this.rendering = false;
-  }
-
   private async handleNavigate() {
     if (!this.selectedNode) return;
     try {
@@ -207,8 +198,6 @@ export class GraphPanel extends LitElement {
       </div>`;
     }
 
-    const hasNodes = this.graphData && this.graphData.nodes.length > 0;
-
     return html`
       <graph-toolbar
         .layout=${this.layout}
@@ -218,37 +207,14 @@ export class GraphPanel extends LitElement {
         @filter-change=${this.handleFilterChange}
         @graph-action=${this.handleGraphAction}
       ></graph-toolbar>
-      <div class="flex-1 min-h-0 relative">
-        ${hasNodes
-          ? html`
-            <sigma-container
-              class="absolute inset-0"
-              .graphData=${this.graphData}
-              .layout=${this.layout}
-              .filters=${this.filters}
-              @node-select=${this.handleNodeSelect}
-              @node-navigate=${this.handleNodeNavigate}
-              @graph-ready=${this.handleGraphReady}
-            ></sigma-container>
-          `
-          : html`
-            <div class="empty-state">
-              <iconify-icon icon="mdi:graph-outline"></iconify-icon>
-              <div>No nodes found in project</div>
-              <div style="font-size: 11px;">Open a project folder to visualize its structure</div>
-            </div>
-          `
-        }
-        ${this.rendering
-          ? html`<div class="progress-overlay absolute inset-0" style="z-index:10;">
-              <div class="spinner"></div>
-              <div class="phase-label">Rendering graph...</div>
-              ${this.filesScanned > 0
-                ? html`<div class="stat">${this.filesScanned} files &middot; ${this.totalNodes.toLocaleString()} nodes</div>`
-                : ''}
-            </div>`
-          : ''}
-      </div>
+      <sigma-container
+        class="flex-1 min-h-0"
+        .graphData=${this.graphData}
+        .layout=${this.layout}
+        .filters=${this.filters}
+        @node-select=${this.handleNodeSelect}
+        @node-navigate=${this.handleNodeNavigate}
+      ></sigma-container>
       ${this.selectedNode
         ? html`<graph-sidebar
             .node=${this.selectedNode}
