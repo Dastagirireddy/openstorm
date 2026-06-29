@@ -215,23 +215,23 @@ export class SigmaContainer extends LitElement {
     this.fa2Supervisor = new FA2LayoutSupervisor(this.graph, { settings });
     this.fa2Supervisor.start();
 
-    const refresh = () => {
-      if (!this.fa2Supervisor || !this.fa2Supervisor.isRunning()) {
-        this.cancelLayoutLoop();
-        this.normalizePositions();
-        this.afterLayout();
-        return;
+    const finishLayout = () => {
+      this.cancelLayoutLoop();
+      if (this.fa2Supervisor) {
+        this.fa2Supervisor.kill();
+        this.fa2Supervisor = null;
       }
+      this.normalizePositions();
+      this.afterLayout();
+    };
+
+    const refresh = () => {
       if (this.sigmaInstance) this.sigmaInstance.refresh();
       this.layoutRafId = requestAnimationFrame(refresh);
     };
     this.layoutRafId = requestAnimationFrame(refresh);
 
-    setTimeout(() => {
-      if (this.fa2Supervisor) {
-        this.fa2Supervisor.stop();
-      }
-    }, 3000);
+    setTimeout(finishLayout, 3000);
   }
 
   private cancelLayoutLoop() {
