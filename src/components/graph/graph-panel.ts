@@ -189,7 +189,7 @@ export class GraphPanel extends LitElement {
   }
 
   render() {
-    if (this.loading || this.rendering) {
+    if (this.loading) {
       return html`
         <div class="progress-overlay">
           <div class="spinner"></div>
@@ -218,26 +218,37 @@ export class GraphPanel extends LitElement {
         @filter-change=${this.handleFilterChange}
         @graph-action=${this.handleGraphAction}
       ></graph-toolbar>
-      ${hasNodes
-        ? html`
-          <sigma-container
-            class="flex-1 min-h-0"
-            .graphData=${this.graphData}
-            .layout=${this.layout}
-            .filters=${this.filters}
-            @node-select=${this.handleNodeSelect}
-            @node-navigate=${this.handleNodeNavigate}
-            @graph-ready=${this.handleGraphReady}
-          ></sigma-container>
-        `
-        : html`
-          <div class="empty-state">
-            <iconify-icon icon="mdi:graph-outline"></iconify-icon>
-            <div>No nodes found in project</div>
-            <div style="font-size: 11px;">Open a project folder to visualize its structure</div>
-          </div>
-        `
-      }
+      <div class="flex-1 min-h-0 relative">
+        ${hasNodes
+          ? html`
+            <sigma-container
+              class="absolute inset-0"
+              .graphData=${this.graphData}
+              .layout=${this.layout}
+              .filters=${this.filters}
+              @node-select=${this.handleNodeSelect}
+              @node-navigate=${this.handleNodeNavigate}
+              @graph-ready=${this.handleGraphReady}
+            ></sigma-container>
+          `
+          : html`
+            <div class="empty-state">
+              <iconify-icon icon="mdi:graph-outline"></iconify-icon>
+              <div>No nodes found in project</div>
+              <div style="font-size: 11px;">Open a project folder to visualize its structure</div>
+            </div>
+          `
+        }
+        ${this.rendering
+          ? html`<div class="progress-overlay absolute inset-0" style="z-index:10;">
+              <div class="spinner"></div>
+              <div class="phase-label">Rendering graph...</div>
+              ${this.filesScanned > 0
+                ? html`<div class="stat">${this.filesScanned} files &middot; ${this.totalNodes.toLocaleString()} nodes</div>`
+                : ''}
+            </div>`
+          : ''}
+      </div>
       ${this.selectedNode
         ? html`<graph-sidebar
             .node=${this.selectedNode}
