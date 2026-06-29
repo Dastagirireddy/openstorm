@@ -71,6 +71,135 @@ pnpm tauri build    # Production build
 
 ---
 
+## Project Graph
+
+<p align="center">
+  <img src="docs/ide/project_graph.png" alt="Project Graph" width="80%">
+</p>
+
+Visualize your entire codebase as an interactive graph. Open the Graph tab to explore project structure, dependencies, and relationships.
+
+### How It Works
+
+When you open a project, OpenStorm **automatically builds a code graph** in the background:
+
+1. **Auto-Indexing** — On first project open, scans all source files (Rust, TypeScript, Python, Go)
+2. **SQLite Storage** — Graph stored in `.openstorm/graph.db` for fast queries
+3. **Incremental Updates** — File watcher keeps the graph in sync as you code
+4. **Status Bar Progress** — See indexing status without blocking your workflow
+
+### Graph Features
+
+| Feature | Description |
+|---------|-------------|
+| **Community Detection** | Louvain algorithm groups related code into color-coded clusters |
+| **Layout Toggle** | Switch between Force (clustered) and Hierarchical (tree) layouts |
+| **Folder Filtering** | Filter nodes by folder to focus on specific modules |
+| **Node Types** | Functions, Structs, Enums, Traits, Imports — each with distinct colors |
+| **Expand/Collapse** | Click folders to drill into files, click files to see functions |
+| **Double-Click** | Navigate directly to the source file and line |
+| **Zoom Controls** | Zoom in/out, fit to screen via toolbar |
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Frontend (sigma-container.ts)                              │
+│  • Sigma.js v3 with WebGL rendering                        │
+│  • Louvain community detection + iwanthue colors            │
+│  • ForceAtlas2 / Dagre layout engines                       │
+│  • Level-of-Detail (LOD) manager for hierarchy              │
+└────────────────────┬────────────────────────────────────────┘
+                     │ Tauri IPC
+┌────────────────────┴────────────────────────────────────────┐
+│  Backend (build_project.rs, graph_watcher.rs)               │
+│  • Tree-sitter extractors (Rust, TS, Python, Go)            │
+│  • SQLite graph store (.openstorm/graph.db)                 │
+│  • Real-time file watcher for incremental updates           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Graph RAG (Retrieval-Augmented Generation)
+
+OpenStorm uses a **Graph-augmented RAG** system that gives the AI agent deep understanding of your codebase structure.
+
+### How Graph RAG Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  User Query                                                 │
+│       │                                                     │
+│       ▼                                                     │
+│  ┌─────────────────┐                                        │
+│  │ Search Nodes    │ ← BM25 full-text search on node names  │
+│  └────────┬────────┘                                        │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────┐                                        │
+│  │ BFS Traversal   │ ← Find neighbors up to depth 2         │
+│  └────────┬────────┘                                        │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────┐                                        │
+│  │ Rank & Budget   │ ← Score by connectivity, fit in tokens │
+│  └────────┬────────┘                                        │
+│           │                                                 │
+│           ▼                                                 │
+│  ┌─────────────────┐                                        │
+│  │ Build Context   │ ← Nodes + Edges → LLM prompt           │
+│  └─────────────────┘                                        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### RAG Pipeline
+
+| Step | Description |
+|------|-------------|
+| **1. Query** | User asks a question (e.g., "How does auth work?") |
+| **2. Search** | BM25 search finds matching nodes (functions, structs, etc.) |
+| **3. Traverse** | BFS traversal finds related code up to 2 hops away |
+| **4. Rank** | Nodes scored by connectivity — more connected = more relevant |
+| **5. Budget** | Select top nodes within token budget (default: 2000 tokens) |
+| **6. Context** | Build graph context with nodes, edges, and relationships |
+| **7. Prompt** | Inject context into LLM system prompt |
+
+### What the AI Sees
+
+When Graph RAG is enabled, the AI receives:
+
+```
+Relevant code from "auth" query:
+├── Function: authenticate_user (src/auth.rs:45)
+│   ├── Calls: validate_token (src/auth.rs:78)
+│   ├── Calls: hash_password (src/crypto.rs:12)
+│   └── Implements: AuthProvider trait (src/auth.rs:23)
+├── Struct: UserSession (src/auth.rs:15)
+│   ├── Uses: Redis client (src/db/redis.rs)
+│   └── References: User model (src/models/user.rs)
+└── Edge: authenticate_user → UserSession (Creates)
+```
+
+### Fallback Behavior
+
+| Condition | Behavior |
+|-----------|----------|
+| Graph exists | Uses Graph RAG (structured context) |
+| Graph not built | Falls back to BM25 RAG (embedding search) |
+| No graph store | Uses basic file search |
+
+### Supported Languages
+
+| Language | Extractors |
+|----------|-----------|
+| Rust | Functions, Structs, Enums, Traits, Impl blocks, Imports |
+| TypeScript | Functions, Classes, Interfaces, Types, Imports |
+| Python | Functions, Classes, Imports |
+| Go | Functions, Structs, Interfaces, Imports |
+
+---
+
 ## Features
 
 ### Code Editor
@@ -260,6 +389,8 @@ No subscriptions. No credit systems. Pay only for what you use, directly to the 
 | **Editor** | CodeMirror 6 |
 | **Terminal** | xterm.js, portable-pty |
 | **AI** | OpenAI-compatible API, MCP protocol |
+| **Graph** | SQLite, Tree-sitter, Sigma.js, Graphology |
+| **RAG** | Graph-augmented RAG, BM25 search, Louvain communities |
 | **Database** | sqlx (Postgres, MySQL, SQLite), mongodb, redis |
 | **Git** | git2-rs |
 | **Debugging** | DAP (Debug Adapter Protocol) |
