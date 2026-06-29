@@ -3,6 +3,7 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
+import FA2LayoutSupervisor from 'graphology-layout-forceatlas2/worker';
 import * as dagre from 'dagre';
 import louvain from 'graphology-communities-louvain';
 import iwanthue from 'iwanthue';
@@ -63,6 +64,8 @@ export class SigmaContainer extends LitElement {
   private buildQueued = false;
   private contourCleanups: Array<() => void> = [];
   private communityPalette: Record<string, string> = {};
+  private fa2Supervisor: FA2LayoutSupervisor | null = null;
+  private layoutRafId = 0;
 
   static styles = css`
     :host {
@@ -187,6 +190,71 @@ export class SigmaContainer extends LitElement {
       this.graph!.setNodeAttribute(node, 'size', this.getNodeSize(node));
     });
 
+    if (this.graph.order === 0) return;
+
+    this.layoutGraph();
+  }
+
+  private layoutGraph() {
+    if (!this.graph || this.graph.order === 0) return;
+
+    if (this.layout === 'force') {
+      this.runForceLayout();
+    } else {
+      this.applyDagre();
+      this.normalizePositions();
+      this.afterLayout();
+    }
+  }
+
+  private runForceLayout() {
+    if (!this.graph) return;
+
+    const settings = forceAtlas2.inferSettings(this.graph);
+
+    this.fa2Supervisor = new FA2LayoutSupervisor(this.graph, { settings });
+    this.fa2Supervisor.start();
+
+    const refresh = () => {
+      if (!this.fa2Supervisor || !this.fa2Supervisor.isRunning()) {
+        this.cancelLayoutLoop();
+        this.normalizePositions();
+        this.afterLayout();
+        return;
+      }
+      if (this.sigmaInstance) this.sigmaInstance.refresh();
+      this.layoutRafId = requestAnimationFrame(refresh);
+    };
+    this.layoutRafId = requestAnimationFrame(refresh);
+
+    setTimeout(() => {
+      if (this.fa2Supervisor) {
+        this.fa2Supervisor.stop();
+      }
+    }, 3000);
+  }
+
+  private cancelLayoutLoop() {
+    if (this.layoutRafId) {
+      cancelAnimationFrame(this.layoutRafId);
+      this.layoutRafId = 0;
+    }
+  }
+
+  private afterLayout() {
+    if (!this.sigmaInstance) {
+      this.initSigma();
+    } else {
+      this.sigmaInstance.refresh();
+      this.fitToScreen();
+    }
+
+    this.runCommunityDetection();
+  }
+
+  private runCommunityDetection() {
+    if (!this.graph) return;
+
     louvain.assign(this.graph, { nodeCommunityAttribute: 'community' });
     const communities = new Set<string>();
     this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
@@ -198,29 +266,8 @@ export class SigmaContainer extends LitElement {
       this.graph!.setNodeAttribute(node, 'color', this.communityPalette[attr.community]);
     });
 
-    if (this.graph.order === 0) return;
-
-    this.layoutGraph();
-  }
-
-  private layoutGraph() {
-    if (!this.graph || this.graph.order === 0) return;
-
-    if (this.layout === 'force') {
-      const settings = forceAtlas2.inferSettings(this.graph);
-      forceAtlas2.assign(this.graph, { iterations: 80, settings });
-    } else {
-      this.applyDagre();
-    }
-
-    this.normalizePositions();
-
-    if (!this.sigmaInstance) {
-      this.initSigma();
-    } else {
-      this.sigmaInstance.refresh();
-      this.fitToScreen();
-    }
+    this.bindContourLayers();
+    if (this.sigmaInstance) this.sigmaInstance.refresh();
   }
 
   private normalizePositions() {
@@ -401,6 +448,11 @@ export class SigmaContainer extends LitElement {
   }
 
   private cleanup() {
+    this.cancelLayoutLoop();
+    if (this.fa2Supervisor) {
+      this.fa2Supervisor.kill();
+      this.fa2Supervisor = null;
+    }
     this.contourCleanups.forEach((clean) => clean());
     this.contourCleanups = [];
     if (this.sigmaInstance) {
