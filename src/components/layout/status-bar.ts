@@ -1,5 +1,6 @@
 import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
+import { listen } from '@tauri-apps/api/event';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
 import { LspService, LspServerInfo, LspInstallProgress } from '../../lib/lsp/lsp-service.js';
@@ -25,6 +26,10 @@ export class StatusBar extends TailwindElement() {
   @state() private installError: string | null = null;
   @state() private statusMessage: string | null = null;
   @state() private statusMessageType: 'success' | 'error' | 'info' = 'info';
+  @state() private graphIndexing = false;
+  @state() private graphIndexFiles = 0;
+  @state() private graphIndexNodes = 0;
+  @state() private graphPhase = '';
 
   private readonly _lspService = LspService.getInstance();
   private _eventCleanups: Array<() => void> = [];
@@ -75,6 +80,22 @@ export class StatusBar extends TailwindElement() {
       }, 5000);
       this.requestUpdate();
     });
+
+    // Graph indexing progress
+    listen<{ phase: string; files_scanned: number; total_nodes: number }>(
+      'graph-build-progress',
+      (e) => {
+        this.graphPhase = e.payload.phase;
+        this.graphIndexFiles = e.payload.files_scanned;
+        this.graphIndexNodes = e.payload.total_nodes;
+
+        if (e.payload.phase === 'done' || e.payload.phase === 'loaded') {
+          this.graphIndexing = false;
+        } else {
+          this.graphIndexing = true;
+        }
+      }
+    ).then((unlisten) => this._eventCleanups.push(unlisten));
   }
 
   // --- Actions ---
@@ -224,6 +245,22 @@ export class StatusBar extends TailwindElement() {
             : nothing}
           ${this._renderLspIndicator()}
 
+          ${this.graphIndexing
+            ? html`
+              <div class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[var(--brand-primary)]/10">
+                <os-icon name="loading" size="12" class="animate-spin" color="var(--brand-primary)"></os-icon>
+                <span>Indexing${this.graphIndexFiles > 0 ? ` ${this.graphIndexFiles} files` : ''}</span>
+              </div>
+            `
+            : this.graphPhase === 'done'
+              ? html`
+                <div class="flex items-center gap-1.5 px-2 py-0.5 rounded">
+                  <os-icon name="check" size="12" color="var(--app-console-success)"></os-icon>
+                  <span>Graph ready</span>
+                </div>
+              `
+              : nothing}
+
           <update-button></update-button>
 
           <div class="flex items-center gap-1 cursor-pointer hover:bg-[var(--statusbar-hover-background)] px-2 py-0.5 rounded">
@@ -252,6 +289,14 @@ export class StatusBar extends TailwindElement() {
 
   setBranch(branch: string) {
     this.branch = branch;
+    this.requestUpdate();
+  }
+
+  startGraphIndexing() {
+    this.graphIndexing = true;
+    this.graphPhase = 'scanning';
+    this.graphIndexFiles = 0;
+    this.graphIndexNodes = 0;
     this.requestUpdate();
   }
 }

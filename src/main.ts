@@ -892,6 +892,11 @@ export class OpenStormApp extends TailwindElement() {
     } as CustomEvent<{ path: string }>);
 
     dispatch("project-opened", { path: this.projectPath });
+
+    // Build graph RAG in background (non-blocking)
+    invoke('graph_build_project', { projectPath: this.projectPath }).catch((err) => {
+      console.error('[Graph] Background build failed:', err);
+    });
   };
 
   private saveSession = async (): Promise<void> => {
