@@ -40,3 +40,6 @@ opencode.json
 # Documentation (local only)
 *.md
 !README.md
+# Build artifacts
+.openstorm/
+src-tauri/.openstorm/
