@@ -2,7 +2,6 @@ use serde::Serialize;
 use tauri::State;
 
 use super::GraphState;
-use crate::graph::query::GraphQuery;
 
 #[derive(Serialize)]
 pub struct FileLocation {
@@ -17,16 +16,22 @@ pub fn graph_navigate_to(
 ) -> Result<FileLocation, String> {
     let store_guard = state.store.lock().map_err(|e| e.to_string())?;
     let store = store_guard.as_ref().ok_or("Graph store not initialized")?;
-    let query = GraphQuery::new(store);
 
-    let nodes = query
-        .search_nodes(&node_id, 1)
+    let mut stmt = store
+        .conn()
+        .prepare(
+            "SELECT file_path, start_line FROM nodes WHERE id = ?1 LIMIT 1",
+        )
         .map_err(|e| e.to_string())?;
 
-    let node = nodes.first().ok_or("Node not found")?;
+    let row = stmt
+        .query_row(rusqlite::params![node_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+        })
+        .map_err(|_| "Node not found".to_string())?;
 
     Ok(FileLocation {
-        file_path: node.file_path.clone(),
-        line: node.start_line,
+        file_path: row.0,
+        line: row.1,
     })
 }
