@@ -13,22 +13,26 @@ pub fn parse_plan(text: &str) -> Vec<PlanStep> {
     let mut steps = Vec::new();
     for line in text.lines() {
         let trimmed = line.trim();
-        if let Some(rest) = trimmed
-            .strip_prefix(|c: char| c.is_ascii_digit())
-            .and_then(|s| {
-                s.strip_prefix('.')
-                    .or_else(|| s.strip_prefix(')'))
-                    .or_else(|| s.strip_prefix(':'))
-            })
-        {
-            let desc = rest.trim();
-            if !desc.is_empty() && desc.len() > 5 {
-                let step_num = steps.len() as u32 + 1;
-                steps.push(PlanStep {
-                    step: step_num,
-                    description: desc.to_string(),
-                    status: PlanStepStatus::Pending,
-                });
+        // Only match lines that START with a number + delimiter, not lines with prefixes like ##
+        // e.g. "1. Step description" or "2) Another step" but NOT "## 1. Something"
+        if trimmed.starts_with(|c: char| c.is_ascii_digit()) {
+            if let Some(rest) = trimmed
+                .strip_prefix(|c: char| c.is_ascii_digit())
+                .and_then(|s| {
+                    s.strip_prefix('.')
+                        .or_else(|| s.strip_prefix(')'))
+                        .or_else(|| s.strip_prefix(':'))
+                })
+            {
+                let desc = rest.trim();
+                if !desc.is_empty() && desc.len() > 5 {
+                    let step_num = steps.len() as u32 + 1;
+                    steps.push(PlanStep {
+                        step: step_num,
+                        description: desc.to_string(),
+                        status: PlanStepStatus::Pending,
+                    });
+                }
             }
         }
     }

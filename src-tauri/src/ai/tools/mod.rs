@@ -20,6 +20,7 @@ use super::agent::FileModification;
 use super::embedding_store::EmbeddingStore;
 use super::mcp::McpManager;
 use super::ToolDefinition;
+use crate::graph::store::GraphStore;
 
 /// Manages background processes spawned by the agent
 pub struct ProcessManager {
@@ -137,6 +138,8 @@ pub struct ToolRegistry {
     pub sandbox: Option<super::sandbox::Sandbox>,
     /// Embedding store for RAG search (optional)
     pub embedding_store: Option<Arc<Mutex<EmbeddingStore>>>,
+    /// Graph store for graph-based RAG (optional)
+    pub graph_store: Option<Arc<Mutex<GraphStore>>>,
     /// Orchestrator for sub-agent spawning (optional)
     pub orchestrator: Option<Arc<super::orchestrator::Orchestrator>>,
     /// MCP manager for external tool servers (optional)
@@ -155,6 +158,7 @@ impl ToolRegistry {
             project_path,
             sandbox: None,
             embedding_store: None,
+            graph_store: None,
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -169,6 +173,7 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: None,
+            graph_store: None,
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -187,6 +192,26 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
+            graph_store: None,
+            orchestrator: None,
+            mcp_manager: None,
+            process_manager: Arc::new(Mutex::new(ProcessManager::new())),
+            event_tx: Arc::new(Mutex::new(None)),
+            pending_file_modifications: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Create a new tool registry with graph store for graph-based RAG
+    pub fn with_graph_store(
+        project_path: String,
+        sandbox: super::sandbox::Sandbox,
+        graph_store: Arc<Mutex<GraphStore>>,
+    ) -> Self {
+        Self {
+            project_path,
+            sandbox: Some(sandbox),
+            embedding_store: None,
+            graph_store: Some(graph_store),
             orchestrator: None,
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -206,6 +231,7 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
+            graph_store: None,
             orchestrator: Some(orchestrator),
             mcp_manager: None,
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -226,6 +252,7 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
+            graph_store: None,
             orchestrator: Some(orchestrator),
             mcp_manager: Some(mcp_manager),
             process_manager: Arc::new(Mutex::new(ProcessManager::new())),
@@ -247,6 +274,7 @@ impl ToolRegistry {
             project_path,
             sandbox: Some(sandbox),
             embedding_store: Some(embedding_store),
+            graph_store: None,
             orchestrator: Some(orchestrator),
             mcp_manager: Some(mcp_manager),
             process_manager,

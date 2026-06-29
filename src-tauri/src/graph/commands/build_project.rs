@@ -10,6 +10,7 @@ use crate::graph::extractor::typescript::TypeScriptExtractor;
 use crate::graph::extractor::python::PythonExtractor;
 use crate::graph::extractor::go::GoExtractor;
 use crate::graph::store::GraphStore;
+use crate::graph::watcher::GraphWatcher;
 
 const IGNORED_DIRS: &[&str] = &[
     ".git", ".hg", ".svn", ".openstorm",
@@ -57,6 +58,14 @@ pub async fn graph_build_project(
     {
         let mut store_guard = state.store.lock().map_err(|e| e.to_string())?;
         *store_guard = Some(store);
+    }
+
+    // Initialize watcher
+    {
+        let mut watcher_guard = state.watcher.lock().map_err(|e| e.to_string())?;
+        if watcher_guard.is_none() {
+            *watcher_guard = Some(GraphWatcher::new());
+        }
     }
 
     if cached {

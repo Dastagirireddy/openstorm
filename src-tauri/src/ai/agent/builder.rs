@@ -241,4 +241,10 @@ impl Agent {
             session_start: std::time::Instant::now(),
         }
     }
+
+    /// Set the graph store for graph-based RAG.
+    /// Call this after constructing the agent to enable graph-aware semantic search.
+    pub fn set_graph_store(&mut self, graph_store: Arc<tokio::sync::Mutex<crate::graph::store::GraphStore>>) {
+        self.tools.graph_store = Some(graph_store);
+    }
 }
