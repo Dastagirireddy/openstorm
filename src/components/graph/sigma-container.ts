@@ -75,6 +75,9 @@ export class SigmaContainer extends LitElement {
     if (changed.has('filters') && this.sigmaInstance) {
       this.sigmaInstance.refresh();
     }
+    if (changed.has('layout') && this.graphData && this.graphData.nodes.length > 0) {
+      this.queueBuild();
+    }
   }
 
   disconnectedCallback() {
@@ -130,18 +133,43 @@ export class SigmaContainer extends LitElement {
       graph.setNodeAttribute(node, 'size', Math.max(graph.getNodeAttribute(node, 'size') || 5, 8));
     });
 
-    const settings = forceAtlas2.inferSettings(graph);
-    forceAtlas2.assign(graph, {
-      iterations: 150,
-      settings: {
-        ...settings,
-        barnesHutOptimize: true,
-        linLogMode: true,
-        scalingRatio: 30,
-        gravity: 0.15,
-        strongGravityMode: true
-      }
-    });
+    if (this.layout === 'hierarchical') {
+      const g = new dagre.graphlib.Graph();
+      g.setDefaultEdgeLabel(() => ({}));
+      g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 80 });
+
+      graph.forEachNode((node) => {
+        const size = graph.getNodeAttribute(node, 'size') as number || 10;
+        g.setNode(node, { width: size * 2, height: size * 2 });
+      });
+
+      graph.forEachEdge((_edge, _attrs, source, target) => {
+        g.setEdge(source, target);
+      });
+
+      dagre.layout(g);
+
+      graph.forEachNode((node) => {
+        const pos = g.node(node);
+        if (pos) {
+          graph.setNodeAttribute(node, 'x', pos.x);
+          graph.setNodeAttribute(node, 'y', pos.y);
+        }
+      });
+    } else {
+      const settings = forceAtlas2.inferSettings(graph);
+      forceAtlas2.assign(graph, {
+        iterations: 150,
+        settings: {
+          ...settings,
+          barnesHutOptimize: true,
+          linLogMode: true,
+          scalingRatio: 30,
+          gravity: 0.15,
+          strongGravityMode: true
+        }
+      });
+    }
   }
 
   private normalizePositions(graph: Graph, scale: number = 200) {
