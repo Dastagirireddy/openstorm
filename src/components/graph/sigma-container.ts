@@ -125,8 +125,25 @@ export class SigmaContainer extends LitElement {
 
   private runQuickLayout(graph: Graph) {
     if (graph.order < 3) return;
+
+    graph.forEachNode((node) => {
+      const size = graph.getNodeAttribute(node, 'size') || 5;
+      graph.setNodeAttribute(node, 'size', Math.max(size, 8));
+    });
+
     const settings = forceAtlas2.inferSettings(graph);
-    forceAtlas2.assign(graph, { iterations: 15, settings });
+    forceAtlas2.assign(graph, {
+      iterations: 150,
+      settings: {
+        ...settings,
+        barnesHutOptimize: true,
+        barnesHutTheta: 0.5,
+        scalingRatio: 30,
+        gravity: 0.15,
+        strongGravityMode: true,
+        slowDown: 1
+      }
+    });
   }
 
   private normalizePositions(graph: Graph, scale: number = 200) {
