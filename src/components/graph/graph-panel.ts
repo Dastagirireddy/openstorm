@@ -13,6 +13,7 @@ export class GraphPanel extends LitElement {
   @state() private layout: LayoutType = 'force';
   @state() private filters: GraphFilters = { kinds: [], languages: [], files: [], folders: [] };
   @state() private loading = true;
+  @state() private rendering = false;
   @state() private error: string | null = null;
   @state() private phase = '';
   @state() private filesScanned = 0;
@@ -98,6 +99,7 @@ export class GraphPanel extends LitElement {
 
   async loadGraph() {
     this.loading = true;
+    this.rendering = false;
     this.error = null;
     this.phase = 'scanning';
     this.filesScanned = 0;
@@ -111,15 +113,18 @@ export class GraphPanel extends LitElement {
         this.filesScanned = result.files_scanned;
         this.totalNodes = result.node_count;
       }
+      this.loading = false;
+      this.rendering = true;
       this.graphData = await invoke('graph_get_all');
     } catch (e) {
       this.error = String(e);
-    } finally {
       this.loading = false;
+      this.rendering = false;
     }
   }
 
   private get phaseLabel(): string {
+    if (this.rendering) return 'Rendering graph...';
     switch (this.phase) {
       case 'scanning': return 'Scanning project files...';
       case 'storing': return 'Building graph...';
@@ -160,6 +165,10 @@ export class GraphPanel extends LitElement {
     }
   }
 
+  private handleGraphReady() {
+    this.rendering = false;
+  }
+
   private async handleNavigate() {
     if (!this.selectedNode) return;
     try {
@@ -180,7 +189,7 @@ export class GraphPanel extends LitElement {
   }
 
   render() {
-    if (this.loading) {
+    if (this.loading || this.rendering) {
       return html`
         <div class="progress-overlay">
           <div class="spinner"></div>
@@ -218,6 +227,7 @@ export class GraphPanel extends LitElement {
             .filters=${this.filters}
             @node-select=${this.handleNodeSelect}
             @node-navigate=${this.handleNodeNavigate}
+            @graph-ready=${this.handleGraphReady}
           ></sigma-container>
         `
         : html`
