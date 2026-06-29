@@ -122,6 +122,12 @@ class TabBar extends TailwindElement() {
       `;
     }
 
+    if (tabType === 'graph') {
+      return html`
+        <os-icon name="git-branch" size="12" color="var(--app-foreground)"></os-icon>
+      `;
+    }
+
     return html`
       <file-icon path="${tab.path}" size=${12}></file-icon>
     `;
@@ -129,7 +135,7 @@ class TabBar extends TailwindElement() {
 
   private renderTab(tab: EditorTab): TemplateResult {
     const isActive = this.activeTab === tab.id;
-    const isUnclosable = tab.tabType === 'openstorm';
+    const isUnclosable = tab.tabType === 'openstorm' || tab.tabType === 'graph';
 
     return html`
       <div
@@ -263,6 +269,16 @@ class TabBar extends TailwindElement() {
                 }}>
                 <os-icon name="sparkles" size="12"></os-icon>
                 <span class="text-[12px]">OpenStorm AI</span>
+              </div>
+              <div
+                class="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+                style="color: var(--app-foreground);"
+                @click=${() => {
+                  this.showAddMenu = false;
+                  this.dispatchEvent(new CustomEvent('tab-add', { detail: { type: 'graph' }, bubbles: true, composed: true }));
+                }}>
+                <os-icon name="git-branch" size="12"></os-icon>
+                <span class="text-[12px]">Project Graph</span>
               </div>
             </div>
           ` : ''}

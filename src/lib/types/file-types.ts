@@ -16,7 +16,7 @@ export interface FileNode {
 /**
  * Tab types - discriminator for different content types
  */
-export type TabType = 'file' | 'terminal' | 'openstorm';
+export type TabType = 'file' | 'terminal' | 'openstorm' | 'graph';
 
 /**
  * Tab state for editor tabs
@@ -46,7 +46,7 @@ export type TerminalTabType = 'terminal' | 'output' | 'debug';
 /**
  * Activity bar items
  */
-export type ActivityItem = 'explorer' | 'terminal' | 'ai';
+export type ActivityItem = 'explorer' | 'terminal' | 'ai' | 'graph';
 
 /**
  * Right activity bar items
