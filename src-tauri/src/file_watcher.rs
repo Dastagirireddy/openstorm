@@ -1,7 +1,9 @@
 use notify::{Config, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+
+use crate::graph::commands::GraphState;
 
 pub struct FileWatcher {
     watcher: Arc<Mutex<RecommendedWatcher>>,
@@ -12,6 +14,11 @@ pub struct FileWatcher {
 /// Check if a path is a git repository
 fn is_git_repository(path: &Path) -> bool {
     path.join(".git").exists()
+}
+
+/// Check if a file extension is supported by the graph extractors
+fn is_graph_supported(ext: &str) -> bool {
+    matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go")
 }
 
 impl FileWatcher {
@@ -38,6 +45,47 @@ impl FileWatcher {
                                 "paths": paths,
                                 "type": event_type
                             }));
+
+                            // Update graph for supported file changes
+                            if let Some(graph_state) = handle.try_state::<GraphState>() {
+                                let store_result = graph_state.store.lock();
+                                let watcher_result = graph_state.watcher.lock();
+
+                                if let (Ok(store_guard), Ok(watcher_guard)) = (&store_result, &watcher_result) {
+                                    if let (Some(store), Some(graph_watcher)) = (store_guard.as_ref(), watcher_guard.as_ref()) {
+                                        for path_str in &paths {
+                                            let path = Path::new(path_str);
+
+                                            // Skip non-supported files
+                                            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+                                            if !is_graph_supported(ext) {
+                                                continue;
+                                            }
+
+                                            // Skip files in ignored directories
+                                            if should_skip_path(path) {
+                                                continue;
+                                            }
+
+                                            match e.kind {
+                                                EventKind::Create(_) | EventKind::Modify(_) => {
+                                                    if let Ok(content) = std::fs::read_to_string(path) {
+                                                        if let Err(e) = graph_watcher.on_file_changed(store, path, &content) {
+                                                            crate::log_warn!("Graph update failed for {}: {}", path_str, e);
+                                                        }
+                                                    }
+                                                }
+                                                EventKind::Remove(_) => {
+                                                    if let Err(e) = graph_watcher.on_file_deleted(store, path) {
+                                                        crate::log_warn!("Graph deletion failed for {}: {}", path_str, e);
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             // Check if .git folder itself was created or removed (not contents inside it)
                             let mut git_folder_created = false;
@@ -128,6 +176,18 @@ impl FileWatcher {
             Err("Failed to lock watcher".to_string())
         }
     }
+}
+
+fn should_skip_path(path: &Path) -> bool {
+    let skip_dirs = [".git", ".hg", ".svn", ".openstorm", "node_modules", "target", "dist", "build"];
+    for component in path.components() {
+        if let std::path::Component::Normal(name) = component {
+            if skip_dirs.contains(&name.to_str().unwrap_or("")) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 #[tauri::command]

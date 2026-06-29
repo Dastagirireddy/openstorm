@@ -1,19 +1,25 @@
 use std::path::Path;
 
 use crate::graph::errors::GraphResult;
+use crate::graph::extractor::registry::ExtractorRegistry;
 use crate::graph::store::GraphStore;
-use crate::graph::watcher::GraphWatcher;
+use crate::graph::types::GraphData;
 
-pub fn handle_change(watcher: &GraphWatcher, path: &Path, content: &str) -> GraphResult<()> {
+pub fn handle_change(
+    store: &GraphStore,
+    registry: &ExtractorRegistry,
+    path: &Path,
+    content: &str,
+) -> GraphResult<()> {
     let file_path = path.to_string_lossy().to_string();
 
-    remove_old_nodes(watcher.store(), &file_path)?;
+    remove_old_nodes(store, &file_path)?;
 
-    let result = watcher.extract_file(&file_path, content);
+    let result = registry.extract(&file_path, content);
     let node_count = result.nodes.len();
     let edge_count = result.edges.len();
 
-    watcher.store().insert_graph(&crate::graph::types::GraphData {
+    store.insert_graph(&GraphData {
         nodes: result.nodes,
         edges: result.edges,
     })?;
@@ -25,6 +31,13 @@ pub fn handle_change(watcher: &GraphWatcher, path: &Path, content: &str) -> Grap
         edge_count
     );
 
+    Ok(())
+}
+
+pub fn handle_deletion(store: &GraphStore, path: &Path) -> GraphResult<()> {
+    let file_path = path.to_string_lossy().to_string();
+    remove_old_nodes(store, &file_path)?;
+    crate::log_debug!("Graph nodes removed for deleted file: {}", file_path);
     Ok(())
 }
 

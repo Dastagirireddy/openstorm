@@ -220,20 +220,39 @@ impl ToolRegistry {
         format!("Could not find definition for '{}'", symbol)
     }
 
-    /// Semantic search using RAG
+    /// Semantic search using RAG - prefers graph-based RAG when available
     pub(super) async fn semantic_search(&self, args: &serde_json::Value) -> String {
         let query = args["query"].as_str().unwrap_or("");
-        let max_results = args["max_results"].as_u64().unwrap_or(5) as usize;
+        let max_tokens = args["max_tokens"].as_u64().unwrap_or(2000) as usize;
 
+        // Try graph-based RAG first
+        if let Some(ref graph_store) = self.graph_store {
+            let store = graph_store.lock().await;
+
+            let rag = crate::graph::rag::GraphRag::new(&store);
+            match rag.get_context_for_query(query, max_tokens) {
+                Ok(ctx) => {
+                    if ctx.matches.is_empty() && ctx.neighbors.is_empty() {
+                        return format!("No results found for: {}", query);
+                    }
+                    return rag.build_llm_prompt(query, &ctx);
+                }
+                Err(e) => {
+                    crate::log_warn!("Graph RAG search failed, falling back to BM25: {}", e);
+                }
+            }
+        }
+
+        // Fall back to BM25-based RAG
         let store = match &self.embedding_store {
             Some(store) => store,
-            None => return "Semantic search not available (embedding store not initialized)".to_string(),
+            None => return "Semantic search not available (no RAG store initialized). Build the graph first.".to_string(),
         };
 
+        let max_results = (max_tokens / 100).max(5); // Estimate ~100 tokens per result
         let results = {
             let mut store = store.lock().await;
             let results = store.search(query, max_results);
-            // Record the search for metrics
             store.record_search(query, &results);
             results
         };
@@ -257,12 +276,10 @@ impl ToolRegistry {
                 result.score
             ));
 
-            // Show symbol name if available
             if let Some(ref name) = chunk.symbol_name {
                 output.push_str(&format!("   Symbol: {}\n", name));
             }
 
-            // Show first few lines of content
             let preview: String = chunk
                 .content
                 .lines()

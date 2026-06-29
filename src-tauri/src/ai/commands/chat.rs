@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::mpsc;
 
 use super::AiState;
@@ -8,6 +8,7 @@ use super::super::orchestrator::Orchestrator;
 use super::super::providers::{LlmProvider, Message, ProviderRegistry};
 use super::super::permissions::PermissionProfile;
 use crate::config::AiProviderConfig;
+use crate::graph::commands::GraphState;
 
 #[tauri::command]
 pub async fn ai_chat(
@@ -69,15 +70,30 @@ pub async fn ai_chat(
 
     let mcp_manager = state.mcp_manager();
     let process_manager = state.process_manager();
-    let agent = Arc::new(Agent::with_mcp_and_process_manager(
+
+    // Create agent
+    let mut agent = Agent::with_mcp_and_process_manager(
         provider,
         model,
-        project_path,
+        project_path.clone(),
         PermissionProfile::Smart,
         orchestrator,
         mcp_manager,
         process_manager,
-    ));
+    );
+
+    // Try to attach graph store for graph-based RAG
+    // Open a separate connection to the graph database for the agent
+    let store_path = format!("{}/.openstorm/graph.db", project_path);
+    if let Ok(graph_store) = crate::graph::store::GraphStore::open(&store_path) {
+        let shared_store = Arc::new(tokio::sync::Mutex::new(graph_store));
+        agent.set_graph_store(shared_store);
+        eprintln!("[ai_chat] Graph RAG enabled for project: {}", project_path);
+    } else {
+        eprintln!("[ai_chat] Graph store not found, falling back to BM25 RAG");
+    }
+
+    let agent = Arc::new(agent);
 
     {
         let mut active = state.active_agent.lock().await;

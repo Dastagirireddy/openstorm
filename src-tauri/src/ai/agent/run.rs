@@ -106,7 +106,7 @@ impl Agent {
         });
 
         // Phase 1: Auto-context injection via RAG
-        self.inject_rag_context(&user_message, &mut ctx, &mut session_log)
+        self.inject_rag_context(&user_message, &mut ctx, &tx, &mut session_log)
             .await;
 
         let tool_defs = self.tools.essential_definitions_with_mcp().await;
@@ -813,7 +813,14 @@ impl Agent {
     }
 
     /// Index the RAG store if it's empty.
+    /// Skips BM25 indexing when graph store is available (graph is already built).
     async fn index_rag_if_needed(&self, session_log: &mut AiSessionLog) {
+        // If graph store is available, no need to index BM25 — graph is already built
+        if self.tools.graph_store.is_some() {
+            session_log.log_flow("Graph store available, skipping BM25 indexing");
+            return;
+        }
+
         let store = self.embedding_store.lock().await;
         if store.is_empty() {
             drop(store);
@@ -841,12 +848,113 @@ impl Agent {
     }
 
     /// Inject RAG-relevant code context into the conversation.
+    /// Uses graph RAG when available, falls back to BM25.
     async fn inject_rag_context(
         &self,
         user_message: &str,
         ctx: &mut ContextManager,
+        tx: &mpsc::Sender<AgentEvent>,
         session_log: &mut AiSessionLog,
     ) {
+        // Try graph RAG first
+        if let Some(ref graph_store) = self.tools.graph_store {
+            let _ = tx.send(AgentEvent::Thinking {
+                message: "Searching code graph...".into(),
+            }).await;
+
+            // Run entire graph query in blocking task (rusqlite::Connection is not Send)
+            let graph_store_clone = graph_store.clone();
+            let query = user_message.to_string();
+            let graph_result = tokio::task::spawn_blocking(move || {
+                let rt = tokio::runtime::Handle::current();
+                rt.block_on(async {
+                    let store = graph_store_clone.lock().await;
+                    let rag = crate::graph::rag::GraphRag::new(&store);
+                    rag.get_context_for_query(&query, 2000)
+                })
+            }).await;
+
+            match graph_result {
+                Ok(Ok(graph_ctx)) => {
+                    let matches_count = graph_ctx.matches.len();
+                    let neighbors_count = graph_ctx.neighbors.len();
+                    let edges_count = graph_ctx.edges.len();
+
+                    if matches_count == 0 && neighbors_count == 0 {
+                        session_log.log_flow(&format!(
+                            "No graph matches found for: \"{}\"",
+                            super::types::truncate_to_boundary(user_message, 60)
+                        ));
+                        let _ = tx.send(AgentEvent::Thinking {
+                            message: "No matching code entities found in graph".into(),
+                        }).await;
+                        return;
+                    }
+
+                    // Build prompt in blocking task
+                    let graph_store_clone2 = graph_store.clone();
+                    let query_clone = user_message.to_string();
+                    let prompt_result = tokio::task::spawn_blocking(move || {
+                        let rt = tokio::runtime::Handle::current();
+                        rt.block_on(async {
+                            let store = graph_store_clone2.lock().await;
+                            let rag = crate::graph::rag::GraphRag::new(&store);
+                            let ctx_for_prompt = crate::graph::rag::GraphContext {
+                                matches: graph_ctx.matches,
+                                neighbors: graph_ctx.neighbors,
+                                edges: graph_ctx.edges,
+                                token_estimate: graph_ctx.token_estimate,
+                            };
+                            rag.build_llm_prompt(&query_clone, &ctx_for_prompt)
+                        })
+                    }).await;
+
+                    match prompt_result {
+                        Ok(prompt) => {
+                            let rag_tokens = (prompt.len() / 4) as u64;
+
+                            let summary = format!(
+                                "Found {} direct matches, {} related entities, {} relationships",
+                                matches_count, neighbors_count, edges_count,
+                            );
+                            let _ = tx.send(AgentEvent::Thinking {
+                                message: summary,
+                            }).await;
+
+                            session_log.log_flow(&format!(
+                                "Graph RAG: {} matches, {} neighbors, {} edges, ~{} tokens",
+                                matches_count, neighbors_count, edges_count, rag_tokens
+                            ));
+
+                            ctx.push(Message::System {
+                                content: prompt,
+                            });
+                            return;
+                        }
+                        Err(e) => {
+                            let _ = tx.send(AgentEvent::Thinking {
+                                message: format!("Graph prompt build failed: {}", e),
+                            }).await;
+                        }
+                    }
+                }
+                Ok(Err(e)) => {
+                    let _ = tx.send(AgentEvent::Thinking {
+                        message: format!("Graph query failed ({}), trying keyword search", e),
+                    }).await;
+                    session_log.log_flow(&format!(
+                        "Graph RAG query failed ({}), falling back to BM25", e
+                    ));
+                }
+                Err(e) => {
+                    let _ = tx.send(AgentEvent::Thinking {
+                        message: format!("Graph task failed ({}), trying keyword search", e),
+                    }).await;
+                }
+            }
+        }
+
+        // Fall back to BM25 RAG
         let store = self.embedding_store.lock().await;
         if store.is_empty() {
             return;
@@ -862,7 +970,7 @@ impl Agent {
 
         let mut context_block = String::from(
             "## Relevant Code Context (auto-retrieved by RAG)\n\
-             These code sections are relevant to the user's request. \
+             These code sections are relevant to user request. \
              Use them as reference — do NOT re-read these files with read_file.\n\n",
         );
         let mut chunk_details = Vec::new();
