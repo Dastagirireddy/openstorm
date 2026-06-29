@@ -388,23 +388,30 @@ export class SigmaContainer extends LitElement {
   private bindContourLayers() {
     if (!this.sigmaInstance || !this.graph) return;
 
+    const gl = this.container.querySelector('canvas')?.getContext('webgl2');
+    if (!gl) return;
+
     const communities = new Set<string>();
     this.graph.forEachNode((_, attrs) => communities.add(attrs.community));
 
     communities.forEach((community) => {
-      const clean = bindWebGLLayer(
-        `community-${community}`,
-        this.sigmaInstance!,
-        createContoursProgram(
-          this.graph!.filterNodes((_, attr) => attr.community === community),
-          {
-            radius: 150,
-            border: { color: this.communityPalette[community], thickness: 4 },
-            levels: [{ color: '#00000000', threshold: 0.5 }],
-          },
-        ),
-      );
-      this.contourCleanups.push(clean);
+      try {
+        const clean = bindWebGLLayer(
+          `community-${community}`,
+          this.sigmaInstance!,
+          createContoursProgram(
+            this.graph!.filterNodes((_, attr) => attr.community === community),
+            {
+              radius: 150,
+              border: { color: this.communityPalette[community], thickness: 4 },
+              levels: [{ color: '#00000000', threshold: 0.5 }],
+            },
+          ),
+        );
+        this.contourCleanups.push(clean);
+      } catch (e) {
+        console.warn('Contour layer skipped:', e);
+      }
     });
   }
 
