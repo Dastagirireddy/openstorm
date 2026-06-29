@@ -250,6 +250,8 @@ export class SigmaContainer extends LitElement {
     }
 
     this.runCommunityDetection();
+
+    this.dispatchEvent(new CustomEvent('graph-ready', { bubbles: true, composed: true }));
   }
 
   private runCommunityDetection() {
