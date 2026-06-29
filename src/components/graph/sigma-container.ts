@@ -180,8 +180,17 @@ export class SigmaContainer extends LitElement {
 
     if (hierarchicalGraph.order === 0) return;
 
-    // Detect communities with Louvain and assign colors
-    const communities = louvain(hierarchicalGraph);
+    // Detect communities with Louvain (needs undirected graph)
+    const undirectedGraph = new Graph();
+    hierarchicalGraph.forEachNode((node) => {
+      undirectedGraph.addNode(node, hierarchicalGraph.getNodeAttributes(node));
+    });
+    hierarchicalGraph.forEachEdge((edge, attrs, source, target) => {
+      if (!undirectedGraph.hasEdge(source, target) && !undirectedGraph.hasEdge(target, source)) {
+        undirectedGraph.addEdge(source, target, attrs);
+      }
+    });
+    const communities = louvain(undirectedGraph);
     const uniqueCommunities = Array.from(new Set(Object.values(communities)));
     const colors = iwanthue(uniqueCommunities.length);
 
