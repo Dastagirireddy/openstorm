@@ -45,10 +45,12 @@ export class SigmaContainer extends LitElement {
   private lodManager = new LODManager();
   @state() private layoutStatus = '';
   private currentGraph: Graph | null = null;
+  private hoveredNode: string | null = null;
 
   static styles = css`
     :host { display: block; width: 100%; height: 100%; overflow: hidden; }
     #sigma-container { position: relative; width: 100%; height: 100%; background: var(--ai-panel-background, #1e1e2e); }
+    #sigma-container canvas { background: transparent !important; }
     .layout-status {
       position: absolute; bottom: 8px; left: 8px; z-index: 10;
       display: flex; align-items: center; gap: 6px;
@@ -106,6 +108,14 @@ export class SigmaContainer extends LitElement {
     return true;
   }
 
+  private lightenColor(hex: string, amount: number): string {
+    const h = hex.replace('#', '');
+    const r = Math.min(255, parseInt(h.substring(0, 2), 16) + Math.round(255 * amount));
+    const g = Math.min(255, parseInt(h.substring(2, 4), 16) + Math.round(255 * amount));
+    const b = Math.min(255, parseInt(h.substring(4, 6), 16) + Math.round(255 * amount));
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
   private buildGraph() {
     this.cleanup();
     if (!this.graphData) return;
@@ -130,15 +140,16 @@ export class SigmaContainer extends LitElement {
     });
     const rangeX = maxX - minX || 1;
     const rangeY = maxY - minY || 1;
+    const aspect = this.container.offsetWidth / this.container.offsetHeight;
     graph.forEachNode((node) => {
       const x = graph.getNodeAttribute(node, 'x');
       const y = graph.getNodeAttribute(node, 'y');
-      graph.setNodeAttribute(node, 'x', ((x - minX) / rangeX - 0.5) * scale);
+      graph.setNodeAttribute(node, 'x', ((x - minX) / rangeX - 0.5) * scale * aspect);
       graph.setNodeAttribute(node, 'y', ((y - minY) / rangeY - 0.5) * scale);
     });
   }
 
-  private renderHierarchicalView() {
+  private renderHierarchicalView(focusNodeId?: string) {
     if (!this.container || !this.graphData) return;
 
     if (this.sigmaInstance) { this.sigmaInstance.kill(); this.sigmaInstance = null; }
@@ -166,15 +177,27 @@ export class SigmaContainer extends LitElement {
       labelRenderedSizeThreshold: 8,
       labelDensity: 0.5,
       labelGridCellSize: 80,
+      renderEdgeLabels: false,
       hideEdgesOnMove: true,
       hideLabelsOnMove: true,
       defaultEdgeType: 'arrow',
+      defaultDrawNodeHover: () => {},
       nodeReducer: (node: string, data: Record<string, unknown>) => {
         const res = { ...data };
         const kind = data.kind as string;
         const file = data.file as string;
         if (kind && file && !this.isNodeVisible(kind, file)) {
           res.hidden = true;
+        }
+        if (node === this.hoveredNode) {
+          res.size = (data.size as number) * 1.8;
+          res.color = data.color;
+          res.strokeColor = '#ffffff';
+          res.strokeWidth = 4;
+          res.zIndex = 1;
+          res.labelColor = { color: resolveCssVar(this.container, '--ai-text', '#e6edf3') };
+          res.labelBackground = false;
+          res.forceLabel = true;
         }
         return res;
       },
@@ -193,6 +216,11 @@ export class SigmaContainer extends LitElement {
             res.color = edgeColor;
             res.size = 1;
           }
+          if (data.highlighted) {
+            res.size = 2.5;
+            res.color = resolveCssVar(this.container, '--brand-primary', '#7c3aed');
+            res.zIndex = 0;
+          }
         }
         return res;
       },
@@ -202,13 +230,30 @@ export class SigmaContainer extends LitElement {
       this.handleNodeInteraction(node);
     });
 
+    this.sigmaInstance.on('enterNode', ({ node }) => {
+      this.hoveredNode = node;
+      this.sigmaInstance?.refresh();
+    });
+
+    this.sigmaInstance.on('leaveNode', () => {
+      this.hoveredNode = null;
+      this.sigmaInstance?.refresh();
+    });
+
     this.sigmaInstance.on('doubleClickNode', ({ node }) => {
       this.handleDoubleClick(node);
     });
 
     this.container.addEventListener('dblclick', (e) => { e.preventDefault(); e.stopPropagation(); });
     this.patchMouseCaptor();
-    this.fitToScreen();
+
+    requestAnimationFrame(() => {
+      if (focusNodeId) {
+        this.focusOnExpandedChildren(focusNodeId);
+      } else {
+        this.fitToScreen();
+      }
+    });
   }
 
   private handleNodeInteraction(nodeId: string) {
@@ -220,10 +265,32 @@ export class SigmaContainer extends LitElement {
     if (result.action === 'expand-folder' || result.action === 'expand-file') {
       this.layoutStatus = 'Expanding...';
       requestAnimationFrame(() => {
-        this.renderHierarchicalView();
+        this.renderHierarchicalView(result.target);
         this.layoutStatus = '';
       });
     }
+  }
+
+  private focusOnExpandedChildren(parentId: string) {
+    if (!this.sigmaInstance) return;
+    const graph = this.sigmaInstance.getGraph();
+
+    let targetNode = parentId;
+    if (!graph.hasNode(targetNode)) {
+      if (graph.hasNode(`folder:${parentId}`)) targetNode = `folder:${parentId}`;
+      else if (graph.hasNode(`file:${parentId}`)) targetNode = `file:${parentId}`;
+      else return;
+    }
+
+    const nodesToFocus = [targetNode];
+    graph.forEachNeighbor(targetNode, (neighbor) => nodesToFocus.push(neighbor));
+
+    if (nodesToFocus.length <= 1) return;
+
+    this.sigmaInstance.getCamera().animate(
+      { nodes: nodesToFocus },
+      { duration: 500 }
+    );
   }
 
   private handleDoubleClick(nodeId: string) {
@@ -266,17 +333,11 @@ export class SigmaContainer extends LitElement {
 
   public fitToScreen() {
     if (!this.sigmaInstance) return;
-    const camera = this.sigmaInstance.getCamera();
-    const graph = this.sigmaInstance.getGraph();
-    const order = graph.order;
-
-    let ratio = 1.0;
-    if (order > 100) ratio = 2.0;
-    else if (order > 50) ratio = 1.5;
-    else if (order > 20) ratio = 1.2;
-
-    camera.setState({ x: 0.5, y: 0.5, ratio });
-    this.sigmaInstance.refresh();
+    const allNodes = this.sigmaInstance.getGraph().nodes();
+    this.sigmaInstance.getCamera().animate(
+      { nodes: allNodes },
+      { duration: 500 }
+    );
   }
 
   public zoomIn() {
