@@ -72,33 +72,6 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
 
-      - name: Sign AppImage for updater
-        run: |
-          sudo apt-get install -y minisign
-
-          # Decode the minisign private key
-          echo "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d > /tmp/signing.key
-
-          echo "=== Signing AppImage files ==="
-          for APPIMAGE in $(find src-tauri/target -name "*.AppImage" -type f); do
-            AI_NAME=$(basename "$APPIMAGE")
-            echo "Signing: $AI_NAME"
-            minisign -S -s /tmp/signing.key -x "${APPIMAGE}.sig" -m "$APPIMAGE" -q
-            if [ -f "${APPIMAGE}.sig" ]; then
-              echo "  Created: ${AI_NAME}.sig"
-            else
-              echo "  ERROR: Failed to sign $AI_NAME"
-            fi
-          done
-
-          rm -f /tmp/signing.key
-
-          echo "=== All .sig files ==="
-          find src-tauri/target -name "*.sig" -type f
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
       - name: List all bundle files
         run: |
           echo "=== Bundle files ==="
