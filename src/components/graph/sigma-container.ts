@@ -3,6 +3,7 @@ import { customElement, property, state, query } from 'lit/decorators.js';
 import Graph from 'graphology';
 import Sigma from 'sigma';
 import forceAtlas2 from 'graphology-layout-forceatlas2';
+import * as dagre from 'dagre';
 import { GraphData, GraphNode, LayoutType, GraphFilters } from './graph-types';
 
 const DARK_NODE_COLORS: Record<string, string> = {
@@ -335,7 +336,7 @@ export class SigmaContainer extends LitElement {
   private applyDagre() {
     if (!this.graph) return;
 
-    const g = new (window as any).dagre.graphlib.Graph();
+    const g = new dagre.graphlib.Graph();
     g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 60 });
     g.setDefaultEdgeLabel(() => ({}));
 
@@ -347,7 +348,7 @@ export class SigmaContainer extends LitElement {
       g.setEdge(source, target);
     });
 
-    (window as any).dagre.layout(g);
+    dagre.layout(g);
 
     this.graph.forEachNode((node) => {
       const pos = g.node(node);
