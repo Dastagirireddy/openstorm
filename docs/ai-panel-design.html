@@ -1,0 +1,2508 @@
+<!DOCTYPE html>
+<html lang="en" class="light" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenStorm AI Panel — Architecture Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+<style>
+/* ═══════════════════════════════════════════════════════════════
+   LANGCHAIN-INSPIRED COLOR SYSTEM
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --primary: 22 31 52;
+  --primary-light: 127 200 255;
+  --primary-dark: 0 109 221;
+  --background-light: 255 255 255;
+  --background-dark: 3 7 16;
+  --gray-50: 243 243 244;
+  --gray-100: 238 238 239;
+  --gray-200: 223 223 224;
+  --gray-300: 206 206 207;
+  --gray-400: 159 159 160;
+  --gray-500: 112 112 113;
+  --gray-600: 80 80 81;
+  --gray-700: 63 63 64;
+  --gray-800: 38 38 38;
+  --gray-900: 23 23 24;
+  --gray-950: 10 11 11;
+  --accent-green: 30 166 98;
+  --accent-purple: 130 80 223;
+  --accent-orange: 234 88 12;
+  --accent-red: 220 38 38;
+  --accent-blue: 0 109 221;
+}
+
+/* LIGHT MODE */
+html.light, html.light body {
+  background: rgb(var(--background-light));
+  color: rgb(var(--gray-700));
+}
+html.light h1 { color: rgb(var(--primary)); }
+html.light h2 { color: rgb(var(--primary-dark)); border-color: rgb(var(--gray-200)); }
+html.light h3 { color: rgb(var(--primary-dark)); }
+html.light a { color: rgb(var(--primary-dark)); }
+html.light code:not([class*="language-"]) {
+  background: rgb(var(--gray-50));
+  color: rgb(var(--primary-dark));
+  border: 1px solid rgb(var(--gray-200));
+}
+html.light pre {
+  background: rgb(var(--gray-950));
+  border: 1px solid rgb(var(--gray-200));
+}
+html.light pre code { color: #e6edf3; background: none; border: none; }
+html.light blockquote {
+  background: rgb(var(--primary-light)) / 0.08;
+  border-left: 3px solid rgb(var(--primary-dark));
+}
+html.light .card {
+  background: rgb(var(--background-light));
+  border: 1px solid rgb(var(--gray-200));
+}
+html.light table th { background: rgb(var(--gray-50)); color: rgb(var(--primary-dark)); border-color: rgb(var(--gray-200)); }
+html.light table td { border-color: rgb(var(--gray-200)); }
+html.light .mermaid { background: rgb(var(--gray-50)); }
+html.light .badge-critical { background: rgb(220 38 38 / 0.1); color: rgb(var(--accent-red)); }
+html.light .badge-high { background: rgb(234 88 12 / 0.1); color: rgb(var(--accent-orange)); }
+html.light .badge-medium { background: rgb(0 109 221 / 0.1); color: rgb(var(--accent-blue)); }
+html.light .badge-low { background: rgb(30 166 98 / 0.1); color: rgb(var(--accent-green)); }
+html.light .callout-tip { background: rgb(var(--accent-green) / 0.06); border-left-color: rgb(var(--accent-green)); }
+html.light .callout-warning { background: rgb(var(--accent-orange) / 0.06); border-left-color: rgb(var(--accent-orange)); }
+html.light .callout-info { background: rgb(var(--accent-blue) / 0.06); border-left-color: rgb(var(--accent-blue)); }
+
+/* DARK MODE */
+html.dark, html.dark body {
+  background: rgb(var(--background-dark));
+  color: rgb(var(--gray-400));
+}
+html.dark h1 { color: rgb(var(--gray-100)); }
+html.dark h2 { color: rgb(var(--gray-100)); border-color: rgb(var(--gray-800)); }
+html.dark h3 { color: rgb(var(--gray-100)); }
+html.dark h4 { color: rgb(var(--gray-200)); }
+html.dark a { color: rgb(var(--primary-light)); }
+html.dark code:not([class*="language-"]) {
+  background: rgb(var(--gray-800));
+  color: rgb(var(--primary-light));
+  border: 1px solid rgb(var(--gray-700));
+}
+html.dark pre {
+  background: rgb(var(--gray-950));
+  border: 1px solid rgb(var(--gray-800));
+}
+html.dark pre code { color: #e6edf3; background: none; border: none; }
+html.dark blockquote {
+  background: rgb(var(--primary-light)) / 0.08;
+  border-left: 3px solid rgb(var(--primary-light));
+}
+html.dark .card {
+  background: rgb(var(--gray-900));
+  border: 1px solid rgb(var(--gray-800));
+}
+html.dark table th { background: rgb(var(--gray-900)); color: rgb(var(--gray-100)); border-color: rgb(var(--gray-800)); }
+html.dark table td { border-color: rgb(var(--gray-800)); }
+html.dark .mermaid { background: rgb(var(--gray-900)); }
+html.dark .badge-critical { background: rgb(220 38 38 / 0.15); color: #fca5a5; }
+html.dark .badge-high { background: rgb(234 88 12 / 0.15); color: #fdba74; }
+html.dark .badge-medium { background: rgb(0 109 221 / 0.15); color: #93c5fd; }
+html.dark .badge-low { background: rgb(30 166 98 / 0.15); color: #86efac; }
+html.dark .callout-tip { background: rgb(30 166 98 / 0.08); border-left-color: rgb(var(--accent-green)); }
+html.dark .callout-warning { background: rgb(234 88 12 / 0.08); border-left-color: rgb(var(--accent-orange)); }
+html.dark .callout-info { background: rgb(0 109 221 / 0.08); border-left-color: rgb(var(--accent-blue)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   BASE STYLES
+   ═══════════════════════════════════════════════════════════════ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.7;
+  padding: 0 1.5rem;
+  max-width: 900px;
+  margin: 0 auto;
+  padding-top: 2rem;
+  padding-bottom: 4rem;
+}
+
+h1 {
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 3rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid;
+}
+h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+}
+h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+p { margin: 0.5rem 0; }
+
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+hr.section-divider {
+  border: none;
+  border-top: 1px solid;
+  margin: 3rem 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CODE BLOCKS (Prism override)
+   ═══════════════════════════════════════════════════════════════ */
+code:not([class*="language-"]) {
+  font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  padding: 0.15rem 0.4rem;
+  border-radius: 5px;
+  font-size: 0.85em;
+  font-weight: 500;
+}
+pre {
+  border-radius: 8px;
+  padding: 1.25rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+pre code {
+  background: none !important;
+  border: none !important;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TABLES
+   ═══════════════════════════════════════════════════════════════ */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.875rem;
+}
+th, td {
+  padding: 0.6rem 0.85rem;
+  text-align: left;
+}
+th {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CALLOUTS (LangChain style)
+   ═══════════════════════════════════════════════════════════════ */
+.callout {
+  border-left: 3px solid;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.875rem;
+}
+.callout-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CARDS
+   ═══════════════════════════════════════════════════════════════ */
+.card {
+  border-radius: 8px;
+  padding: 1.25rem;
+  margin: 1rem 0;
+}
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+
+/* ═══════════════════════════════════════════════════════════════
+   BADGES
+   ═══════════════════════════════════════════════════════════════ */
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MERMAID
+   ═══════════════════════════════════════════════════════════════ */
+.mermaid {
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin: 1rem 0;
+  text-align: center;
+  overflow-x: auto;
+}
+.mermaid svg { max-width: 100%; }
+
+/* ═══════════════════════════════════════════════════════════════
+   LEFT SIDEBAR NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 260px;
+  height: 100vh;
+  overflow-y: auto;
+  padding: 1.5rem 1rem 2rem 1.5rem;
+  z-index: 50;
+  border-right: 1px solid;
+  font-size: 0.82rem;
+}
+html.light .sidebar { background: rgb(var(--background-light)); border-color: rgb(var(--gray-200)); }
+html.dark .sidebar { background: rgb(var(--gray-950)); border-color: rgb(var(--gray-800)); }
+
+.sidebar-logo {
+  font-weight: 700;
+  font-size: 0.95rem;
+  display: block;
+}
+html.light .sidebar-logo { color: rgb(var(--primary)); }
+html.dark .sidebar-logo { color: rgb(var(--gray-100)); }
+
+.sidebar-section {
+  font-weight: 600;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 1rem 0 0.35rem 0;
+  padding: 0 0.75rem;
+}
+html.light .sidebar-section { color: rgb(var(--gray-400)); }
+html.dark .sidebar-section { color: rgb(var(--gray-600)); }
+
+.sidebar .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  margin: 1px 0.5rem;
+  text-decoration: none;
+  font-size: 0.82rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  border-left: 2px solid transparent;
+}
+html.light .nav-item { color: rgb(var(--gray-600)); }
+html.light .nav-item:hover { background: rgb(var(--gray-50)); color: rgb(var(--primary-dark)); }
+html.light .nav-item.active { background: rgb(var(--accent-blue) / 0.08); color: rgb(var(--accent-blue)); border-left-color: rgb(var(--accent-blue)); }
+
+html.dark .nav-item { color: rgb(var(--gray-400)); }
+html.dark .nav-item:hover { background: rgb(var(--gray-800)); color: rgb(var(--gray-100)); }
+html.dark .nav-item.active { background: rgb(var(--accent-blue) / 0.12); color: rgb(--accent-blue); border-left-color: rgb(var(--accent-blue)); }
+
+.sidebar .nav-item.sub { padding-left: 2rem; font-size: 0.78rem; font-weight: 400; }
+
+/* Theme toggle switch */
+.theme-toggle-switch {
+  width: 40px; height: 22px;
+  border-radius: 11px;
+  position: relative;
+  transition: background 0.2s;
+}
+html.light .theme-toggle-switch { background: rgb(var(--gray-300)); }
+html.dark .theme-toggle-switch { background: rgb(var(--accent-blue)); }
+.theme-toggle-switch::after {
+  content: '';
+  position: absolute; top: 3px; left: 3px;
+  width: 16px; height: 16px;
+  background: white; border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+html.dark .theme-toggle-switch::after { transform: translateX(18px); }
+
+/* Main content shift */
+body { padding-left: 270px; max-width: 1100px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile sidebar collapse
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .sidebar { display: none; }
+  body { padding-left: 1.5rem; max-width: 100%; }
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SMOOTH SCROLL & SCROLLBAR
+   ═══════════════════════════════════════════════════════════════ */
+html { scroll-behavior: smooth; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+html.light ::-webkit-scrollbar-thumb { background: rgb(var(--gray-300)); border-radius: 3px; }
+html.dark ::-webkit-scrollbar-thumb { background: rgb(var(--gray-700)); border-radius: 3px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS
+   ═══════════════════════════════════════════════════════════════ */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.content > * { animation: fadeIn 0.4s ease forwards; }
+
+/* ═══════════════════════════════════════════════════════════════
+   STAT CARDS
+   ═══════════════════════════════════════════════════════════════ */
+.stat {
+  border-radius: var(--radius-lg, 12px);
+  padding: 1.25rem;
+  text-align: center;
+}
+html.light .stat { background: #fff; border: 1px solid rgb(var(--gray-200)); }
+html.dark .stat { background: rgb(var(--gray-900)); border: 1px solid rgb(var(--gray-800)); }
+.stat-icon {
+  width: 40px; height: 40px;
+  margin: 0 auto 0.75rem;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.stat-value { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.5px; }
+html.light .stat-value { color: rgb(var(--primary)); }
+html.dark .stat-value { color: rgb(var(--gray-100)); }
+.stat-label { font-size: 0.8rem; margin-top: 0.25rem; }
+html.light .stat-label { color: rgb(var(--gray-500)); }
+html.dark .stat-label { color: rgb(var(--gray-500)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   CARDS WITH ICONS
+   ═══════════════════════════════════════════════════════════════ */
+.card-icon {
+  width: 36px; height: 36px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.card-icon.blue { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); }
+.card-icon.green { background: rgb(var(--accent-green) / 0.1); color: rgb(var(--accent-green)); }
+.card-icon.purple { background: rgb(var(--accent-purple) / 0.1); color: rgb(var(--accent-purple)); }
+.card-icon.orange { background: rgb(var(--accent-orange) / 0.1); color: rgb(var(--accent-orange)); }
+.card-icon.red { background: rgb(var(--accent-red) / 0.1); color: rgb(var(--accent-red)); }
+.card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.card-title { font-size: 0.95rem; font-weight: 600; }
+html.light .card-title { color: rgb(var(--primary)); }
+html.dark .card-title { color: rgb(var(--gray-100)); }
+.card-subtitle { font-size: 0.78rem; }
+html.light .card-subtitle { color: rgb(var(--gray-500)); }
+html.dark .card-subtitle { color: rgb(var(--gray-500)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   FILE PATH
+   ═══════════════════════════════════════════════════════════════ */
+.file-path {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  margin: 0.25rem 0.25rem 0.25rem 0;
+}
+html.light .file-path { background: rgb(var(--gray-50)); color: rgb(var(--gray-600)); border: 1px solid rgb(var(--gray-200)); }
+html.dark .file-path { background: rgb(var(--gray-800)); color: rgb(var(--gray-400)); border: 1px solid rgb(var(--gray-700)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   DIAGRAM MAXIMIZE MODAL
+   ═══════════════════════════════════════════════════════════════ */
+.diagram-wrap { position: relative; }
+.diagram-maximize {
+  position: absolute; top: 12px; right: 12px;
+  width: 30px; height: 30px; border-radius: 6px;
+  border: 1px solid; cursor: pointer; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+html.light .diagram-maximize { background: rgb(var(--gray-50)); border-color: rgb(var(--gray-200)); color: rgb(var(--gray-500)); }
+html.dark .diagram-maximize { background: rgb(var(--gray-800)); border-color: rgb(var(--gray-700)); color: rgb(var(--gray-400)); }
+.diagram-maximize:hover { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); border-color: rgb(var(--accent-blue)); }
+
+.diagram-modal {
+  display: none; position: fixed; top: 0; left: 0;
+  width: 100vw; height: 100vh;
+  background: rgba(0,0,0,0.92); backdrop-filter: blur(12px);
+  z-index: 1000; align-items: center; justify-content: center; padding: 24px;
+}
+.diagram-modal.active { display: flex; }
+.diagram-modal-content {
+  border-radius: 16px; width: 95vw; height: 90vh;
+  display: flex; flex-direction: column; position: relative;
+  box-shadow: 0 25px 80px rgba(0,0,0,0.5); overflow: hidden;
+}
+html.light .diagram-modal-content { background: #fff; }
+html.dark .diagram-modal-content { background: rgb(var(--gray-950)); }
+.diagram-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px; border-bottom: 1px solid;
+  flex-shrink: 0;
+}
+html.light .diagram-modal-header { border-color: rgb(var(--gray-200)); background: rgb(var(--gray-50)); }
+html.dark .diagram-modal-header { border-color: rgb(var(--gray-800)); background: rgb(var(--gray-900)); }
+.diagram-modal-title { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.diagram-modal-actions { display: flex; gap: 6px; }
+.diagram-modal-btn {
+  width: 30px; height: 30px; border-radius: 6px;
+  border: 1px solid; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s;
+}
+html.light .diagram-modal-btn { background: rgb(var(--gray-50)); border-color: rgb(var(--gray-200)); color: rgb(var(--gray-600)); }
+html.dark .diagram-modal-btn { background: rgb(var(--gray-800)); border-color: rgb(var(--gray-700)); color: rgb(var(--gray-400)); }
+.diagram-modal-btn:hover { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); }
+.diagram-modal-btn.close-btn:hover { background: rgb(var(--accent-red) / 0.1); color: rgb(var(--accent-red)); }
+.diagram-modal-body {
+  flex: 1; overflow: auto; display: flex; align-items: center; justify-content: center; padding: 32px;
+}
+html.light .diagram-modal-body { background: radial-gradient(circle at 1px 1px, rgb(var(--gray-100)) 1px, transparent 0); background-size: 24px 24px; }
+html.dark .diagram-modal-body { background: radial-gradient(circle at 1px 1px, rgb(var(--gray-800)) 1px, transparent 0); background-size: 24px 24px; }
+.diagram-modal-body svg { max-width: 100%; max-height: 100%; filter: drop-shadow(0 4px 12px rgba(0,0,0,0.1)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   FLOW COMPONENT
+   ═══════════════════════════════════════════════════════════════ */
+.flow { display: flex; flex-direction: column; gap: 0; }
+.flow-item {
+  display: flex; align-items: flex-start; gap: 16px; padding: 16px 0;
+  position: relative;
+}
+.flow-item:not(:last-child)::after {
+  content: ''; position: absolute; left: 15px; top: 48px; bottom: 0;
+  width: 2px;
+}
+html.light .flow-item:not(:last-child)::after { background: rgb(var(--gray-200)); }
+html.dark .flow-item:not(:last-child)::after { background: rgb(var(--gray-700)); }
+.flow-marker {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.8rem; font-weight: 600; flex-shrink: 0; position: relative; z-index: 1;
+}
+.flow-marker.blue { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); }
+.flow-marker.green { background: rgb(var(--accent-green) / 0.1); color: rgb(var(--accent-green)); }
+.flow-marker.purple { background: rgb(var(--accent-purple) / 0.1); color: rgb(var(--accent-purple)); }
+.flow-marker.orange { background: rgb(var(--accent-orange) / 0.1); color: rgb(var(--accent-orange)); }
+.flow-content { flex: 1; padding-top: 4px; }
+.flow-title { font-weight: 600; margin-bottom: 0.25rem; }
+html.light .flow-title { color: rgb(var(--primary)); }
+html.dark .flow-title { color: rgb(var(--gray-100)); }
+.flow-desc { font-size: 0.8rem; }
+html.light .flow-desc { color: rgb(var(--gray-500)); }
+html.dark .flow-desc { color: rgb(var(--gray-500)); }
+
+/* ═══════════════════════════════════════════════════════════════
+   LISTS
+   ═══════════════════════════════════════════════════════════════ */
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.25rem 0; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TOC
+   ═══════════════════════════════════════════════════════════════ */
+.toc ul { list-style: none; padding-left: 0; }
+.toc li { margin: 0.35rem 0; }
+.toc li li { padding-left: 1.25rem; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TABS (for code groups)
+   ═══════════════════════════════════════════════════════════════ */
+.tabs { display: flex; gap: 0; margin-top: 1rem; }
+.tab-btn {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+  opacity: 0.6;
+}
+.tab-btn.active { opacity: 1; border-bottom-color: rgb(var(--primary-dark)); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- LEFT SIDEBAR -->
+<nav class="sidebar" id="sidebar">
+  <div style="padding: 1.25rem 1rem 1rem; border-bottom: 1px solid;">
+    <div style="display: flex; align-items: center; gap: 10px; text-decoration: none;">
+      <div style="width: 32px; height: 32px; background: linear-gradient(135deg, rgb(var(--accent-blue)) 0%, rgb(var(--accent-purple)) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <i data-lucide="bot" style="width:18px;height:18px;color:white"></i>
+      </div>
+      <span class="sidebar-logo">OpenStorm AI</span>
+    </div>
+  </div>
+
+  <div style="flex: 1; padding: 0.75rem 0; overflow-y: auto;">
+    <div class="sidebar-section">Getting Started</div>
+    <a href="#design-principles" class="nav-item"><i data-lucide="compass" style="width:16px;height:16px"></i> 1. Design Principles</a>
+    <a href="#architecture" class="nav-item"><i data-lucide="git-branch" style="width:16px;height:16px"></i> 2. Architecture</a>
+
+    <div class="sidebar-section">Core Systems</div>
+    <a href="#messages" class="nav-item"><i data-lucide="message-square" style="width:16px;height:16px"></i> 3. Messages</a>
+    <a href="#messages-types" class="nav-item sub">Message Types</a>
+    <a href="#messages-content" class="nav-item sub">Content Blocks</a>
+    <a href="#messages-flow" class="nav-item sub">Message Flow</a>
+    <a href="#tools" class="nav-item"><i data-lucide="wrench" style="width:16px;height:16px"></i> 4. Tools</a>
+    <a href="#tools-runtime" class="nav-item sub">ToolRuntime</a>
+    <a href="#tools-trait" class="nav-item sub">Tool Trait</a>
+    <a href="#tools-middleware" class="nav-item sub">Middleware</a>
+    <a href="#tools-dynamic" class="nav-item sub">Dynamic Selection</a>
+    <a href="#tools-question" class="nav-item sub">Question Tool</a>
+    <a href="#agent-loop" class="nav-item"><i data-lucide="play-circle" style="width:16px;height:16px"></i> 5. Agent Loop</a>
+    <a href="#agent-context" class="nav-item sub">Context Management</a>
+
+    <div class="sidebar-section">Infrastructure</div>
+    <a href="#permissions" class="nav-item"><i data-lucide="shield" style="width:16px;height:16px"></i> 6. Permissions</a>
+    <a href="#response-filter" class="nav-item sub"><i data-lucide="filter" style="width:14px;height:14px"></i> 6b. Response Filter</a>
+    <a href="#subagents" class="nav-item"><i data-lucide="users" style="width:16px;height:16px"></i> 7. Sub-Agents</a>
+    <a href="#memory" class="nav-item"><i data-lucide="database" style="width:16px;height:16px"></i> 8. Memory</a>
+
+    <div class="sidebar-section">Frontend</div>
+    <a href="#frontend" class="nav-item"><i data-lucide="layout" style="width:16px;height:16px"></i> 9. Frontend</a>
+    <a href="#ipc" class="nav-item"><i data-lucide="radio" style="width:16px;height:16px"></i> 10. IPC Events</a>
+
+    <div class="sidebar-section">Reference</div>
+    <a href="#sequences" class="nav-item"><i data-lucide="arrow-right-left" style="width:16px;height:16px"></i> 11. Sequences</a>
+    <a href="#sequences-permission" class="nav-item sub">Permission Flow</a>
+    <a href="#sequences-response-filter" class="nav-item sub">Response Filter</a>
+    <a href="#sequences-caching" class="nav-item sub">Caching Flow</a>
+    <a href="#roadmap" class="nav-item"><i data-lucide="map" style="width:16px;height:16px"></i> 12. Roadmap</a>
+  </div>
+
+  <div style="padding: 12px 16px; border-top: 1px solid;">
+    <div class="theme-toggle" onclick="toggleTheme()" style="display:flex; align-items:center; justify-content:space-between; padding: 10px 14px; border-radius: 8px; cursor: pointer;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500;">
+        <i data-lucide="sun" style="width:16px;height:16px"></i>
+        <span>Theme</span>
+      </div>
+      <div class="theme-toggle-switch"></div>
+    </div>
+  </div>
+</nav>
+
+<h1>OpenStorm AI Panel — Architecture Design</h1>
+<p>Complete design for a loosely coupled, industry-standard agentic coding assistant.</p>
+<p style="opacity:0.6"><em>Design before implementation — all classes, functions, and flows defined for future coding.</em></p>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     1. DESIGN PRINCIPLES
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="design-principles">1. Design Principles</h2>
+
+<table>
+  <tr><th>Principle</th><th>Description</th><th>Source</th></tr>
+  <tr><td><strong>Loose Coupling</strong></td><td>Services communicate via traits and event bus, not direct references</td><td>Actor model (AutoGen)</td></tr>
+  <tr><td><strong>ToolRuntime Pattern</strong></td><td>Tools access state, context, store via injected runtime — not global state</td><td>LangChain ToolRuntime</td></tr>
+  <tr><td><strong>Structured Messages</strong></td><td>All communication uses typed message objects, not raw strings</td><td>LangChain messages</td></tr>
+  <tr><td><strong>Middleware Pipeline</strong></td><td>Cross-cutting concerns as composable middleware layers</td><td>LangChain middleware</td></tr>
+  <tr><td><strong>Least Privilege</strong></td><td>Sub-agents get only the tools they need, enforced at runtime</td><td>Claude Code</td></tr>
+  <tr><td><strong>Context Isolation</strong></td><td>Sub-agents get fresh context with only what parent passes</td><td>Claude Code Task</td></tr>
+  <tr><td><strong>Event-Driven</strong></td><td>Agents communicate via typed events, not synchronous calls</td><td>LangGraph, AutoGen</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     2. HIGH-LEVEL ARCHITECTURE
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="architecture">2. High-Level Architecture</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph Frontend["Frontend (Lit.js)"]
+        A1["AI Panel (v2)"]
+        A2["Timeline (render)"]
+        A3["Input Deck (compose)"]
+        A4["Task Sidebar"]
+        A5["Event Dispatcher"]
+        A6["State Manager"]
+        A7["IPC Bridge"]
+        A1 --> A2
+        A1 --> A3
+        A1 --> A4
+        A2 --> A5
+        A3 --> A6
+        A5 --> A7
+    end
+
+    subgraph Backend["Backend (Rust)"]
+        B1["Chat Command"]
+        B2["Agent Runtime"]
+        B3["Context Service"]
+        B4["Tool Service"]
+        B5["Permission Service"]
+        B6["ToolRegistry"]
+        B7["Store (memory)"]
+        B8["Event Bus"]
+        B9["Cost Tracker"]
+        B1 --> B2
+        B2 --> B3
+        B2 --> B4
+        B2 --> B5
+        B4 --> B6
+        B3 --> B7
+        B2 --> B8
+        B8 --> B9
+    end
+
+    subgraph SubAgents["Sub-Agent System"]
+        C1["Explorer (read-only)"]
+        C2["Implementer (full)"]
+        C3["Reviewer (read-only)"]
+        C4["Synthesis Service"]
+        C1 --> C4
+        C2 --> C4
+        C3 --> C4
+    end
+
+    A7 -->|"Tauri IPC"| B1
+    B1 --> A7
+    B2 -.-> C1
+    B2 -.-> C2
+    B2 -.-> C3
+</div>
+
+<h3>Dependency Direction</h3>
+
+<div class="mermaid">
+graph TD
+    A["AgentRuntime"] -->|depends on| B["ContextService"]
+    A -->|depends on| C["ToolService"]
+    A -->|depends on| D["PermissionService"]
+    C -->|uses| E["ToolRegistry"]
+    E -->|executes through| F["MiddlewarePipeline"]
+    A -->|calls| G["LLMProvider"]
+
+    style A fill:#006ddd,color:#fff
+    style B fill:#8250df,color:#fff
+    style C fill:#8250df,color:#fff
+    style D fill:#8250df,color:#fff
+    style E fill:#1a7f37,color:#fff
+    style F fill:#1a7f37,color:#fff
+    style G fill:#ea580c,color:#fff
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     3. MESSAGE SYSTEM
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="messages">3. Message System (LangChain-Inspired)</h2>
+
+<p>All communication uses typed message objects. No raw strings in the pipeline.</p>
+
+<h3 id="messages-types">Message Types</h3>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// MESSAGE TYPES — Typed messages for all communication
+// ═══════════════════════════════════════════════════════════════
+
+/// Base message trait — all messages implement this
+trait Message: Send + Sync {
+    fn role(&self) -> &str;
+    fn content(&self) -> &[ContentBlock];
+    fn metadata(&self) -> &MessageMetadata;
+    fn id(&self) -> &str;
+}
+
+/// System message — instructions for the model
+struct SystemMessage {
+    id: String,
+    content: String,              // The system prompt
+    metadata: MessageMetadata,
+}
+
+/// Human message — user input
+struct HumanMessage {
+    id: String,
+    content: Vec&lt;ContentBlock&gt;,   // Text, images, files
+    name: Option&lt;String&gt;,         // Optional user identifier
+    metadata: MessageMetadata,
+}
+
+/// AI message — model output (may include tool calls)
+struct AIMessage {
+    id: String,
+    content: Vec&lt;ContentBlock&gt;,   // Text + reasoning blocks
+    tool_calls: Vec&lt;ToolCall&gt;,    // Tools the model wants to call
+    usage: Option&lt;UsageMetadata&gt;,
+    response_metadata: ResponseMetadata,
+    metadata: MessageMetadata,
+}
+
+/// Tool message — result of a tool execution
+struct ToolMessage {
+    id: String,
+    content: String,              // Tool output text
+    tool_call_id: String,         // Matches AIMessage.tool_calls[].id
+    tool_name: String,
+    artifact: Option&lt;Value&gt;,      // Data not sent to LLM
+    is_error: bool,
+    metadata: MessageMetadata,
+}
+
+/// Agent message — inter-agent communication
+struct AgentMessage {
+    id: String,
+    from_agent: String,
+    to_agent: String,
+    content: Vec&lt;ContentBlock&gt;,
+    message_type: AgentMessageType,
+    metadata: MessageMetadata,
+}
+
+/// Metadata attached to every message
+struct MessageMetadata {
+    timestamp: DateTime&lt;Utc&gt;,
+    agent_id: Option&lt;String&gt;,
+    session_id: String,
+    token_count: Option&lt;usize&gt;,
+    cost: Option&lt;f64&gt;,
+}</code></pre>
+
+<h3 id="messages-content">Content Blocks</h3>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// CONTENT BLOCKS — Structured content within messages
+// ═══════════════════════════════════════════════════════════════
+
+enum ContentBlock {
+    /// Plain text
+    Text { text: String },
+
+    /// Model reasoning
+    Reasoning { reasoning: String, signature: Option&lt;String&gt; },
+
+    /// Code block with language
+    Code { language: String, code: String },
+
+    /// File reference
+    FileReference { path: String, line_range: Option&lt;(u32, u32)&gt; },
+
+    /// Tool call (within AI message)
+    ToolCallBlock { tool_call: ToolCall },
+
+    /// Tool result (within Tool message)
+    ToolResultBlock { result: String, is_error: bool },
+
+    /// Diff (for code changes)
+    Diff { file_path: String, hunks: Vec&lt;DiffHunk&gt; },
+
+    /// Error
+    Error { message: String, code: Option&lt;String&gt; },
+}
+
+/// Tool call the model wants to execute
+struct ToolCall {
+    id: String,               // Unique ID for this call
+    name: String,             // Tool name
+    args: Value,              // JSON arguments
+}
+
+/// Usage metadata
+struct UsageMetadata {
+    input_tokens: usize,
+    output_tokens: usize,
+    total_tokens: usize,
+    cache_read_tokens: Option&lt;usize&gt;,
+    estimated_cost: Option&lt;f64&gt;,
+}</code></pre>
+
+<h3 id="messages-flow">Message Flow</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant CTX as Context Service
+    participant LLM as LLM Provider
+    participant MW as Middleware
+    participant TR as ToolRegistry
+    participant T as Tool
+
+    U->>FE: "Run unit tests and share report"
+    FE->>CTX: Build context for message
+
+    rect rgb(240, 248, 255)
+    Note over CTX: Context Assembly
+    CTX->>CTX: SystemMessage (prompt)
+    CTX->>CTX: SystemMessage (RAG context)
+    CTX->>CTX: HumanMessage (user input)
+    end
+
+    CTX->>LLM: Vec of Messages
+
+    rect rgb(255, 248, 240)
+    Note over LLM: Streaming Response
+    LLM-->>FE: TextDelta chunks (streamed)
+    LLM->>CTX: AIMessage with ToolCalls
+    end
+
+    rect rgb(240, 255, 240)
+    Note over MW: Tool Execution
+    MW->>MW: PermissionMiddleware.check()
+    MW->>MW: CacheMiddleware.check()
+    MW->>TR: execute(tool_call, runtime)
+    TR->>T: tool.execute(args, runtime)
+    T-->>TR: ToolResult
+    TR-->>MW: ToolResult
+    end
+
+    MW-->>FE: ToolResult event
+    MW->>LLM: ToolMessage (result)
+    LLM-->>FE: Final AIMessage (text)
+    FE->>U: Render response
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     4. TOOL SYSTEM
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="tools">4. Tool System (LangChain-Inspired)</h2>
+
+<h3 id="tools-runtime">ToolRuntime — The Core Pattern</h3>
+
+<div class="callout callout-info">
+  <div class="callout-title">Inspired by LangChain</div>
+  Tools don't access global state — they receive a <code>ToolRuntime</code> object with everything they need: state, context, store, stream writer.
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// TOOL RUNTIME — Injected into every tool call
+// ═══════════════════════════════════════════════════════════════
+
+struct ToolRuntime {
+    /// Short-term memory: messages in current conversation
+    state: Arc&lt;Mutex&lt;ConversationState&gt;&gt;,
+
+    /// Immutable context: project path, model info, session ID
+    context: ToolContext,
+
+    /// Long-term memory: persistent across sessions
+    store: Arc&lt;dyn Store&gt;,
+
+    /// Stream writer: emit real-time updates during execution
+    stream_tx: mpsc::Sender&lt;StreamEvent&gt;,
+
+    /// Execution info: thread ID, run ID, attempt number
+    execution: ExecutionInfo,
+
+    /// Tool call ID: for correlating results with calls
+    tool_call_id: String,
+}
+
+/// Immutable per-invocation context
+struct ToolContext {
+    project_path: PathBuf,
+    model_name: String,
+    session_id: String,
+    agent_id: String,
+    agent_role: AgentRole,
+    max_result_chars: usize,
+}
+
+/// Conversation state (short-term memory)
+struct ConversationState {
+    messages: Vec&lt;Box&lt;dyn Message&gt;&gt;,
+    current_plan: Option&lt;Plan&gt;,
+    todo_items: Vec&lt;TodoItem&gt;,
+    files_modified: Vec&lt;PathBuf&gt;,
+    total_tool_calls: u32,
+    total_tokens: usize,
+}</code></pre>
+
+<h3 id="tools-trait">Tool Trait</h3>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// TOOL — Every tool implements this trait
+// ═══════════════════════════════════════════════════════════════
+
+#[async_trait]
+trait Tool: Send + Sync {
+    /// Tool name (snake_case, no spaces)
+    fn name(&self) -> &str;
+
+    /// Description shown to the LLM
+    fn description(&self) -> &str;
+
+    /// JSON Schema for input validation
+    fn input_schema(&self) -> Value;
+
+    /// Execute the tool with given arguments
+    async fn execute(&self, args: Value, runtime: &ToolRuntime) -> ToolResult;
+
+    /// Trust tier classification
+    fn trust_tier(&self) -> TrustTier { TrustTier::Standard }
+
+    /// Can this tool be auto-approved in autonomy mode?
+    fn auto_approvable(&self) -> bool { false }
+
+    /// Return directly to user without another LLM call?
+    fn return_direct(&self) -> bool { false }
+}
+
+/// Tool execution result
+struct ToolResult {
+    content: String,               // Text output (sent to LLM)
+    artifact: Option&lt;Value&gt;,       // Supplementary data (NOT sent to LLM)
+    success: bool,
+    token_count: usize,
+    execution_time_ms: u64,
+    tool_call_id: String,
+}
+
+/// Tool categories for organization
+enum ToolCategory {
+    FileSystem,     // read_file, write_file, edit_file, list_directory
+    Search,         // search_code, search_files
+    Execution,      // run_command, run_background
+    Analysis,       // get_diagnostics, print_tree
+    Agent,          // spawn_agent, run_subagent
+    Vcs,            // git_status, git_diff
+    External,       // web_fetch
+}</code></pre>
+
+<h3 id="tools-middleware">Middleware Pipeline</h3>
+
+<div class="mermaid">
+graph LR
+    A["Tool Call Request"] --> B["1. PermissionMiddleware"]
+    B -->|Allow| C["2. CacheMiddleware"]
+    B -->|Ask| D["Permission Card"]
+    B -->|Deny| E["Denied Response"]
+    C -->|Cache Hit| F["Return Cached"]
+    C -->|Cache Miss| G["3. ValidationMiddleware"]
+    G --> H["4. RedirectionMiddleware"]
+    H -->|"ls → list_directory"| I["5. Tool Execution"]
+    H -->|"cargo test (original)"| I
+    I --> J["6. TruncationMiddleware"]
+    J --> K["7. CacheMiddleware (write)"]
+    K --> L["ToolResult"]
+
+    style A fill:#006ddd,color:#fff
+    style B fill:#8250df,color:#fff
+    style C fill:#8250df,color:#fff
+    style I fill:#1a7f37,color:#fff
+    style L fill:#1a7f37,color:#fff
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// MIDDLEWARE — Composable tool execution pipeline
+// ═══════════════════════════════════════════════════════════════
+
+/// Middleware trait — wraps tool execution
+#[async_trait]
+trait ToolMiddleware: Send + Sync {
+    async fn process(
+        &self,
+        request: &ToolCallRequest,
+        next: &dyn Fn(&ToolCallRequest) -> Pin&lt;Box&lt;dyn Future&lt;Output = Result&lt;ToolResult&gt;&gt;&gt;&gt;,
+    ) -> Result&lt;ToolResult&gt;;
+}
+
+/// Request flowing through middleware
+struct ToolCallRequest {
+    tool_call: ToolCall,
+    runtime: ToolRuntime,
+    metadata: RequestMetadata,
+}
+
+/// Middleware pipeline executor
+struct MiddlewarePipeline {
+    middlewares: Vec&lt;Arc&lt;dyn ToolMiddleware&gt;&gt;,
+}</code></pre>
+
+<h3 id="tools-dynamic">Dynamic Tool Selection by Role</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph "Tool Access Matrix"
+        R1["Explorer"] --> T1["read_file, list_directory, search_code, search_files, get_diagnostics"]
+        R2["Implementer"] --> T2["ALL tools"]
+        R3["Reviewer"] --> T3["read_file, list_directory, search_code, search_files"]
+        R4["Orchestrator"] --> T4["ALL tools + spawn_agent"]
+        R5["SubAgent"] --> T5["Parent tools MINUS spawn_agent"]
+    end
+
+    style R1 fill:#1a7f37,color:#fff
+    style R2 fill:#006ddd,color:#fff
+    style R3 fill:#8250df,color:#fff
+    style R4 fill:#ea580c,color:#fff
+    style R5 fill:#6e7681,color:#fff
+</div>
+
+<h3 id="tools-question">Question Tool — LLM-to-User Input</h3>
+
+<div class="callout callout-info">
+  <div class="callout-title">Why a Tool?</div>
+  <p>The LLM shouldn't just "ask" in plain text. A structured <code>question()</code> tool forces the LLM to define options, lets the frontend render a UI, and returns a clean typed answer back to the LLM.</p>
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// QUESTION TOOL — LLM asks user for input
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Serialize, Deserialize)]
+struct QuestionTool {
+    questions: Vec&lt;QuestionItem&gt;,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QuestionItem {
+    /// Unique ID for the answer key
+    id: String,
+    /// The question text (supports markdown)
+    text: String,
+    /// Question type determines the UI
+    #[serde(default)]
+    kind: QuestionKind,
+    /// Options for choice/confirm types
+    #[serde(default)]
+    options: Vec&lt;String&gt;,
+    /// Whether user can select multiple options
+    #[serde(default)]
+    multiple: bool,
+    /// Default value if user skips
+    #[serde(default)]
+    default: Option&lt;String&gt;,
+}
+
+#[derive(Serialize, Deserialize)]
+enum QuestionKind {
+    /// Text input (single line or multiline)
+    Text,
+    /// Choose from predefined options
+    Choice,
+    /// Yes/No or custom confirm
+    Confirm,
+    /// Multi-select from options
+    MultiSelect,
+}
+
+#[derive(Serialize, Deserialize)]
+struct QuestionAnswer {
+    id: String,
+    value: String,       // For Choice/Confirm/Text
+    values: Vec&lt;String&gt;, // For MultiSelect
+}</code></pre>
+
+<h4>Tool Definition (sent to LLM)</h4>
+
+<pre><code class="language-json">{
+  "name": "question",
+  "description": "Ask the user a question. The user will answer before you continue. Use this when you need clarification, confirmation, or input before proceeding.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "questions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "Unique key for the answer" },
+            "text": { "type": "string", "description": "Question text (markdown supported)" },
+            "kind": { "type": "string", "enum": ["text", "choice", "confirm", "multi_select"] },
+            "options": { "type": "array", "items": { "type": "string" } },
+            "multiple": { "type": "boolean" },
+            "default": { "type": "string" }
+          },
+          "required": ["id", "text"]
+        }
+      }
+    },
+    "required": ["questions"]
+  }
+}</code></pre>
+
+<h4>Event Flow</h4>
+
+<div class="mermaid">
+sequenceDiagram
+    participant LLM as LLM
+    participant AL as Agent Loop
+    participant RF as Response Filter
+    participant CH as chat.rs
+    participant FE as Frontend
+    participant U as User
+
+    LLM->>AL: tool_call: question(questions: [...])
+    AL->>RF: AgentEvent::ToolUse { name: "question", args }
+    RF->>RF: Detect question tool → convert to QuestionRequest
+    RF->>CH: AgentEvent::QuestionRequest { questions }
+    CH->>FE: app.emit("ai-question-request")
+
+    FE->>FE: Render question UI (buttons/text/confirm)
+    U->>FE: Answer questions + click Submit
+    FE->>CH: app.emit("ai-question-response", { answers })
+    CH->>AL: Send answers as tool result
+
+    AL->>LLM: tool_result: { approach: "ToolRuntime", scope: "Full" }
+    LLM->>AL: Continue with answers
+</div>
+
+<h4>Frontend Question UI</h4>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// Question Component — Renders in timeline
+// ═══════════════════════════════════════════════════════════════
+
+interface QuestionRequestEvent {
+  type: "question-request";
+  questions: Array&lt;{
+    id: string;
+    text: string;
+    kind: "text" | "choice" | "confirm" | "multi_select";
+    options?: string[];
+    multiple?: boolean;
+    default?: string;
+  }&gt;;
+}
+
+// Render each question by type:
+// - choice      → radio buttons or pill buttons
+// - confirm     → [Yes] [No] or [Approve] [Deny]
+// - multi_select → checkboxes or toggle pills
+// - text        → text input or textarea
+
+// User clicks Submit → emit response
+this.dispatchEvent(new CustomEvent("ai-question-response", {
+  detail: {
+    answers: [
+      { id: "approach", value: "ToolRuntime" },
+      { id: "scope", value: "Full" }
+    ]
+  },
+  bubbles: true,
+  composed: true
+}));</code></pre>
+
+<h4>Rules for the LLM</h4>
+
+<div class="callout callout-warning">
+  <div class="callout-title">Prompt Rules (add to system prompt)</div>
+  <ul>
+    <li><strong>Use <code>question()</code> when:</strong> you need user input before proceeding, you're uncertain about approach, or you need confirmation for a destructive action</li>
+    <li><strong>Don't use <code>question()</code> when:</strong> you can proceed without asking (just do it)</li>
+    <li><strong>Batch questions:</strong> ask all independent questions in one call, don't ask sequentially</li>
+    <li><strong>Provide options:</strong> always give concrete choices instead of open-ended "what do you want?"</li>
+    <li><strong>One exception:</strong> if answer to Q2 depends on Q1, ask Q1 first, then Q2 in a new call</li>
+  </ul>
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     5. AGENT LOOP
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="agent-loop">5. Agent Loop</h2>
+
+<div class="mermaid">
+flowchart TD
+    A["Start: User Message"] --> B["Build Context"]
+    B --> C["Loop: iteration < max_iterations"]
+    C --> D["Call LLM (stream)"]
+    D --> E["Stream TextDelta to Frontend"]
+    D --> F{"Has ToolCalls?"}
+    F -->|No| G["Check: consecutive_text >= 3?"]
+    G -->|Yes| H["Force Stop"]
+    G -->|No| I["Return Final Response"]
+    F -->|Yes| J["For each ToolCall:"]
+    J --> K["Send ToolUse Event"]
+    K --> L["Execute through Middleware"]
+    L --> M["Send ToolResult Event"]
+    M --> N["Add ToolMessage to context"]
+    N --> C
+
+    H --> I
+    I --> J2["Send ExecutionSummary"]
+    J2 --> K2["Done"]
+
+    style A fill:#006ddd,color:#fff
+    style D fill:#ea580c,color:#fff
+    style L fill:#1a7f37,color:#fff
+    style I fill:#8250df,color:#fff
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// AGENT LOOP — The main execution cycle
+// ═══════════════════════════════════════════════════════════════
+
+struct AgentRuntime {
+    provider: Arc&lt;dyn LLMProvider&gt;,
+    tools: Arc&lt;ToolRegistry&gt;,
+    context_service: Arc&lt;ContextService&gt;,
+    permission_service: Arc&lt;PermissionService&gt;,
+    store: Arc&lt;dyn Store&gt;,
+    event_tx: mpsc::Sender&lt;AgentEvent&gt;,
+    config: AgentConfig,
+}
+
+struct AgentConfig {
+    model: String,
+    max_iterations: usize,          // Default: 20
+    max_consecutive_text: usize,    // Default: 3
+    context_token_budget: usize,    // Default: 8192
+    tool_result_cache_ttl: Duration, // Default: 5 min
+}
+
+impl AgentRuntime {
+    async fn run(
+        &self,
+        user_message: HumanMessage,
+        history: Vec&lt;Message&gt;,
+    ) -> Result&lt;AgentEvent&gt; {
+        let mut messages = vec![];
+
+        // 1. Build context
+        let system = self.context_service.build_system_prompt(&self.config);
+        let rag = self.context_service.inject_rag(&user_message).await;
+        messages.push(Box::new(SystemMessage::new(system)));
+        if let Some(ctx) = rag {
+            messages.push(Box::new(SystemMessage::new(ctx)));
+        }
+        messages.extend(history);
+        messages.push(Box::new(user_message));
+
+        // 2. Loop
+        let mut iteration = 0;
+        let mut consecutive_text = 0;
+
+        loop {
+            iteration += 1;
+            if iteration > self.config.max_iterations { break; }
+
+            // 3. Call LLM
+            let ai_msg = self.provider.chat_completion(&messages).await?;
+
+            // 4. Stream text deltas
+            for block in &ai_msg.content {
+                if let ContentBlock::Text { text } = block {
+                    self.event_tx.send(AgentEvent::TextDelta {
+                        content: text.clone()
+                    }).await?;
+                }
+            }
+
+            // 5. Check for tool calls
+            if ai_msg.tool_calls.is_empty() {
+                consecutive_text += 1;
+                if consecutive_text >= self.config.max_consecutive_text {
+                    break; // Force stop
+                }
+                messages.push(Box::new(ai_msg));
+                break;
+            }
+
+            consecutive_text = 0;
+            messages.push(Box::new(ai_msg.clone()));
+
+            // 6. Execute tools
+            for tool_call in &ai_msg.tool_calls {
+                self.event_tx.send(AgentEvent::ToolUse {
+                    name: tool_call.name.clone(),
+                    args: tool_call.args.clone(),
+                }).await?;
+
+                let runtime = self.build_tool_runtime(tool_call.id.clone());
+                let result = self.tools.execute(tool_call.clone(), runtime).await?;
+
+                self.event_tx.send(AgentEvent::ToolResult {
+                    tool_call_id: tool_call.id.clone(),
+                    output: result.content.clone(),
+                    is_error: !result.success,
+                }).await?;
+
+                messages.push(Box::new(ToolMessage {
+                    content: result.content,
+                    tool_call_id: tool_call.id.clone(),
+                    ..Default::default()
+                }));
+            }
+        }
+
+        // 7. Extract final response
+        Ok(AgentEvent::Response {
+            content: extract_final_text(&messages),
+            tool_calls_made: iteration as u32,
+            usage: self.calculate_usage(&messages),
+        })
+    }
+}</code></pre>
+
+<h3 id="agent-context">Context Management</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph "4-Layer Memory"
+        L1["Layer 1: System Prompt<br/>Project context, permissions, lessons<br/>Cost: ~3K tokens"]
+        L2["Layer 2: Conversation State<br/>Messages, plan, TODO items<br/>Cost: varies"]
+        L3["Layer 3: Tool Result Cache<br/>Cached outputs with TTL<br/>Cost: ~0 tokens"]
+        L4["Layer 4: Store (long-term)<br/>Project rules, lessons, prefs<br/>Cost: ~0 tokens"]
+    end
+
+    L1 --> L2 --> L3 --> L4
+
+    style L1 fill:#006ddd,color:#fff
+    style L2 fill:#8250df,color:#fff
+    style L3 fill:#1a7f37,color:#fff
+    style L4 fill:#ea580c,color:#fff
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     6. PERMISSION SYSTEM
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="permissions">6. Permission System</h2>
+
+<div class="mermaid">
+flowchart TD
+    A["Tool Call"] --> B{"Trust Tier?"}
+    B -->|Safe| C{"Autonomy Mode?"}
+    B -->|Standard| D{"Session Memory<br/>has approval?"}
+    B -->|Destructive| E["Always Ask"]
+
+    C -->|Yes| F["Auto-Approve"]
+    C -->|No| G["Ask User"]
+
+    D -->|Yes| H["Auto-Approve (cached)"]
+    D -->|No| I{"Autonomy Mode?"}
+
+    I -->|Yes| J["Ask Once → Cache"]
+    I -->|No| K["Ask User"]
+
+    G --> L{"User Decision"}
+    J --> L
+    K --> L
+    E --> L
+
+    L -->|Grant Once| M["Execute → Don't Cache"]
+    L -->|Always Allow| N["Execute → Cache for Session"]
+    L -->|Deny| O["Return Denied"]
+
+    style A fill:#006ddd,color:#fff
+    style F fill:#1a7f37,color:#fff
+    style H fill:#1a7f37,color:#fff
+    style O fill:#dc2626,color:#fff
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// PERMISSION SERVICE
+// ═══════════════════════════════════════════════════════════════
+
+enum PermissionDecision {
+    Allow { reason: String },
+    Ask { reason: String, card: PermissionCard },
+    Deny { reason: String },
+    Redirect { to_tool: String, reason: String },
+}
+
+struct PermissionCard {
+    tool_name: String,
+    args_summary: String,
+    risk_level: RiskLevel,
+    rollback_info: Option&lt;String&gt;,
+    project_scoped: bool,
+}
+
+enum RiskLevel { Low, Medium, High, Critical }
+
+#[async_trait]
+trait PermissionService: Send + Sync {
+    async fn check(
+        &self,
+        agent: &AgentRuntime,
+        tool_call: &ToolCall,
+    ) -> PermissionDecision;
+
+    fn grant(&self, agent_id: &str, tool: &str, scope: GrantScope);
+    fn revoke(&self, agent_id: &str, tool: &str);
+}
+
+enum GrantScope {
+    Once,       // This call only
+    Session,    // Same (tool, args) in this session
+    Project,    // All calls with this tool in this project
+}
+
+/// Caches approved (tool, args) pairs
+struct SessionMemory {
+    approved: HashMap&lt;(String, String), Instant&gt;,
+    ttl: Duration,                                  // Default: 1 hour
+    project_grants: HashMap&lt;String, Instant&gt;,
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     6b. RESPONSE FILTER MIDDLEWARE
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="response-filter">6b. Response Filter Middleware</h2>
+
+<p>The single chokepoint where every event passes before reaching the frontend. Controls what the user sees.</p>
+
+<div class="callout callout-info">
+  <div class="callout-title">Why This Matters</div>
+  <p>Currently, every <code>AgentEvent</code> flows from the agent loop → <code>chat.rs</code> → <code>app.emit()</code> → frontend with zero filtering. The model's raw output, internal tool details, and verbose reasoning all reach the user unchecked.</p>
+</div>
+
+<h3>Current Flow (No Filtering)</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant AL as Agent Loop
+    participant CH as chat.rs (relay)
+    participant FE as Frontend
+
+    AL->>CH: AgentEvent::TextDelta
+    CH->>FE: app.emit("ai-agent-event") ❌ raw
+    AL->>CH: AgentEvent::ToolUse
+    CH->>FE: app.emit("ai-agent-event") ❌ raw
+    AL->>CH: AgentEvent::ToolResult
+    CH->>FE: app.emit("ai-agent-event") ❌ raw (full output)
+    AL->>CH: AgentEvent::Response
+    CH->>FE: app.emit("ai-agent-event") ❌ raw
+</div>
+
+<h3>Designed Flow (With Filtering)</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant AL as Agent Loop
+    participant RF as Response Filter
+    participant CH as chat.rs (relay)
+    participant FE as Frontend
+
+    AL->>RF: AgentEvent::TextDelta
+    RF->>RF: strip_internal_markers()
+    RF->>CH: filtered event
+    CH->>FE: app.emit("ai-agent-event")
+
+    AL->>RF: AgentEvent::ToolUse
+    RF->>RF: format_for_display()
+    RF->>CH: filtered event
+    CH->>FE: app.emit("ai-agent-event")
+
+    AL->>RF: AgentEvent::ToolResult
+    RF->>RF: truncate_if_needed() + stripSensitive()
+    RF->>CH: filtered event
+    CH->>FE: app.emit("ai-agent-event")
+
+    AL->>RF: AgentEvent::Response
+    RF->>RF: add_cost_summary() + format_final()
+    RF->>CH: filtered event
+    CH->>FE: app.emit("ai-agent-event")
+</div>
+
+<h3>Filter Pipeline</h3>
+
+<div class="mermaid">
+graph LR
+    A["AgentEvent"] --> B["TextFilter"]
+    B --> C["ToolFilter"]
+    C --> D["SensitiveFilter"]
+    D --> E["CostEnricher"]
+    E --> F["FormatFilter"]
+    F --> G["FilteredEvent → Frontend"]
+
+    style A fill:#ea580c,color:#fff
+    style G fill:#1a7f37,color:#fff
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// RESPONSE FILTER — Single chokepoint for all events
+// ═══════════════════════════════════════════════════════════════
+
+/// Response filter trait — each filter is a composable layer
+#[async_trait]
+trait EventFilter: Send + Sync {
+    /// Filter/transform an event. Returns None to suppress the event.
+    async fn filter(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt;;
+}
+
+/// Context available to all filters
+struct FilterContext {
+    session_id: String,
+    agent_id: String,
+    project_path: PathBuf,
+    config: FilterConfig,
+}
+
+struct FilterConfig {
+    /// Max chars for tool results shown to user
+    max_tool_result_display: usize,    // Default: 500
+
+    /// Strip internal reasoning from display
+    strip_reasoning: bool,             // Default: true
+
+    /// Add cost summary to final response
+    add_cost_summary: bool,            // Default: true
+
+    /// Patterns to strip from text (API keys, tokens, etc.)
+    sensitive_patterns: Vec&lt;String&gt;,
+
+    /// Events to suppress entirely
+    suppressed_events: Vec&lt;String&gt;,
+}
+
+/// The filter pipeline
+struct ResponseFilterPipeline {
+    filters: Vec&lt;Arc&lt;dyn EventFilter&gt;&gt;,
+}
+
+impl ResponseFilterPipeline {
+    async fn apply(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt; {
+        let mut current = Some(event);
+        for filter in &self.filters {
+            if let Some(evt) = current {
+                current = filter.filter(evt, ctx).await;
+            } else {
+                return None; // Event suppressed
+            }
+        }
+        current
+    }
+}</code></pre>
+
+<h3>Concrete Filters</h3>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// FILTER 1: TextFilter — Clean up text deltas
+// ═══════════════════════════════════════════════════════════════
+
+struct TextFilter;
+
+#[async_trait]
+impl EventFilter for TextFilter {
+    async fn filter(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt; {
+        match event {
+            AgentEvent::TextDelta { content } => {
+                // Strip internal markers like [PLAN], [TODO], etc.
+                let cleaned = content
+                    .replace("[PLAN]", "")
+                    .replace("[TODO]", "")
+                    .replace("[DONE]", "")
+                    .trim()
+                    .to_string();
+
+                if cleaned.is_empty() { None }
+                else { Some(AgentEvent::TextDelta { content: cleaned }) }
+            }
+            _ => Some(event),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILTER 2: ToolFilter — Control what tool details show
+// ═══════════════════════════════════════════════════════════════
+
+struct ToolFilter {
+    max_result_display: usize,
+}
+
+#[async_trait]
+impl EventFilter for ToolFilter {
+    async fn filter(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt; {
+        match event {
+            AgentEvent::ToolResult { tool_call_id, output, is_error } => {
+                // Truncate long outputs for display
+                let display_output = if output.len() > self.max_result_display {
+                    format!("{}... ({} total chars)",
+                        &output[..self.max_result_display],
+                        output.len())
+                } else {
+                    output
+                };
+                Some(AgentEvent::ToolResult { tool_call_id, output: display_output, is_error })
+            }
+            AgentEvent::ToolUse { name, args } => {
+                // Summarize args for display (don't show full JSON)
+                Some(AgentEvent::ToolUse { name, args }) // Pass through, frontend handles display
+            }
+            _ => Some(event),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILTER 3: SensitiveFilter — Strip secrets/keys
+// ═══════════════════════════════════════════════════════════════
+
+struct SensitiveFilter {
+    patterns: Vec&lt;Regex&gt;,
+}
+
+impl SensitiveFilter {
+    fn new() -> Self {
+        Self {
+            patterns: vec![
+                Regex::new(r"(?i)(api[_-]?key|token|secret|password)\s*[=:]\s*\S+").unwrap(),
+                Regex::new(r"sk-[a-zA-Z0-9]{20,}").unwrap(),
+                Regex::new(r"ghp_[a-zA-Z0-9]{36}").unwrap(),
+            ],
+        }
+    }
+}
+
+#[async_trait]
+impl EventFilter for SensitiveFilter {
+    async fn filter(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt; {
+        match event {
+            AgentEvent::TextDelta { content } => {
+                let mut filtered = content;
+                for pattern in &self.patterns {
+                    filtered = pattern.replace_all(&filtered, "[REDACTED]").to_string();
+                }
+                Some(AgentEvent::TextDelta { content: filtered })
+            }
+            AgentEvent::ToolResult { tool_call_id, output, is_error } => {
+                let mut filtered = output;
+                for pattern in &self.patterns {
+                    filtered = pattern.replace_all(&filtered, "[REDACTED]").to_string();
+                }
+                Some(AgentEvent::ToolResult { tool_call_id, output: filtered, is_error })
+            }
+            _ => Some(event),
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FILTER 4: CostEnricher — Add cost info to responses
+// ═══════════════════════════════════════════════════════════════
+
+struct CostEnricher;
+
+#[async_trait]
+impl EventFilter for CostEnricher {
+    async fn filter(&self, event: AgentEvent, ctx: &FilterContext) -> Option&lt;AgentEvent&gt; {
+        // Cost enrichment happens at Response stage
+        // Frontend receives CostUpdate events separately
+        Some(event)
+    }
+}</code></pre>
+
+<h3>Integration Point</h3>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// chat.rs — The single chokepoint
+// ═══════════════════════════════════════════════════════════════
+
+#[tauri::command]
+pub async fn ai_chat(
+    app: AppHandle,
+    state: State&lt;'_, AiState&gt;,
+    // ... other params
+) -> Result&lt;String, String&gt; {
+    let agent = /* ... */;
+    let mut rx = agent.run(message, history);
+
+    // Build filter pipeline
+    let filter_ctx = FilterContext {
+        session_id: session_id.clone(),
+        agent_id: agent.id.clone(),
+        project_path: project_path.clone(),
+        config: FilterConfig::default(),
+    };
+    let pipeline = state.response_filter.clone();
+
+    let mut final_response = String::new();
+
+    while let Some(event) = rx.recv().await {
+        // ═══════════════════════════════════════════════
+        // FILTER EVERY EVENT BEFORE SENDING TO FRONTEND
+        // See Section 6b: Response Filter Middleware
+        // ═══════════════════════════════════════════════
+        let filtered = pipeline.apply(event, &filter_ctx).await;
+
+        if let Some(evt) = filtered {
+            if let AgentEvent::Response { content, .. } = &evt {
+                final_response = content.clone();
+            }
+            let _ = app.emit("ai-agent-event", &evt);
+        }
+    }
+
+    Ok(final_response)
+}</code></pre>
+
+<h3>What Each Filter Controls</h3>
+
+<table>
+  <tr><th>Filter</th><th>Input</th><th>Output</th><th>Purpose</th></tr>
+  <tr>
+    <td><strong>TextFilter</strong></td>
+    <td>Raw text deltas</td>
+    <td>Cleaned text</td>
+    <td>Strip internal markers ([PLAN], [TODO]), whitespace</td>
+  </tr>
+  <tr>
+    <td><strong>ToolFilter</strong></td>
+    <td>Tool results, tool use args</td>
+    <td>Truncated/summarized</td>
+    <td>Prevent huge outputs from flooding UI, summarize args</td>
+  </tr>
+  <tr>
+    <td><strong>SensitiveFilter</strong></td>
+    <td>Any text content</td>
+    <td>Redacted text</td>
+    <td>Strip API keys, tokens, passwords from display</td>
+  </tr>
+  <tr>
+    <td><strong>CostEnricher</strong></td>
+    <td>Response events</td>
+    <td>Enriched response</td>
+    <td>Add token count and cost summary</td>
+  </tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     7. SUB-AGENT SYSTEM
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="subagents">7. Sub-Agent System</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant P as Parent Agent
+    participant SP as AgentSpawner
+    participant S1 as Sub-Agent 1
+    participant S2 as Sub-Agent 2
+    participant SYN as Synthesis Service
+
+    U->>P: "Spawn 2 agents: search TODOs, find tests"
+    P->>P: LLM decides to spawn agents
+
+    par Parallel spawn
+        P->>SP: spawn({task: "search TODOs", role: Explorer})
+        SP->>S1: Create with parent context
+        P->>SP: spawn({task: "find tests", role: Explorer})
+        SP->>S2: Create with parent context
+    end
+
+    Note over S1: Has: RAG context, project path<br/>NO: parent history
+
+    par Parallel execution
+        S1->>S1: search_code("TODO")
+        S2->>S2: search_code("#[test]")
+    end
+
+    S1-->>SP: TaskResult { summary, files }
+    S2-->>SP: TaskResult { summary, files }
+
+    SP->>SYN: synthesize([result1, result2])
+    SYN->>SYN: LLM call to merge results
+    SYN-->>P: "Found 3 TODOs in auth.rs, 2 tests in main.rs"
+
+    P-->>U: Final response with synthesized answer
+</div>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// SUB-AGENT SYSTEM
+// ═══════════════════════════════════════════════════════════════
+
+#[async_trait]
+trait AgentSpawner: Send + Sync {
+    async fn spawn(&self, config: SpawnConfig) -> Result&lt;TaskHandle&gt;;
+    async fn abort(&self, task_id: &str) -> Result&lt;()&gt;;
+    fn list_active(&self) -> Vec&lt;AgentInfo&gt;;
+    async fn get_result(&self, task_id: &str) -> Option&lt;TaskResult&gt;;
+}
+
+struct SpawnConfig {
+    task: String,
+    role: AgentRole,
+    parent_id: String,
+    parent_context: ParentContext,
+    timeout: Duration,
+    max_iterations: usize,
+}
+
+/// What context to pass from parent to child
+struct ParentContext {
+    rag_context: Option&lt;String&gt;,
+    project_path: PathBuf,
+    key_decisions: Vec&lt;String&gt;,
+    active_files: Vec&lt;PathBuf&gt;,
+}
+
+struct TaskHandle {
+    task_id: String,
+    agent_id: String,
+    status: watch::Receiver&lt;TaskStatus&gt;,
+    result_rx: oneshot::Receiver&lt;TaskResult&gt;,
+}
+
+struct TaskResult {
+    task_id: String,
+    agent_id: String,
+    success: bool,
+    summary: String,
+    files_affected: Vec&lt;PathBuf&gt;,
+    tool_calls_made: u32,
+    token_usage: UsageMetadata,
+    duration_ms: u64,
+}
+
+#[async_trait]
+trait SynthesisService: Send + Sync {
+    async fn synthesize(
+        &self,
+        parent_context: &Context,
+        results: &[TaskResult],
+    ) -> String;
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     8. CONTEXT & MEMORY
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="memory">8. Context & Memory</h2>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// STORE — Long-term memory across sessions
+// ═══════════════════════════════════════════════════════════════
+
+#[async_trait]
+trait Store: Send + Sync {
+    async fn get(&self, namespace: &str, key: &str) -> Option&lt;Value&gt;;
+    async fn put(&self, namespace: &str, key: &str, value: Value) -> Result&lt;()&gt;;
+    async fn delete(&self, namespace: &str, key: &str) -> Result&lt;()&gt;;
+    async fn list(&self, namespace: &str) -> Vec&lt;String&gt;;
+}
+
+struct StoreNamespaces;
+
+impl StoreNamespaces {
+    const PROJECT_RULES: &str = "project_rules";
+    const TOOL_CACHE: &str = "tool_cache";
+    const SESSION_LESSONS: &str = "session_lessons";
+    const USER_PREFS: &str = "user_preferences";
+    const AGENT_MEMORY: &str = "agent_memory";
+}
+
+/// Cross-query cache
+struct ToolResultCache {
+    entries: HashMap&lt;(String, String), CachedResult&gt;,
+    default_ttl: Duration,
+    max_entries: usize,
+}
+
+struct CachedResult {
+    result: ToolResult,
+    cached_at: Instant,
+    ttl: Duration,
+    hit_count: u32,
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     9. FRONTEND ARCHITECTURE
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="frontend">9. Frontend Architecture</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph Components["Component Tree"]
+        A["openstorm-app"]
+        B["ai-panel-v2"]
+        C["ai-header"]
+        D["ai-timeline"]
+        E["ai-input-deck"]
+        F["ai-task-sidebar"]
+        G["ai-message"]
+        H["ai-timeline-step"]
+        I["ai-permission-card"]
+        J["ai-execution-summary"]
+        K2["ai-question-card"]
+
+        A --> B
+        B --> C
+        B --> D
+        B --> E
+        B --> F
+        D --> G
+        D --> H
+        D --> I
+        D --> J
+        D --> K2
+    end
+
+    subgraph State["State Management"]
+        K["AIStateManager (singleton)"]
+        L["sessions: Map"]
+        M["todos: TodoItem[]"]
+        N["isStreaming: boolean"]
+        O["isThinking: boolean"]
+    end
+
+    subgraph Events["Event Flow"]
+        P["listen('ai-agent-event')"]
+        Q["handleAgentEvent()"]
+        R["switch on event.type"]
+        S["handleTextDelta"]
+        T["handleToolUse"]
+        U["handleResponse"]
+    end
+
+    P --> Q --> R
+    R --> S
+    R --> T
+    R --> U
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     10. IPC EVENT SYSTEM
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="ipc">10. IPC Event System</h2>
+
+<pre><code class="language-rust">// ═══════════════════════════════════════════════════════════════
+// IPC EVENTS — Backend to Frontend
+// ═══════════════════════════════════════════════════════════════
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+enum AgentEvent {
+    #[serde(rename = "text_delta")]
+    TextDelta { content: String },
+
+    #[serde(rename = "tool_use")]
+    ToolUse { name: String, args: Value },
+
+    #[serde(rename = "tool_result")]
+    ToolResult { tool_call_id: String, output: String, is_error: bool },
+
+    #[serde(rename = "tool_approval_required")]
+    ToolApprovalRequired {
+        tool_call_id: String,
+        tool_name: String,
+        args_summary: String,
+        risk_level: String,
+        rollback_info: Option&lt;String&gt;,
+    },
+
+    #[serde(rename = "todo_update")]
+    TodoUpdate { todos: Vec&lt;TodoItem&gt; },
+
+    #[serde(rename = "response")]
+    Response { content: String, tool_calls_made: u32, usage: Option&lt;UsageMetadata&gt; },
+
+    #[serde(rename = "execution_summary")]
+    ExecutionSummary { files_modified: Vec&lt;String&gt;, duration_ms: u64, tool_calls: u32 },
+
+    #[serde(rename = "subagent_progress")]
+    SubAgentProgress { task_id: String, status: String, current_step: Option&lt;String&gt; },
+
+    #[serde(rename = "subagent_result")]
+    SubAgentResult { task_id: String, summary: String, success: bool },
+
+    #[serde(rename = "error")]
+    Error { message: String },
+
+    #[serde(rename = "cost_update")]
+    CostUpdate { total_cost: f64, token_count: usize },
+
+    #[serde(rename = "question_request")]
+    QuestionRequest {
+        questions: Vec&lt;QuestionItem&gt;,
+    },
+
+    #[serde(rename = "question_response")]
+    QuestionResponse {
+        answers: Vec&lt;QuestionAnswer&gt;,
+    },
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TAURI COMMANDS — Frontend to Backend
+// ═══════════════════════════════════════════════════════════════
+
+#[tauri::command]
+async fn ai_chat(message: String, history: Vec&lt;Value&gt;, project_path: String, model: String) -> Result&lt;String, String&gt;;
+
+#[tauri::command]
+async fn ai_approve_tool(approved: bool) -> Result&lt;(), String&gt;;
+
+#[tauri::command]
+async fn ai_abort() -> Result&lt;(), String&gt;;
+
+#[tauri::command]
+async fn ai_spawn_agent(task: String, role: String) -> Result&lt;String, String&gt;;
+
+#[tauri::command]
+async fn ai_get_subagent_status(task_id: String) -> Result&lt;Value, String&gt;;
+
+#[tauri::command]
+async fn ai_question_response(answers: Vec&lt;QuestionAnswer&gt;) -> Result&lt;(), String&gt;;</code></pre>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     11. SEQUENCE DIAGRAMS
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="sequences">11. Complete Sequence Diagrams</h2>
+
+<h3 id="sequences-permission">11a. Permission Flow</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant AL as Agent Loop
+    participant PM as Permission Service
+    participant SM as Session Memory
+    participant UI as Frontend UI
+    participant U as User
+
+    AL->>PM: check(tool_call)
+    PM->>SM: is_approved(tool, args)
+
+    alt Already approved
+        SM-->>PM: true (cached)
+        PM-->>AL: Allow
+    else Not approved
+        SM-->>PM: false
+        PM->>PM: Check trust tier + autonomy mode
+
+        alt Safe tier + autonomy
+            PM->>SM: grant(session)
+            PM-->>AL: Allow
+        else Needs approval
+            PM-->>UI: ToolApprovalRequired event
+            UI->>U: Show permission card
+            U->>UI: Click "Always Allow for Project"
+            UI->>PM: grant(project)
+            PM->>SM: store approval
+            PM-->>AL: Allow
+        end
+    end
+
+    AL->>AL: Execute tool
+</div>
+
+<h3 id="sequences-response-filter">11b. Response Filter Flow</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant AL as Agent Loop
+    participant RF as Response Filter
+    participant CH as chat.rs
+    participant FE as Frontend
+
+    loop For each event
+        AL->>RF: AgentEvent
+        RF->>RF: TextFilter: strip markers
+        RF->>RF: ToolFilter: truncate output
+        RF->>RF: SensitiveFilter: redact secrets
+        alt Event suppressed
+            RF-->>CH: None (drop)
+        else Event passes
+            RF->>CH: FilteredEvent
+            CH->>FE: app.emit("ai-agent-event")
+        end
+    end
+</div>
+
+<h3 id="sequences-caching">11c. Basic Query with Caching</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant Cache as Tool Cache
+    participant LLM as LLM
+    participant Tool as Tool
+
+    U->>FE: "Run unit tests"
+    FE->>BE: ai_chat("Run unit tests")
+    BE->>LLM: stream(messages)
+    LLM-->>FE: TextDelta("I'll run the tests...")
+    BE->>Tool: execute("cargo test")
+    Tool-->>BE: ToolResult("42 passed")
+    BE->>Cache: store("cargo_test", result, ttl=5min)
+    BE-->>FE: Response("42 tests passed")
+    FE-->>U: Display result
+
+    U->>FE: "Create HTML report"
+    FE->>BE: ai_chat("Create HTML report")
+    BE->>LLM: stream(messages)
+    LLM-->>FE: TextDelta("I'll generate the report...")
+    BE->>Cache: lookup("cargo_test")
+    Note over Cache: Cache HIT — no re-run needed
+    Cache-->>BE: cached result
+    BE->>BE: Generate report from cached result
+    BE-->>FE: Response("Report created")
+    FE-->>U: Display result
+</div>
+
+<hr class="section-divider">
+
+<!-- ═══════════════════════════════════════════════════════════════
+     12. IMPLEMENTATION ROADMAP
+     ═══════════════════════════════════════════════════════════════ -->
+<h2 id="roadmap">12. Implementation Roadmap</h2>
+
+<table>
+  <tr><th>Phase</th><th>Component</th><th>New Files</th><th>Effort</th></tr>
+  <tr>
+    <td><span class="badge badge-critical">P0</span></td>
+    <td>Message Types</td>
+    <td><code>ai/messages/</code></td>
+    <td>1 day</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-critical">P0</span></td>
+    <td>ToolRuntime</td>
+    <td><code>ai/tools/runtime.rs</code></td>
+    <td>1 day</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-critical">P0</span></td>
+    <td>Tool Middleware Pipeline</td>
+    <td><code>ai/middleware/</code></td>
+    <td>2 days</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-critical">P0</span></td>
+    <td>Response Filter Middleware</td>
+    <td><code>ai/middleware/response_filter.rs</code></td>
+    <td>1 day</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-high">P1</span></td>
+    <td>Tool Result Cache</td>
+    <td><code>ai/cache/</code></td>
+    <td>1 day</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-high">P1</span></td>
+    <td>Bash-to-Built-in Redirection</td>
+    <td><code>ai/middleware/redirect.rs</code></td>
+    <td>1 day</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-high">P1</span></td>
+    <td>Prompt Rewrite + Tool Preference Rules</td>
+    <td>Modify <code>ai/agent/prompt.rs</code></td>
+    <td>4 hours</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-medium">P2</span></td>
+    <td>Sub-Agent System (rewrite)</td>
+    <td><code>ai/subagent/</code></td>
+    <td>3 days</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-medium">P2</span></td>
+    <td>Context Compaction</td>
+    <td><code>ai/context/compaction.rs</code></td>
+    <td>2 days</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-medium">P2</span></td>
+    <td>Store (long-term memory)</td>
+    <td><code>ai/store/</code></td>
+    <td>2 days</td>
+  </tr>
+  <tr>
+    <td><span class="badge badge-low">P3</span></td>
+    <td>Project Rules File</td>
+    <td><code>ai/rules/</code></td>
+    <td>1 day</td>
+  </tr>
+</table>
+
+<h3>New File Structure</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph "ai/ (new modules)"
+        M1["messages/"]
+        M2["tools/"]
+        M3["middleware/"]
+        M4["context/"]
+        M5["cache/"]
+        M6["permissions/"]
+        M7["subagent/"]
+        M8["store/"]
+        M9["agent/"]
+        M10["commands/"]
+        M11["provider/"]
+    end
+
+    M1 --> M9
+    M2 --> M9
+    M3 --> M2
+    M4 --> M9
+    M5 --> M3
+    M6 --> M3
+    M7 --> M9
+    M8 --> M4
+    M9 --> M10
+    M11 --> M9
+
+    style M1 fill:#006ddd,color:#fff
+    style M2 fill:#1a7f37,color:#fff
+    style M3 fill:#8250df,color:#fff
+    style M9 fill:#ea580c,color:#fff
+</div>
+
+<hr class="section-divider">
+
+<h2>Summary</h2>
+
+<table>
+  <tr><th>Aspect</th><th>Current</th><th>Designed</th></tr>
+  <tr><td>Message types</td><td>Raw strings</td><td>Typed System/Human/AI/Tool/Agent messages</td></tr>
+  <tr><td>Tool access</td><td>Global state</td><td>ToolRuntime injected per call</td></tr>
+  <tr><td>Tool pipeline</td><td>Ad-hoc checks</td><td>7-layer middleware pipeline</td></tr>
+  <tr><td>Tool preference</td><td>None (ls via bash)</td><td>RedirectionMiddleware</td></tr>
+  <tr><td>Result caching</td><td>None</td><td>ToolResultCache with TTL</td></tr>
+  <tr><td>Permissions</td><td>Profile-based</td><td>Middleware + session memory + project grants</td></tr>
+  <tr><td>Sub-agents</td><td>Broken (12 bugs)</td><td>AgentSpawner + context passing + synthesis</td></tr>
+  <tr><td>Context</td><td>Fresh per query</td><td>4-layer memory system</td></tr>
+  <tr><td>Frontend events</td><td>Raw passthrough</td><td>Typed events + response filtering</td></tr>
+  <tr><td>User input</td><td>Plain text only</td><td>Question Tool with structured options</td></tr>
+  <tr><td>Dependencies</td><td>Tightly coupled</td><td>Trait-based, event-driven</td></tr>
+</table>
+
+<p style="text-align: center; margin-top: 3rem; opacity: 0.5;">
+  <em>Design complete. Ready for implementation.</em>
+</p>
+
+<!-- Diagram Fullscreen Modal -->
+<div class="diagram-modal" id="diagramModal">
+  <div class="diagram-modal-content">
+    <div class="diagram-modal-header">
+      <div class="diagram-modal-title">
+        <i data-lucide="maximize-2" style="width:18px;height:18px;color:rgb(var(--accent-blue))"></i>
+        <span id="diagramModalTitle">Diagram</span>
+      </div>
+      <div class="diagram-modal-actions">
+        <button class="diagram-modal-btn" onclick="zoomDiagram(1.2)" title="Zoom In">
+          <i data-lucide="zoom-in" style="width:16px;height:16px"></i>
+        </button>
+        <button class="diagram-modal-btn" onclick="zoomDiagram(0.8)" title="Zoom Out">
+          <i data-lucide="zoom-out" style="width:16px;height:16px"></i>
+        </button>
+        <button class="diagram-modal-btn close-btn" onclick="closeDiagramModal()" title="Close">
+          <i data-lucide="x" style="width:16px;height:16px"></i>
+        </button>
+      </div>
+    </div>
+    <div class="diagram-modal-body" id="diagramModalBody"></div>
+  </div>
+</div>
+
+<script>
+// Theme toggle
+function toggleTheme() {
+  const html = document.documentElement;
+  const current = html.classList.contains('dark') ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  html.classList.remove('light', 'dark');
+  html.classList.add(next);
+  html.setAttribute('data-theme', next);
+  localStorage.setItem('theme', next);
+  // Re-init mermaid for new theme
+  initMermaid();
+}
+
+// Load saved theme
+(function() {
+  const saved = localStorage.getItem('theme');
+  if (saved) {
+    document.documentElement.classList.remove('light', 'dark');
+    document.documentElement.classList.add(saved);
+    document.documentElement.setAttribute('data-theme', saved);
+  }
+  // Init Lucide icons
+  if (typeof lucide !== 'undefined') lucide.createIcons();
+})();
+
+// Mermaid init
+function initMermaid() {
+  const isDark = document.documentElement.classList.contains('dark');
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: isDark ? 'dark' : 'default',
+    securityLevel: 'loose',
+    fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif',
+    themeVariables: isDark ? {
+      primaryColor: '#006ddd',
+      primaryTextColor: '#e6edf3',
+      primaryBorderColor: '#30363d',
+      lineColor: '#8b949e',
+      secondaryColor: '#161b22',
+      tertiaryColor: '#0d1117',
+      background: '#0d1117',
+      mainBkg: '#161b22',
+      nodeBorder: '#30363d',
+      clusterBkg: '#161b22',
+      titleColor: '#e6edf3',
+      edgeLabelBackground: '#161b22',
+    } : {
+      primaryColor: '#006ddd',
+      primaryTextColor: '#1f2328',
+      primaryBorderColor: '#d0d7de',
+      lineColor: '#656d76',
+      secondaryColor: '#f6f8fa',
+      tertiaryColor: '#ffffff',
+    }
+  });
+}
+
+// Re-run mermaid on theme change
+document.addEventListener('DOMContentLoaded', initMermaid);
+
+// ═══════════════════════════════════════════════════════════════
+// SCROLL SPY — Highlight active section in sidebar
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const sidebar = document.getElementById('sidebar');
+  if (!sidebar) return;
+  const links = sidebar.querySelectorAll('a[href^="#"]');
+  const sections = [];
+  links.forEach(link => {
+    const id = link.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if (el) sections.push({ el, link });
+  });
+
+  function update() {
+    let current = sections[0];
+    const scrollY = window.scrollY + 120;
+    for (const s of sections) {
+      if (s.el.offsetTop <= scrollY) current = s;
+    }
+    links.forEach(l => l.classList.remove('active'));
+    if (current) current.link.classList.add('active');
+  }
+
+  window.addEventListener('scroll', update, { passive: true });
+  update();
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// DIAGRAM MAXIMIZE MODAL
+// ═══════════════════════════════════════════════════════════════
+let currentZoom = 1;
+
+function openDiagramModal(title, svgEl) {
+  const modal = document.getElementById('diagramModal');
+  const body = document.getElementById('diagramModalBody');
+  const titleEl = document.getElementById('diagramModalTitle');
+  titleEl.textContent = title;
+  body.innerHTML = '';
+  const clone = svgEl.cloneNode(true);
+  clone.style.maxWidth = '100%';
+  clone.style.maxHeight = '100%';
+  body.appendChild(clone);
+  currentZoom = 1;
+  modal.classList.add('active');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDiagramModal() {
+  document.getElementById('diagramModal').classList.remove('active');
+  document.body.style.overflow = '';
+}
+
+function zoomDiagram(factor) {
+  currentZoom *= factor;
+  currentZoom = Math.max(0.3, Math.min(3, currentZoom));
+  const svg = document.querySelector('#diagramModalBody svg');
+  if (svg) svg.style.transform = `scale(${currentZoom})`;
+}
+
+// Close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDiagramModal();
+});
+
+// Close on backdrop click
+document.getElementById('diagramModal')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeDiagramModal();
+});
+
+// Add maximize buttons to diagrams after mermaid renders
+function addDiagramButtons() {
+  document.querySelectorAll('.mermaid').forEach((el, i) => {
+    if (el.closest('.diagram-wrap')) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'diagram-wrap';
+    el.parentNode.insertBefore(wrap, el);
+    wrap.appendChild(el);
+
+    // Find the title from the preceding h2/h3/h4
+    let title = 'Diagram';
+    let prev = wrap.previousElementSibling;
+    while (prev) {
+      if (prev.matches('h2, h3, h4')) {
+        title = prev.textContent.trim();
+        break;
+      }
+      prev = prev.previousElementSibling;
+    }
+
+    const btn = document.createElement('button');
+    btn.className = 'diagram-maximize';
+    btn.innerHTML = '<i data-lucide="maximize-2" style="width:14px;height:14px"></i>';
+    btn.title = 'Maximize';
+    btn.onclick = () => {
+      const svg = el.querySelector('svg');
+      if (svg) openDiagramModal(title, svg);
+    };
+    wrap.appendChild(btn);
+    if (typeof lucide !== 'undefined') lucide.createIcons({ nodes: [btn] });
+  });
+}
+
+// Run after mermaid renders
+setTimeout(addDiagramButtons, 2000);
+</script>
+
+</body>
+</html>
