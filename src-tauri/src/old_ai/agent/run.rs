@@ -9,9 +9,9 @@ use super::tool_executor;
 use super::todo_interceptor;
 use super::types::{TodoItem, TodoStatus};
 use super::Agent;
-use crate::ai::context::{ContextManager, AiSessionLog};
-use crate::ai::permissions::PermissionResult;
-use crate::ai::provider::*;
+use crate::old_ai::context::{ContextManager, AiSessionLog};
+use crate::old_ai::permissions::PermissionResult;
+use crate::old_ai::provider::*;
 
 /// Maximum time to wait for streaming response from LLM (per iteration).
 const STREAM_TIMEOUT_SECS: u64 = 120;
@@ -55,12 +55,12 @@ impl Agent {
     }
 
     /// Get the embedding store for external access.
-    pub fn embedding_store(&self) -> Arc<tokio::sync::Mutex<crate::ai::embedding_store::EmbeddingStore>> {
+    pub fn embedding_store(&self) -> Arc<tokio::sync::Mutex<crate::old_ai::embedding_store::EmbeddingStore>> {
         self.embedding_store.clone()
     }
 
     /// Get the cost tracker for external access.
-    pub fn cost_tracker(&self) -> crate::ai::cost_tracker::SharedCostTracker {
+    pub fn cost_tracker(&self) -> crate::old_ai::cost_tracker::SharedCostTracker {
         self.cost_tracker.clone()
     }
 
@@ -263,6 +263,7 @@ impl Agent {
                         *todo_store = todos.clone();
                         session_log.log_todo_update(&todos);
                         let _ = tx.send(AgentEvent::TodoUpdate { todos }).await;
+                        let _ = tx.send(AgentEvent::PlanUpdate { steps: new_steps }).await;
                     }
                     actually_created
                 } else {
@@ -611,7 +612,7 @@ impl Agent {
                     continue;
                 }
                 PermissionResult::ApprovalRequired { .. } => {
-                    let preview = crate::ai::agent::preview::generate_tool_preview(self, &call.function.name, &call.function.arguments);
+                    let preview = crate::old_ai::agent::preview::generate_tool_preview(self, &call.function.name, &call.function.arguments);
                     let _ = tx
                         .send(AgentEvent::ToolApprovalRequired {
                             tool_name: call.function.name.clone(),
@@ -782,6 +783,19 @@ impl Agent {
             let todos_clone = todos.clone();
             drop(todos);
             let _ = tx.send(AgentEvent::TodoUpdate { todos: todos_clone }).await;
+
+            // Also update plan_steps so the sidebar reflects completion
+            let mut steps = self.plan_steps.lock().await;
+            for step in steps.iter_mut() {
+                if step.status == super::types::PlanStepStatus::Pending
+                    || step.status == super::types::PlanStepStatus::InProgress
+                {
+                    step.status = super::types::PlanStepStatus::Done;
+                }
+            }
+            let steps_clone = steps.clone();
+            drop(steps);
+            let _ = tx.send(AgentEvent::PlanUpdate { steps: steps_clone }).await;
         }
     }
 

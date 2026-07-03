@@ -377,6 +377,7 @@ fn main() {
         .manage(dap_installer::DebugAdapterInstaller::new())
             .manage(database::DatabaseManager::new())
             .manage(old_ai::commands::AiState::new())
+            .manage(ai_v2::commands::state::AiV2State::new())
             .manage(GraphState::new())
         .setup(|app| {
             let handle = app.handle().clone();

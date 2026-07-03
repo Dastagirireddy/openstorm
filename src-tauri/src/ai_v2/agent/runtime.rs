@@ -1,10 +1,11 @@
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Mutex};
 
 use super::config::AgentConfig;
+use super::planner;
 use crate::ai_v2::messages::{HumanMessage, Message, SystemMessage};
-use crate::ai_v2::response_filter::events::AgentEvent;
+use crate::ai_v2::response_filter::events::{AgentEvent, PlanStepData};
 use crate::ai_v2::tools::tool_trait::ToolResult;
 
 /// LLM Provider trait
@@ -95,6 +96,8 @@ pub struct AgentRuntime {
     tool_service: Arc<dyn ToolService>,
     event_tx: mpsc::Sender<AgentEvent>,
     config: AgentConfig,
+    plan_steps: Arc<Mutex<Vec<PlanStepData>>>,
+    has_plan: Arc<Mutex<bool>>,
 }
 
 impl AgentRuntime {
@@ -110,6 +113,103 @@ impl AgentRuntime {
             tool_service,
             event_tx,
             config,
+            plan_steps: Arc::new(Mutex::new(Vec::new())),
+            has_plan: Arc::new(Mutex::new(false)),
+        }
+    }
+
+    /// Get the event sender
+    pub fn event_sender(&self) -> &mpsc::Sender<AgentEvent> {
+        &self.event_tx
+    }
+
+    /// Get the config
+    pub fn config(&self) -> &AgentConfig {
+        &self.config
+    }
+
+    /// Get current plan steps
+    pub async fn plan_steps(&self) -> Vec<PlanStepData> {
+        self.plan_steps.lock().await.clone()
+    }
+
+    /// Set plan steps and emit PlanUpdate event
+    pub async fn set_plan_steps(&self, steps: Vec<PlanStepData>) {
+        {
+            let mut plan = self.plan_steps.lock().await;
+            *plan = steps.clone();
+        }
+        {
+            let mut has_plan = self.has_plan.lock().await;
+            if !steps.is_empty() {
+                *has_plan = true;
+            }
+        }
+        let _ = self
+            .event_tx
+            .send(AgentEvent::PlanUpdate { steps })
+            .await;
+    }
+
+    /// Update a single plan step status
+    pub async fn update_step_status(&self, step_num: u32, status: &str) {
+        let steps = {
+            let mut plan = self.plan_steps.lock().await;
+            for step in plan.iter_mut() {
+                if step.step == step_num {
+                    step.status = status.to_string();
+                    break;
+                }
+            }
+            plan.clone()
+        };
+        if !steps.is_empty() {
+            let _ = self
+                .event_tx
+                .send(AgentEvent::PlanUpdate { steps })
+                .await;
+        }
+    }
+
+    /// Parse plan from LLM text and emit if new plan found
+    async fn maybe_parse_plan(&self, text: &str) {
+        let has_plan = *self.has_plan.lock().await;
+        if has_plan {
+            return;
+        }
+        let steps = planner::parse_plan(text);
+        if !steps.is_empty() {
+            self.set_plan_steps(steps).await;
+        }
+    }
+
+    /// Sync plan steps from todo_write tool results
+    pub async fn sync_plan_from_tool(&self, tool_name: &str, output: &str) {
+        if tool_name != "todo_write" {
+            return;
+        }
+        // Try to parse todo items from tool output
+        if let Ok(todos) = serde_json::from_str::<Vec<serde_json::Value>>(output) {
+            let todo_pairs: Vec<(String, String)> = todos
+                .iter()
+                .filter_map(|t| {
+                    let id = t.get("id")?.as_str()?.to_string();
+                    let status = t.get("status")?.as_str()?.to_string();
+                    Some((id, status))
+                })
+                .collect();
+            if !todo_pairs.is_empty() {
+                let mut steps = self.plan_steps.lock().await;
+                if !steps.is_empty() {
+                    planner::sync_plan_from_todos(&mut steps, &todo_pairs);
+                    let steps_clone = steps.clone();
+                    drop(steps);
+                    let _ = self
+                        .event_tx
+                        .send(AgentEvent::PlanUpdate { steps: steps_clone })
+                        .await;
+                }
+            }
         }
     }
 
@@ -156,8 +256,9 @@ impl AgentRuntime {
                 .await
                 .map_err(|e| AgentError::LLMError(e.to_string()))?;
 
-            // 4. Stream text deltas
+            // 4. Stream text deltas and try to parse plan
             if !response.content.is_empty() {
+                self.maybe_parse_plan(&response.content).await;
                 let _ = self
                     .event_tx
                     .send(AgentEvent::TextDelta {
@@ -193,6 +294,9 @@ impl AgentRuntime {
                     .await
                     .map_err(|e| AgentError::ToolError(e))?;
 
+                // Sync plan if this was a todo_write call
+                self.sync_plan_from_tool(&tool_call.name, &result.content).await;
+
                 let _ = self
                     .event_tx
                     .send(AgentEvent::ToolResult {
@@ -207,18 +311,28 @@ impl AgentRuntime {
             }
         }
 
-        // 7. Extract final response
+        // 7. Force-complete remaining plan steps
+        {
+            let mut steps = self.plan_steps.lock().await;
+            let mut changed = false;
+            for step in steps.iter_mut() {
+                if step.status == "pending" || step.status == "in_progress" {
+                    step.status = "completed".to_string();
+                    changed = true;
+                }
+            }
+            if changed {
+                let steps_clone = steps.clone();
+                drop(steps);
+                let _ = self
+                    .event_tx
+                    .send(AgentEvent::PlanUpdate { steps: steps_clone })
+                    .await;
+            }
+        }
+
+        // 8. Extract final response
         Ok("Agent loop completed".to_string())
-    }
-
-    /// Get the event sender
-    pub fn event_sender(&self) -> &mpsc::Sender<AgentEvent> {
-        &self.event_tx
-    }
-
-    /// Get the config
-    pub fn config(&self) -> &AgentConfig {
-        &self.config
     }
 }
 

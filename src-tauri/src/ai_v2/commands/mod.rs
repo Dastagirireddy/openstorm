@@ -1,8 +1,15 @@
-use tauri::command;
+pub mod state;
 
+use std::sync::Arc;
+use tauri::{command, AppHandle, Emitter, State};
+use tokio::sync::mpsc;
+
+use super::agent::AgentRuntime;
 use super::messages::content::UsageMetadata;
+use super::response_filter::events::{AgentEvent, PlanStepData};
 use super::tools::tool_trait::ToolResult;
 use super::tools::question_types::{QuestionAnswer, QuestionItem};
+use state::AiV2State;
 
 /// Chat request from frontend
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -58,10 +65,67 @@ pub struct QuestionResponseRequest {
 
 /// Send a chat message to the AI agent
 #[command]
-pub async fn ai_v2_chat(request: ChatRequest) -> Result<ChatResponse, String> {
-    // Placeholder: In real impl, this would invoke AgentRuntime
+pub async fn ai_v2_chat(
+    app: AppHandle,
+    state: State<'_, AiV2State>,
+    request: ChatRequest,
+) -> Result<ChatResponse, String> {
+    let runtime: Arc<AgentRuntime> = {
+        let rt = state.runtime.lock().await;
+        rt.as_ref()
+            .ok_or_else(|| "No agent runtime initialized".to_string())?
+            .clone()
+    };
+
+    // Reset plan for new conversation
+    runtime.set_plan_steps(Vec::new()).await;
+
+    // Run the agent
+    let mut rx = {
+        let (tx, rx) = mpsc::channel(64);
+        // For now, run in a spawned task since we need the runtime to be shared
+        let runtime_clone = runtime.clone();
+        let message = request.message.clone();
+        tokio::spawn(async move {
+            let result = runtime_clone.run(&message).await;
+            match result {
+                Ok(response) => {
+                    let _ = tx.send(AgentEvent::Response {
+                        content: response,
+                        tool_calls_made: 0,
+                        usage: None,
+                    }).await;
+                }
+                Err(e) => {
+                    let _ = tx.send(AgentEvent::Error {
+                        message: e.to_string(),
+                        code: None,
+                    }).await;
+                }
+            }
+        });
+        rx
+    };
+
+    let mut final_response = String::new();
+    while let Some(event) = rx.recv().await {
+        let _ = app.emit("ai-v2:agent-event", &event);
+        match &event {
+            AgentEvent::Response { content, .. } => {
+                final_response = content.clone();
+            }
+            AgentEvent::Error { message, .. } => {
+                final_response = format!("Error: {}", message);
+            }
+            AgentEvent::PlanUpdate { steps } => {
+                let _ = app.emit("ai-v2:plan-update", steps);
+            }
+            _ => {}
+        }
+    }
+
     Ok(ChatResponse {
-        content: format!("Echo: {}", request.message),
+        content: final_response,
         tool_calls_made: 0,
         usage: None,
         success: true,

@@ -64,6 +64,19 @@ pub enum AgentEvent {
         total_cost: f64,
         duration_ms: u64,
     },
+
+    /// Plan step update
+    PlanUpdate {
+        steps: Vec<PlanStepData>,
+    },
+}
+
+/// Serializable plan step for frontend consumption
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanStepData {
+    pub step: u32,
+    pub description: String,
+    pub status: String,
 }
 
 /// Question event data
