@@ -6,10 +6,11 @@ use tokio::process::Command;
 use super::types::McpServerConfig;
 
 pub struct McpServerConnection {
-    #[allow(dead_code)]
-    config: McpServerConfig,
-    pub service: RunningService<rmcp::RoleClient, ()>,
+    pub config: McpServerConfig,
+    pub service: Option<RunningService<rmcp::RoleClient, ()>>,
     pub tools: Vec<Tool>,
+    #[allow(dead_code)]
+    child_pid: Option<u32>,
 }
 
 impl McpServerConnection {
@@ -20,6 +21,13 @@ impl McpServerConnection {
         }
         for (key, value) in &config.env {
             cmd.env(key, value);
+        }
+
+        // Create process group on Unix for clean tree killing
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0);
         }
 
         let service = ()
@@ -33,11 +41,33 @@ impl McpServerConnection {
             .await
             .map_err(|e| format!("Failed to list tools from '{}': {}", config.name, e))?;
 
+        // Try to find the child PID by looking for the process
+        let child_pid = Self::find_child_pid(config);
+
         Ok(Self {
             config: config.clone(),
-            service,
+            service: Some(service),
             tools,
+            child_pid,
         })
+    }
+
+    /// Find child process PID by command name
+    fn find_child_pid(config: &McpServerConfig) -> Option<u32> {
+        #[cfg(unix)]
+        {
+            use std::process::Command as StdCommand;
+            let output = StdCommand::new("pgrep")
+                .args(["-f", &config.command])
+                .output()
+                .ok()?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.lines().next()?.parse().ok()
+        }
+        #[cfg(not(unix))]
+        {
+            None
+        }
     }
 
     pub async fn call_tool(&self, tool_name: &str, arguments: serde_json::Value) -> Result<String, String> {
@@ -53,7 +83,8 @@ impl McpServerConnection {
             task: None,
         };
 
-        let result = self.service
+        let service = self.service.as_ref().ok_or("MCP service not connected")?;
+        let result = service
             .call_tool(params)
             .await
             .map_err(|e| format!("MCP tool call failed: {}", e))?;
@@ -71,6 +102,31 @@ impl McpServerConnection {
             Err(output.join("\n"))
         } else {
             Ok(output.join("\n"))
+        }
+    }
+
+    /// Kill the MCP server and its entire process tree
+    pub async fn kill_tree(&mut self) {
+        // First try to cancel the service gracefully
+        if let Some(service) = self.service.take() {
+            let _ = service.cancel().await;
+        }
+
+        // On Unix, kill the process group if we have the PID
+        #[cfg(unix)]
+        {
+            if let Some(pid) = self.child_pid {
+                unsafe {
+                    // Kill the entire process group (negative PID)
+                    libc::kill(-(pid as i32), libc::SIGTERM);
+                }
+                // Give processes time to cleanup
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                // Force kill if still alive
+                unsafe {
+                    libc::kill(-(pid as i32), libc::SIGKILL);
+                }
+            }
         }
     }
 }

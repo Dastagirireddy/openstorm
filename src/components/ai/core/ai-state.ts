@@ -56,6 +56,7 @@ export interface AIMessage {
   toolCalls?: ToolCall[];
   metadata?: MessageMetadata;
   streaming?: boolean;
+  isError?: boolean;
 }
 
 export interface UsageMetadata {
@@ -76,6 +77,7 @@ export interface AIState {
   currentModel: string;
   agentId: string | null;
   pendingApprovals: ToolApproval[];
+  allowedTools: string[];
   activeToolCalls: ToolCall[];
   subAgents: SubAgent[];
   planSteps: PlanStep[];
@@ -170,6 +172,7 @@ export function createDefaultState(): AIState {
     currentModel: '',
     agentId: null,
     pendingApprovals: [],
+    allowedTools: [],
     activeToolCalls: [],
     subAgents: [],
     planSteps: [],

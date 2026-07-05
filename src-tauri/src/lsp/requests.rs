@@ -138,6 +138,57 @@ impl LspClient {
         Ok(response.result)
     }
 
+    /// Get document symbols for a file
+    pub fn get_document_symbols(
+        &mut self,
+        uri: &str,
+        content: &str,
+        language_id: &str,
+    ) -> Result<Vec<DocumentSymbol>, String> {
+        if !self.initialized {
+            return Err("LSP server not initialized".to_string());
+        }
+
+        self.did_open(uri, content, language_id)?;
+
+        let params = DocumentSymbolParams {
+            text_document: TextDocumentIdentifier {
+                uri: uri.parse().map_err(|e| format!("Invalid URI: {}", e))?,
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let response: Result<JsonRpcResponse<DocumentSymbolResponse>, String> =
+            self.send_request("textDocument/documentSymbol", params);
+        let response = match response {
+            Ok(r) => r,
+            Err(e) => return Err(e),
+        };
+
+        if let Some(error) = response.error {
+            return Err(format!("LSP document symbols error: {}", error.message));
+        }
+
+        match response.result {
+            Some(DocumentSymbolResponse::Flat(symbols)) => {
+                // Flat response (SymbolInformation) - convert to DocumentSymbol format
+                Ok(symbols.into_iter().map(|s| DocumentSymbol {
+                    name: s.name,
+                    detail: None,
+                    kind: s.kind,
+                    range: s.location.range,
+                    selection_range: s.location.range,
+                    tags: None,
+                    deprecated: None,
+                    children: None,
+                }).collect())
+            }
+            Some(DocumentSymbolResponse::Nested(symbols)) => Ok(symbols),
+            None => Ok(Vec::new()),
+        }
+    }
+
     /// Get definition location at a position
     pub fn get_definition(
         &mut self,

@@ -11,6 +11,7 @@ export interface CancelDetail {}
 export interface ApproveToolDetail {
   toolCallId: string;
   approved: boolean;
+  alwaysAllow?: boolean;
 }
 
 export interface AnswerQuestionDetail {

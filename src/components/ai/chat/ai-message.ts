@@ -44,6 +44,31 @@ export class AIMessage extends LitElement {
       line-height: 1.6;
       user-select: text;
     }
+    .error-message {
+      display: flex;
+      flex-direction: column;
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      background: color-mix(in srgb, var(--ai-error, #ef4444) 8%, transparent);
+      border-left: 3px solid var(--ai-error, #ef4444);
+      border-radius: 0 6px 6px 0;
+    }
+    .error-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ai-error, #ef4444);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .error-content {
+      font-size: 13px;
+      color: var(--ai-text, #1f2937);
+      line-height: 1.5;
+    }
     .tool-calls {
       margin-top: 12px;
       display: flex;
@@ -65,6 +90,7 @@ export class AIMessage extends LitElement {
   render() {
     if (!this.message) return html``;
     const isUser = this.message.role === 'user';
+    const isError = this.message.isError === true;
 
     if (isUser) {
       return html`
@@ -76,6 +102,19 @@ export class AIMessage extends LitElement {
           </div>
           <div class="user-content">
             <openstorm-ai-content .content=${this.message.content} .streaming=${this.streaming}></openstorm-ai-content>
+          </div>
+        </div>
+      `;
+    }
+
+    if (isError) {
+      return html`
+        <div class="error-message">
+          <div class="error-header">
+            <span>Error</span>
+          </div>
+          <div class="error-content">
+            ${this.message.content}
           </div>
         </div>
       `;

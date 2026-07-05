@@ -284,6 +284,77 @@ pub fn get_hover(
 }
 
 
+/// Document symbol info for frontend
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DocumentSymbolInfo {
+    pub name: String,
+    pub kind: String,
+    pub range: RangeInfo,
+    pub children: Option<Vec<DocumentSymbolInfo>>,
+}
+
+/// Tauri command: Get document symbols for a file
+#[tauri::command]
+pub fn lsp_get_document_symbols(
+    language_id: String,
+    uri: String,
+    content: String,
+) -> Result<Vec<DocumentSymbolInfo>, String> {
+    let pool = get_pool().ok_or("Connection pool not initialized")?;
+    let mut pool_guard = pool.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let client = pool_guard.get_or_create(&language_id)?;
+
+    let symbols = client.get_document_symbols(&uri, &content, &language_id)?;
+
+    fn convert_symbol(symbol: lsp_types::DocumentSymbol) -> DocumentSymbolInfo {
+        let kind = match symbol.kind {
+            lsp_types::SymbolKind::FILE => "file",
+            lsp_types::SymbolKind::MODULE => "module",
+            lsp_types::SymbolKind::NAMESPACE => "namespace",
+            lsp_types::SymbolKind::PACKAGE => "package",
+            lsp_types::SymbolKind::CLASS => "class",
+            lsp_types::SymbolKind::METHOD => "method",
+            lsp_types::SymbolKind::PROPERTY => "property",
+            lsp_types::SymbolKind::FIELD => "field",
+            lsp_types::SymbolKind::CONSTRUCTOR => "constructor",
+            lsp_types::SymbolKind::ENUM => "enum",
+            lsp_types::SymbolKind::INTERFACE => "interface",
+            lsp_types::SymbolKind::FUNCTION => "function",
+            lsp_types::SymbolKind::VARIABLE => "variable",
+            lsp_types::SymbolKind::CONSTANT => "constant",
+            lsp_types::SymbolKind::STRING => "string",
+            lsp_types::SymbolKind::NUMBER => "number",
+            lsp_types::SymbolKind::BOOLEAN => "boolean",
+            lsp_types::SymbolKind::ARRAY => "array",
+            lsp_types::SymbolKind::OBJECT => "object",
+            lsp_types::SymbolKind::KEY => "key",
+            lsp_types::SymbolKind::NULL => "null",
+            lsp_types::SymbolKind::ENUM_MEMBER => "enum_member",
+            lsp_types::SymbolKind::STRUCT => "struct",
+            lsp_types::SymbolKind::EVENT => "event",
+            lsp_types::SymbolKind::OPERATOR => "operator",
+            lsp_types::SymbolKind::TYPE_PARAMETER => "type_parameter",
+            _ => "unknown",
+        };
+
+        DocumentSymbolInfo {
+            name: symbol.name,
+            kind: kind.to_string(),
+            range: RangeInfo {
+                start_line: symbol.range.start.line,
+                start_char: symbol.range.start.character,
+                end_line: symbol.range.end.line,
+                end_char: symbol.range.end.character,
+            },
+            children: symbol.children.map(|c| {
+                c.into_iter().map(convert_symbol).collect()
+            }),
+        }
+    }
+
+    Ok(symbols.into_iter().map(convert_symbol).collect())
+}
+
 /// Tauri command: Get definition location at position
 #[tauri::command]
 pub fn get_definition(

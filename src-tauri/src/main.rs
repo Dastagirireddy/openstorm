@@ -580,6 +580,7 @@ fn main() {
             lsp::initialize_lsp_pool,
             lsp::get_completions,
             lsp::get_hover,
+            lsp::lsp_get_document_symbols,
             lsp::get_definition,
             lsp::notify_document_opened,
             lsp::notify_document_changed,

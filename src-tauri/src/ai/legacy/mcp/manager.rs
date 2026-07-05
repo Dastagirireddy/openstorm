@@ -109,11 +109,9 @@ impl McpManager {
     }
 
     pub async fn disconnect(&mut self, name: &str) -> Result<(), String> {
-        if let Some(conn) = self.connections.remove(name) {
-            conn.service
-                .cancel()
-                .await
-                .map_err(|e| format!("Error disconnecting '{}': {}", name, e))?;
+        if let Some(mut conn) = self.connections.remove(name) {
+            // Kill the process tree (including browsers, etc.)
+            conn.kill_tree().await;
         }
         self.set_state(name, McpConnectionState::Disconnected);
         Ok(())
@@ -238,12 +236,9 @@ impl McpManager {
     }
 
     pub async fn test_server(config: &McpServerConfig) -> Result<Vec<String>, String> {
-        let conn = McpServerConnection::connect(config).await?;
+        let mut conn = McpServerConnection::connect(config).await?;
         let tool_names: Vec<String> = conn.tools.iter().map(|t| t.name.to_string()).collect();
-        conn.service
-            .cancel()
-            .await
-            .map_err(|e| format!("Error closing test connection: {}", e))?;
+        conn.kill_tree().await;
         Ok(tool_names)
     }
 

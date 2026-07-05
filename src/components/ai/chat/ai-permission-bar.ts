@@ -168,8 +168,8 @@ export class AIPermissionBar extends LitElement {
     return text.substring(0, maxLength) + '...';
   }
 
-  private onDecision(toolCallId: string, approved: boolean) {
-    dispatchAIEvent(this, 'ai:approve-tool', { toolCallId, approved });
+  private onDecision(toolCallId: string, approved: boolean, alwaysAllow = false) {
+    dispatchAIEvent(this, 'ai:approve-tool', { toolCallId, approved, alwaysAllow });
   }
 
   render() {
@@ -193,7 +193,7 @@ export class AIPermissionBar extends LitElement {
               </div>
               <div class="actions">
                 <button class="btn btn-primary" @click=${() => this.onDecision(a.toolCallId, true)}>Allow once</button>
-                <button class="btn btn-secondary" @click=${() => this.onDecision(a.toolCallId, true)}>Allow always</button>
+                <button class="btn btn-secondary" @click=${() => this.onDecision(a.toolCallId, true, true)}>Allow always</button>
                 <button class="btn btn-reject" @click=${() => this.onDecision(a.toolCallId, false)}>Reject</button>
               </div>
             </div>

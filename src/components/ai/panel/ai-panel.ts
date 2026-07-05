@@ -18,6 +18,7 @@ import '../chat/ai-question-card.js';
 import '../chat/ai-typing.js';
 import '../layout/ai-task-sidebar.js';
 import { parseFileMentions, readMentionedFiles, buildContextMessage } from '../ai-file-utils.js';
+import { gatherLspContext } from '../../../lib/ai/lsp-context.js';
 import { ASCII_LOGO } from '../ai-commands.js';
 
 @customElement('openstorm-ai-panel')
@@ -609,20 +610,40 @@ export class AIPanel extends LitElement {
 
   private _listenForPermissionEvents() {
     this.addEventListener('ai:approve-tool' as any, ((e: CustomEvent) => {
-      const { toolCallId, approved } = e.detail;
-      this._handleToolApproval(toolCallId, approved);
+      const { toolCallId, approved, alwaysAllow } = e.detail;
+      this._handleToolApproval(toolCallId, approved, alwaysAllow);
     }) as EventListener);
   }
 
-  private async _handleToolApproval(toolCallId: string, approved: boolean) {
+  private async _handleToolApproval(toolCallId: string, approved: boolean, alwaysAllow = false) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       await invoke('ai_approve_tool', { approved });
+      // If "Allow always", add tool name to allowedTools
+      if (alwaysAllow && approved) {
+        const current = aiStore.get('pendingApprovals');
+        const approval = current.find(a => a.toolCallId === toolCallId);
+        if (approval) {
+          const allowedTools = aiStore.get('allowedTools');
+          if (!allowedTools.includes(approval.toolName)) {
+            aiStore.set('allowedTools', [...allowedTools, approval.toolName]);
+          }
+        }
+      }
       // Remove from pending approvals
       const current = aiStore.get('pendingApprovals');
       aiStore.set('pendingApprovals', current.filter(a => a.toolCallId !== toolCallId));
     } catch (e) {
       console.error('[AI Panel] Failed to approve tool:', e);
+    }
+  }
+
+  private async _autoApproveTool() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('ai_approve_tool', { approved: true });
+    } catch (e) {
+      console.error('[AI Panel] Failed to auto-approve tool:', e);
     }
   }
 
@@ -698,13 +719,20 @@ export class AIPanel extends LitElement {
             : tc,
         ));
         // Also add to pending approvals for the permission bar
-        const current = aiStore.get('pendingApprovals');
-        aiStore.set('pendingApprovals', [...current, {
-          toolCallId: `tc-${Date.now()}`,
-          toolName: event.tool_name || 'unknown',
-          argsSummary: event.preview || '',
-          riskLevel: 'medium',
-        }]);
+        const toolName = event.tool_name || 'unknown';
+        const allowedTools = aiStore.get('allowedTools');
+        if (allowedTools.includes(toolName)) {
+          // Auto-approve if tool is in the "always allow" list
+          this._autoApproveTool();
+        } else {
+          const current = aiStore.get('pendingApprovals');
+          aiStore.set('pendingApprovals', [...current, {
+            toolCallId: `tc-${Date.now()}`,
+            toolName,
+            argsSummary: event.preview || '',
+            riskLevel: 'medium',
+          }]);
+        }
         break;
       }
       case 'tool_preview': {
@@ -764,8 +792,9 @@ export class AIPanel extends LitElement {
         aiStore.set('messages', [...current, {
           id: `error-${Date.now()}`,
           role: 'assistant',
-          content: `⚠️ ${errorMsg}`,
+          content: errorMsg,
           timestamp: Date.now(),
+          isError: true,
         }]);
         aiStore.set('isThinking', false);
         aiStore.set('isStreaming', false);
@@ -869,8 +898,25 @@ export class AIPanel extends LitElement {
     this.showModelDropdown = false;
     aiStore.set('currentModel', modelId);
     try {
-      const current = await invoke<{ provider: string; api_key: string; base_url: string; model: string; model_name: string }>('ai_get_config');
-      await invoke('ai_set_config', { config: { ...current, model: modelId, model_name: model ? model.name : modelId } });
+      const current = await invoke<{
+        provider: string;
+        api_key: string;
+        base_url: string;
+        model: string;
+        model_name: string;
+        provider_models: Record<string, string>;
+      }>('ai_get_config');
+      await invoke('ai_set_config', {
+        config: {
+          ...current,
+          model: modelId,
+          model_name: model ? model.name : modelId,
+          provider_models: {
+            ...current.provider_models,
+            [current.provider]: modelId,
+          },
+        },
+      });
     } catch (e) {
       console.error('[AI Panel] Failed to save model:', e);
     }
@@ -911,7 +957,29 @@ export class AIPanel extends LitElement {
     const mentions = parseFileMentions(rawMsg);
     if (mentions.length > 0 && this.projectPath) {
       const attachments = await readMentionedFiles(mentions, this.projectPath);
+      
+      // Gather LSP context for each mentioned file (non-blocking, fail silently)
+      const lspContexts: string[] = [];
+      for (const attachment of attachments) {
+        try {
+          const lspContext = await gatherLspContext(attachment.path, attachment.content);
+          if (lspContext) {
+            lspContexts.push(`[${attachment.path}]\n${lspContext}`);
+          }
+        } catch (e) {
+          // LSP context gathering failed - continue without it
+          console.debug('[AI Panel] LSP context failed:', e);
+        }
+      }
+      
+      // Build message with file content and LSP context
       msg = buildContextMessage(rawMsg, attachments);
+      
+      // Add LSP context if available
+      if (lspContexts.length > 0) {
+        const lspBlock = `\n\n[Code Structure]\n${lspContexts.join('\n\n')}`;
+        msg = msg + lspBlock;
+      }
     }
 
     aiStore.set('streamingMessage', null);
@@ -956,8 +1024,9 @@ export class AIPanel extends LitElement {
       aiStore.set('messages', [...current, {
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: `⚠️ ${errorMsg}`,
+        content: errorMsg,
         timestamp: Date.now(),
+        isError: true,
       }]);
       aiStore.set('isThinking', false);
       aiStore.set('isStreaming', false);

@@ -265,8 +265,8 @@ impl ProviderError {
                     "The server rejected the request. The model might be overloaded.".to_string()
                 } else if msg.contains("500") || msg.contains("502") || msg.contains("503") {
                     "The server encountered an error. Please try again later.".to_string()
-                } else if msg.contains("Ollama") {
-                    "Ollama error. Please check if Ollama is running correctly.".to_string()
+                } else if msg.contains("subscription") || msg.contains("upgrade") {
+                    "This model requires a paid subscription. Select a free model from the AI Models panel.".to_string()
                 } else {
                     "A server error occurred. Please try again.".to_string()
                 }
