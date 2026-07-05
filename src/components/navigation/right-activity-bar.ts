@@ -2,7 +2,7 @@ import { html, type TemplateResult } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../tailwind-element.js';
 
-export type RightActivityItem = 'database' | 'mcp' | '';
+export type RightActivityItem = 'database' | 'mcp' | 'models' | '';
 
 interface ActivityDefinition {
   id: RightActivityItem;
@@ -19,6 +19,11 @@ export class RightActivityBar extends TailwindElement() {
       id: 'database',
       label: 'Database',
       icon: 'mdi:database',
+    },
+    {
+      id: 'models',
+      label: 'Models',
+      icon: 'mdi:cpu-64-bit',
     },
     {
       id: 'mcp',

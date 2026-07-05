@@ -73,6 +73,48 @@ pub async fn ai_set_config(config: crate::config::AiProviderConfig) -> Result<()
     super::legacy::commands::ai_set_config(config).await
 }
 
+/// Get per-provider settings for the models panel
+#[command]
+pub async fn ai_get_settings() -> Result<crate::config::AiProviderConfig, String> {
+    Ok(crate::config::AiProviderConfig::load())
+}
+
+/// Update per-provider settings from the models panel
+#[command]
+pub async fn ai_update_provider(
+    provider_id: String,
+    enabled: bool,
+    api_key: Option<String>,
+    base_url: Option<String>,
+    model: Option<String>,
+) -> Result<(), String> {
+    let mut config = crate::config::AiProviderConfig::load();
+    let settings = crate::config::ProviderSettings {
+        enabled,
+        api_key: api_key.unwrap_or_default(),
+        base_url: base_url.unwrap_or_default(),
+        model: model.unwrap_or_default(),
+    };
+    config.set_provider_settings(&provider_id, &settings);
+    config.save()
+}
+
+/// List all available AI providers
+#[command]
+pub async fn ai_list_providers() -> Result<Vec<super::legacy::providers::traits::ProviderInfo>, String> {
+    super::legacy::commands::ai_list_providers().await
+}
+
+/// Check connection to an AI provider
+#[command]
+pub async fn ai_check_connection(
+    provider_id: String,
+    api_key: Option<String>,
+    base_url: Option<String>,
+) -> Result<bool, String> {
+    super::legacy::commands::ai_check_connection(provider_id, api_key, base_url).await
+}
+
 /// List available models for a provider
 #[command]
 pub async fn ai_list_models(

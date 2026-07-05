@@ -90,6 +90,7 @@ import "./components/panels/data-sources/data-sources-panel.js";
 import "./components/panels/mcp/mcp-panel.js";
 import "./components/panels/mcp/mcp-server-card.js";
 import "./components/panels/mcp/mcp-add-modal.js";
+import "./components/panels/models/models-panel.js";
 import "./components/panels/data-sources/database-multi-tree.js";
 import "./components/panels/data-sources/data-source-type-picker.js";
 import "./components/panels/data-sources/database-vendor-picker.js";
@@ -1791,6 +1792,7 @@ export class OpenStormApp extends TailwindElement() {
     const showAppConsole = !isSingleFileMode && !this.isDebugging && this.activeStatusBarPanel === 'app-console';
     const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
     const showMcp = !isSingleFileMode && this.activeRightActivity === 'mcp';
+    const showModels = !isSingleFileMode && this.activeRightActivity === 'models';
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
@@ -1832,7 +1834,7 @@ export class OpenStormApp extends TailwindElement() {
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
               <!-- Normal view: Explorer + Content (editor/terminal/openstorm) -->
               <div class="flex flex-1 overflow-hidden h-full">
-                ${showExplorer || showDatabase || showMcp ? html`
+                ${showExplorer || showDatabase || showMcp || showModels ? html`
                   <resizable-container
                     direction="horizontal"
                     class="flex-1"
@@ -1870,6 +1872,11 @@ export class OpenStormApp extends TailwindElement() {
                   ${showMcp ? html`
                     <div class="shrink-0 border-l" style="width: 280px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
                       <mcp-panel class="h-full w-full"></mcp-panel>
+                    </div>
+                  ` : nothing}
+                  ${showModels ? html`
+                    <div class="shrink-0 border-l" style="width: 280px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                      <models-panel class="h-full w-full"></models-panel>
                     </div>
                   ` : nothing}
                 ` : html`

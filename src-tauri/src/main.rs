@@ -668,7 +668,11 @@ fn main() {
             // === AI / LLM ===
             ai::commands::ai_get_config,
             ai::commands::ai_set_config,
+            ai::commands::ai_get_settings,
+            ai::commands::ai_update_provider,
+            ai::commands::ai_list_providers,
             ai::commands::ai_list_models,
+            ai::commands::ai_check_connection,
             ai::commands::ai_chat,
             ai::commands::ai_abort,
             ai::commands::ai_reset,

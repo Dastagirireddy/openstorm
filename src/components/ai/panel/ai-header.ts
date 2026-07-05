@@ -3,6 +3,11 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { dispatchAIEvent } from '../core/ai-events.js';
 
+interface ProviderInfo {
+  id: string;
+  name: string;
+}
+
 @customElement('openstorm-ai-header')
 export class AIHeader extends LitElement {
   static styles = css`
@@ -35,9 +40,7 @@ export class AIHeader extends LitElement {
     .hdr-dot { width: 8px; height: 8px; border-radius: 50%; margin-left: 4px; }
     .hdr-dot.on { background: var(--ai-success, #22c55e); box-shadow: 0 0 6px var(--ai-success, #22c55e); }
     .hdr-dot.off { background: var(--ai-error, #ef4444); }
-    .hdr-provider { font-size: 12px; color: var(--ai-text-muted, #6b7280); font-weight: 500; }
     .hdr-actions { display: flex; align-items: center; gap: 8px; }
-    .hdr-btn-icon { font-size: 12px; }
     .hdr-btn-icon-only {
       display: flex;
       align-items: center;
@@ -57,43 +60,46 @@ export class AIHeader extends LitElement {
       border-color: var(--ai-panel-border, #e5e7eb);
       color: var(--ai-text, #1f2937);
     }
-    .model-dropdown { position: relative; }
-    .model-trigger {
+
+    /* ── Provider Dropdown ── */
+    .provider-dropdown { position: relative; }
+    .provider-trigger {
       display: flex;
       align-items: center;
       gap: 6px;
       background: transparent;
       border: none;
       color: var(--ai-text, #1f2937);
+      font-size: 12px;
+      font-weight: 500;
       font-family: 'SF Mono', 'Fira Code', monospace;
-      font-size: 11px;
       padding: 5px 10px;
       border-radius: 4px;
       cursor: pointer;
       transition: all 0.15s ease;
       outline: none;
-      max-width: 200px;
+      max-width: 180px;
     }
-    .model-trigger:hover { background: var(--ai-tool-background, #f9fafb); }
-    .model-trigger:focus { background: var(--ai-tool-background, #f9fafb); }
-    .model-trigger-text {
+    .provider-trigger:hover { background: var(--ai-tool-background, #f9fafb); }
+    .provider-trigger-text {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
-    .model-trigger-chevron {
+    .provider-chevron {
       font-size: 8px;
       color: var(--ai-text-dim, #9ca3af);
       transition: transform 0.15s ease;
       flex-shrink: 0;
     }
-    .model-dropdown.open .model-trigger-chevron { transform: rotate(180deg); }
-    .model-dropdown.open .model-trigger { background: var(--ai-tool-background, #f9fafb); }
-    .model-list {
+    .provider-dropdown.open .provider-chevron { transform: rotate(180deg); }
+    .provider-dropdown.open .provider-trigger { background: var(--ai-tool-background, #f9fafb); }
+
+    .provider-list {
       position: absolute;
       top: calc(100% + 4px);
       left: 0;
-      min-width: 220px;
+      min-width: 200px;
       max-height: 300px;
       overflow-y: auto;
       background: var(--ai-panel-background, #ffffff);
@@ -103,12 +109,12 @@ export class AIHeader extends LitElement {
       z-index: 1000;
       padding: 4px;
     }
-    .model-search-wrap {
+    .provider-search-wrap {
       position: relative;
       padding: 4px;
       margin-bottom: 2px;
     }
-    .model-search-icon {
+    .provider-search-icon {
       position: absolute;
       left: 12px;
       top: 50%;
@@ -116,7 +122,7 @@ export class AIHeader extends LitElement {
       color: var(--ai-text-dim, #9ca3af);
       pointer-events: none;
     }
-    .model-search-input {
+    .provider-search-input {
       width: 100%;
       padding: 6px 8px 6px 26px;
       font-size: 11px;
@@ -127,13 +133,9 @@ export class AIHeader extends LitElement {
       outline: none;
       box-sizing: border-box;
     }
-    .model-search-input:focus {
-      border-color: var(--ai-primary, #3574f0);
-    }
-    .model-search-input::placeholder {
-      color: var(--ai-text-dim, #9ca3af);
-    }
-    .model-list-item {
+    .provider-search-input:focus { border-color: var(--ai-primary, #3574f0); }
+    .provider-search-input::placeholder { color: var(--ai-text-dim, #9ca3af); }
+    .provider-item {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -144,23 +146,23 @@ export class AIHeader extends LitElement {
       color: var(--ai-text-muted, #6b7280);
       transition: background 0.1s ease;
     }
-    .model-list-item:hover {
+    .provider-item:hover {
       background: var(--ai-tool-background, #f9fafb);
       color: var(--ai-text, #1f2937);
     }
-    .model-list-item.selected {
+    .provider-item.selected {
       background: color-mix(in srgb, var(--ai-primary, #3574f0) 10%, transparent);
       color: var(--ai-primary, #3574f0);
     }
-    .model-list-item-icon {
+    .provider-item-icon {
       font-size: 10px;
       color: var(--ai-text-dim, #9ca3af);
       flex-shrink: 0;
+      width: 14px;
+      text-align: center;
     }
-    .model-list-item.selected .model-list-item-icon {
-      color: var(--ai-primary, #3574f0);
-    }
-    .model-list-empty {
+    .provider-item.selected .provider-item-icon { color: var(--ai-primary, #3574f0); }
+    .provider-empty {
       padding: 12px;
       text-align: center;
       color: var(--ai-text-dim, #9ca3af);
@@ -169,21 +171,19 @@ export class AIHeader extends LitElement {
     }
   `;
 
-  @property({ type: String }) model = '';
   @property({ type: Boolean }) isConnected = true;
   @property({ type: String }) projectPath = '';
 
   @state() private provider = '';
-  @state() private modelName = '';
-  @state() private models: Array<{ id: string; name: string }> = [];
-  @state() private showModelDropdown = false;
-  @state() private modelSearch = '';
+  @state() private enabledProviders: ProviderInfo[] = [];
+  @state() private showProviderDropdown = false;
+  @state() private providerSearch = '';
   @state() private hasContent = false;
 
   connectedCallback(): void {
     super.connectedCallback();
     this._loadConfig();
-    this._loadModels();
+    this._loadEnabledProviders();
     document.addEventListener('click', this._handleOutsideClick);
     document.addEventListener('settings-closed', this._handleSettingsClosed);
   }
@@ -196,68 +196,67 @@ export class AIHeader extends LitElement {
 
   private _handleOutsideClick = (e: MouseEvent) => {
     const path = e.composedPath();
-    const dropdown = this.shadowRoot?.querySelector('.model-dropdown');
+    const dropdown = this.shadowRoot?.querySelector('.provider-dropdown');
     if (dropdown && !path.includes(dropdown)) {
-      this.showModelDropdown = false;
+      this.showProviderDropdown = false;
     }
   };
 
   private _handleSettingsClosed = async () => {
     await this._loadConfig();
-    await this._loadModels();
+    await this._loadEnabledProviders();
   };
 
   private async _loadConfig() {
     try {
-      const c = await invoke<{ provider: string; model: string; model_name: string; api_key: string; provider_keys: Record<string, string> }>('ai_get_config');
+      const c = await invoke<{ provider: string }>('ai_get_settings');
       this.provider = c.provider;
-      this.modelName = c.model_name || c.model;
     } catch (e) {
       console.debug('Failed to load AI config:', e);
     }
   }
 
-  private async _loadModels() {
+  private async _loadEnabledProviders() {
     try {
-      const config = await invoke<{ provider: string; model: string; model_name: string; api_key: string; provider_keys: Record<string, string> }>('ai_get_config');
-      const providerKeys = config.provider_keys || {};
-      const apiKey = providerKeys[config.provider] || config.api_key || '';
-      const loadedModels = await invoke<Array<{ id: string; name: string }>>('ai_list_models', {
-        providerId: config.provider,
-        apiKey: apiKey || null,
-        baseUrl: null,
-      });
-      this.models = loadedModels;
-      if (this.model && !this.models.find(m => m.id === this.model)) {
-        this.model = this.models[0]?.id || '';
+      const [settings, allProviders] = await Promise.all([
+        invoke<{
+          enabled_providers: Record<string, boolean>;
+          provider: string;
+        }>('ai_get_settings'),
+        invoke<ProviderInfo[]>('ai_list_providers'),
+      ]);
+      const enabledIds = Object.entries(settings.enabled_providers)
+        .filter(([_, enabled]) => enabled)
+        .map(([id]) => id);
+      if (settings.provider && !enabledIds.includes(settings.provider)) {
+        enabledIds.push(settings.provider);
       }
-      if (this.model && !this.modelName) {
-        const found = this.models.find(m => m.id === this.model);
-        this.modelName = found ? found.name : this.model;
-      }
+      this.enabledProviders = allProviders.filter(p => enabledIds.includes(p.id));
     } catch (e) {
-      console.error('Failed to load models:', e);
-      this.models = [];
+      console.error('Failed to load enabled providers:', e);
+      this.enabledProviders = [];
     }
   }
 
-  private toggleModelDropdown(): void {
-    this.showModelDropdown = !this.showModelDropdown;
-    if (!this.showModelDropdown) this.modelSearch = '';
+  private toggleProviderDropdown(): void {
+    this.showProviderDropdown = !this.showProviderDropdown;
+    if (!this.showProviderDropdown) this.providerSearch = '';
   }
 
-  private async selectModel(modelId: string) {
-    const model = this.models.find(m => m.id === modelId);
-    this.model = modelId;
-    this.modelName = model ? model.name : modelId;
-    this.showModelDropdown = false;
-    dispatchAIEvent(this, 'ai:select-model', { model: modelId });
-    try {
-      const current = await invoke<{ provider: string; api_key: string; base_url: string; model: string; model_name: string }>('ai_get_config');
-      await invoke('ai_set_config', { config: { ...current, model: modelId, model_name: model ? model.name : modelId } });
-    } catch (e) {
-      console.error('Failed to save model:', e);
+  private async selectProvider(providerId: string) {
+    if (providerId === this.provider) {
+      this.showProviderDropdown = false;
+      return;
     }
+    this.provider = providerId;
+    this.showProviderDropdown = false;
+    try {
+      const current = await invoke<{ provider: string; model: string; model_name: string }>('ai_get_config');
+      await invoke('ai_set_config', { config: { ...current, provider: providerId, model: '', model_name: '' } });
+    } catch (e) {
+      console.error('Failed to save provider:', e);
+    }
+    dispatchAIEvent(this, 'ai:select-provider', { provider: providerId });
   }
 
   private onClear() {
@@ -268,10 +267,15 @@ export class AIHeader extends LitElement {
     this.hasContent = hasMessages;
   }
 
+  private get currentProviderName(): string {
+    const p = this.enabledProviders.find(p => p.id === this.provider);
+    return p?.name || this.provider || 'Select provider';
+  }
+
   render() {
-    const filteredModels = this.modelSearch
-      ? this.models.filter(m => m.name.toLowerCase().includes(this.modelSearch.toLowerCase()) || m.id.toLowerCase().includes(this.modelSearch.toLowerCase()))
-      : this.models;
+    const filteredProviders = this.providerSearch
+      ? this.enabledProviders.filter(p => p.name.toLowerCase().includes(this.providerSearch.toLowerCase()) || p.id.toLowerCase().includes(this.providerSearch.toLowerCase()))
+      : this.enabledProviders;
 
     return html`
       <div class="hdr">
@@ -279,42 +283,44 @@ export class AIHeader extends LitElement {
           <iconify-icon class="hdr-avatar" icon="mdi:robot-outline" width="18"></iconify-icon>
           <span class="hdr-label">AI</span>
           <span class="hdr-dot ${this.isConnected ? 'on' : 'off'}"></span>
-          <span class="hdr-provider">${this.provider}</span>
-          <div class="model-dropdown ${this.showModelDropdown ? 'open' : ''}">
-            <button class="model-trigger" @click=${this.toggleModelDropdown}>
-              <span class="model-trigger-text">${this.modelName || 'Select model'}</span>
-              <span class="model-trigger-chevron"><iconify-icon icon="mdi:chevron-down" width="14"></iconify-icon></span>
+
+          <!-- Provider Dropdown -->
+          <div class="provider-dropdown ${this.showProviderDropdown ? 'open' : ''}">
+            <button class="provider-trigger" @click=${this.toggleProviderDropdown}>
+              <span class="provider-trigger-text">${this.currentProviderName}</span>
+              <span class="provider-chevron"><iconify-icon icon="mdi:chevron-down" width="14"></iconify-icon></span>
             </button>
-            ${this.showModelDropdown ? html`
-              <div class="model-list">
-                ${this.models.length > 2 ? html`
-                  <div class="model-search-wrap">
-                    <iconify-icon icon="mdi:magnify" width="13" class="model-search-icon"></iconify-icon>
+            ${this.showProviderDropdown ? html`
+              <div class="provider-list">
+                ${this.enabledProviders.length > 3 ? html`
+                  <div class="provider-search-wrap">
+                    <iconify-icon icon="mdi:magnify" width="13" class="provider-search-icon"></iconify-icon>
                     <input
                       type="text"
-                      class="model-search-input"
-                      placeholder="Search models..."
-                      .value=${this.modelSearch}
-                      @input=${(e: Event) => { this.modelSearch = (e.target as HTMLInputElement).value; }}
+                      class="provider-search-input"
+                      placeholder="Search providers..."
+                      .value=${this.providerSearch}
+                      @input=${(e: Event) => { this.providerSearch = (e.target as HTMLInputElement).value; }}
                       @click=${(e: Event) => e.stopPropagation()}
                     />
                   </div>
                 ` : ''}
-                ${filteredModels.length === 0 ? html`
-                  <div class="model-list-empty">No models found</div>
-                ` : filteredModels.map(m => html`
-                  <div class="model-list-item ${m.id === this.model ? 'selected' : ''}"
-                       @click=${() => this.selectModel(m.id)}>
-                    <span class="model-list-item-icon">${m.id === this.model
+                ${filteredProviders.length === 0 ? html`
+                  <div class="provider-empty">No providers enabled</div>
+                ` : filteredProviders.map(p => html`
+                  <div class="provider-item ${p.id === this.provider ? 'selected' : ''}"
+                       @click=${() => this.selectProvider(p.id)}>
+                    <span class="provider-item-icon">${p.id === this.provider
                       ? html`<iconify-icon icon="mdi:check" width="14"></iconify-icon>`
                       : html`<iconify-icon icon="mdi:circle-outline" width="14"></iconify-icon>`}</span>
-                    <span>${m.name}</span>
+                    <span>${p.name}</span>
                   </div>
                 `)}
               </div>
             ` : ''}
           </div>
         </div>
+
         <div class="hdr-actions">
           ${this.hasContent ? html`
             <button class="hdr-btn-icon-only" @click=${this.onClear} title="Clear conversation and reset context">

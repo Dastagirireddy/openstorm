@@ -281,6 +281,26 @@ use std::collections::HashMap;
 
 // ── AI Provider Configuration ────────────────────────────────
 
+/// Per-provider settings (for the models panel)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderSettings {
+    pub enabled: bool,
+    pub api_key: String,
+    pub base_url: String,
+    pub model: String,
+}
+
+impl Default for ProviderSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            api_key: String::new(),
+            base_url: String::new(),
+            model: String::new(),
+        }
+    }
+}
+
 /// AI provider configuration (stored as plaintext JSON)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AiProviderConfig {
@@ -298,6 +318,15 @@ pub struct AiProviderConfig {
     /// Per-provider API keys (persisted across provider switches)
     #[serde(default)]
     pub provider_keys: HashMap<String, String>,
+    /// Per-provider base URLs
+    #[serde(default)]
+    pub provider_base_urls: HashMap<String, String>,
+    /// Per-provider selected models
+    #[serde(default)]
+    pub provider_models: HashMap<String, String>,
+    /// Which providers are enabled
+    #[serde(default)]
+    pub enabled_providers: HashMap<String, bool>,
 }
 
 impl Default for AiProviderConfig {
@@ -309,6 +338,9 @@ impl Default for AiProviderConfig {
             model: String::new(),
             model_name: String::new(),
             provider_keys: HashMap::new(),
+            provider_base_urls: HashMap::new(),
+            provider_models: HashMap::new(),
+            enabled_providers: HashMap::new(),
         }
     }
 }
@@ -344,6 +376,42 @@ impl AiProviderConfig {
         // Keep legacy field in sync for the active provider
         if self.provider == provider_id {
             self.api_key = key;
+        }
+    }
+
+    /// Get per-provider settings for the models panel
+    pub fn get_provider_settings(&self, provider_id: &str) -> ProviderSettings {
+        ProviderSettings {
+            enabled: *self.enabled_providers.get(provider_id).unwrap_or(&false),
+            api_key: self.api_key_for(provider_id),
+            base_url: self.provider_base_urls
+                .get(provider_id)
+                .cloned()
+                .unwrap_or_default(),
+            model: self.provider_models
+                .get(provider_id)
+                .cloned()
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Update per-provider settings from the models panel
+    pub fn set_provider_settings(&mut self, provider_id: &str, settings: &ProviderSettings) {
+        self.enabled_providers.insert(provider_id.to_string(), settings.enabled);
+        if !settings.api_key.is_empty() {
+            self.set_api_key(provider_id, settings.api_key.clone());
+        }
+        if !settings.base_url.is_empty() {
+            self.provider_base_urls.insert(provider_id.to_string(), settings.base_url.clone());
+        }
+        if !settings.model.is_empty() {
+            self.provider_models.insert(provider_id.to_string(), settings.model.clone());
+        }
+        // Keep legacy fields in sync for the active provider
+        if self.provider == provider_id {
+            self.api_key = settings.api_key.clone();
+            self.base_url = settings.base_url.clone();
+            self.model = settings.model.clone();
         }
     }
 

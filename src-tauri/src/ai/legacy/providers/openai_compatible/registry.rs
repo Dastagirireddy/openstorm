@@ -61,10 +61,20 @@ impl ProviderRegistry {
     ) -> Result<Arc<dyn LlmProvider>, ProviderError> {
         match provider_id {
             "ollama" => {
-                Ok(Arc::new(crate::ai::legacy::providers::OllamaProvider::new(None)))
+                let url = if config.base_url.is_empty() {
+                    None
+                } else {
+                    Some(config.base_url.clone())
+                };
+                Ok(Arc::new(crate::ai::legacy::providers::OllamaProvider::new(url)))
             }
             "lmstudio" => {
-                Ok(Arc::new(crate::ai::legacy::providers::LmStudioProvider::new(None)))
+                let url = if config.base_url.is_empty() {
+                    None
+                } else {
+                    Some(config.base_url.clone())
+                };
+                Ok(Arc::new(crate::ai::legacy::providers::LmStudioProvider::new(url)))
             }
             "anthropic" => {
                 if config.api_key.is_empty() {

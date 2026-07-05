@@ -244,6 +244,118 @@ export class AIPanel extends LitElement {
     .input-btn-icon {
       font-size: 12px;
     }
+
+    /* ── Model Dropdown ── */
+    .model-dropdown-wrap { position: relative; }
+    .model-dropdown-trigger {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 5px 8px;
+      font-size: 11px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      color: var(--ai-text-muted, #6b7280);
+      background: transparent;
+      border: 1px solid var(--ai-panel-border, #e5e7eb);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      max-width: 150px;
+    }
+    .model-dropdown-trigger:hover {
+      background: var(--ai-tool-background, #f9fafb);
+      border-color: var(--ai-accent, #3574f0);
+      color: var(--ai-text, #1f2937);
+    }
+    .model-dropdown-trigger.open {
+      background: var(--ai-tool-background, #f9fafb);
+      border-color: var(--ai-accent, #3574f0);
+    }
+    .model-dropdown-trigger-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .model-dropdown-chevron {
+      font-size: 8px;
+      color: var(--ai-text-dim, #9ca3af);
+      transition: transform 0.15s ease;
+      flex-shrink: 0;
+    }
+    .model-dropdown-trigger.open .model-dropdown-chevron { transform: rotate(180deg); }
+    .model-dropdown-list {
+      position: fixed;
+      min-width: 220px;
+      max-height: 280px;
+      overflow-y: auto;
+      background: var(--ai-panel-background, #ffffff);
+      border: 1px solid var(--ai-panel-border, #e5e7eb);
+      border-radius: 6px;
+      box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.15);
+      z-index: 9999;
+      padding: 4px;
+    }
+    .model-dropdown-search-wrap {
+      position: relative;
+      padding: 4px;
+      margin-bottom: 2px;
+    }
+    .model-dropdown-search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ai-text-dim, #9ca3af);
+      pointer-events: none;
+    }
+    .model-dropdown-search-input {
+      width: 100%;
+      padding: 6px 8px 6px 26px;
+      font-size: 11px;
+      border: 1px solid var(--ai-panel-border, #e5e7eb);
+      border-radius: 4px;
+      background: var(--ai-panel-background, #ffffff);
+      color: var(--ai-text, #1f2937);
+      outline: none;
+      box-sizing: border-box;
+    }
+    .model-dropdown-search-input:focus { border-color: var(--ai-accent, #3574f0); }
+    .model-dropdown-search-input::placeholder { color: var(--ai-text-dim, #9ca3af); }
+    .model-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--ai-text-muted, #6b7280);
+      transition: background 0.1s ease;
+    }
+    .model-dropdown-item:hover {
+      background: var(--ai-tool-background, #f9fafb);
+      color: var(--ai-text, #1f2937);
+    }
+    .model-dropdown-item.selected {
+      background: color-mix(in srgb, var(--ai-accent, #3574f0) 10%, transparent);
+      color: var(--ai-accent, #3574f0);
+    }
+    .model-dropdown-item-icon {
+      font-size: 10px;
+      color: var(--ai-text-dim, #9ca3af);
+      flex-shrink: 0;
+      width: 14px;
+      text-align: center;
+    }
+    .model-dropdown-item.selected .model-dropdown-item-icon { color: var(--ai-accent, #3574f0); }
+    .model-dropdown-empty {
+      padding: 12px;
+      text-align: center;
+      color: var(--ai-text-dim, #9ca3af);
+      font-size: 12px;
+      font-style: italic;
+    }
+
     .status-bar {
       display: flex;
       justify-content: space-between;
@@ -312,6 +424,13 @@ export class AIPanel extends LitElement {
   @state() private inputValue = '';
   @state() private provider = '';
   @state() private model = '';
+  @state() private modelName = '';
+  @state() private models: Array<{ id: string; name: string }> = [];
+  @state() private showModelDropdown = false;
+  @state() private modelSearch = '';
+  @state() private dropdownPos = { bottom: 80, left: 0 };
+  @state() private apiKey = '';
+  @state() private baseUrl = '';
   @state() private tokens = '0 in  0 out';
   @state() private showFileSuggestions = false;
   @state() private fileSuggestions: string[] = [];
@@ -323,9 +442,29 @@ export class AIPanel extends LitElement {
   private _listenUnsub: (() => void) | null = null;
   private _clearHandler = () => this.clearAndReset();
 
+  private _handleEsc = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && this.showModelDropdown) {
+      this.showModelDropdown = false;
+      this.modelSearch = '';
+    }
+  };
+
+  private _handleOutsideClick = (e: MouseEvent) => {
+    if (this.showModelDropdown) {
+      const path = e.composedPath();
+      const dropdown = this.shadowRoot?.querySelector('.model-dropdown-wrap');
+      if (dropdown && !path.includes(dropdown)) {
+        this.showModelDropdown = false;
+        this.modelSearch = '';
+      }
+    }
+  };
+
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('ai-clear', this._clearHandler);
+    document.addEventListener('keydown', this._handleEsc);
+    document.addEventListener('click', this._handleOutsideClick);
     this._unsubscribes.push(
       aiStore.subscribe('messages', (msgs) => {
         this.state = { ...this.state, messages: msgs };
@@ -376,6 +515,8 @@ export class AIPanel extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('ai-clear', this._clearHandler);
+    document.removeEventListener('keydown', this._handleEsc);
+    document.removeEventListener('click', this._handleOutsideClick);
     this._unsubscribes.forEach(u => u());
     this._unsubscribes = [];
     this._listenUnsub?.();
@@ -385,12 +526,48 @@ export class AIPanel extends LitElement {
   private async _loadConfig() {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const c = await invoke<{ provider: string; model: string; model_name: string; api_key: string; provider_keys: Record<string, string> }>('ai_get_config');
+      const c = await invoke<{
+        provider: string;
+        model: string;
+        model_name: string;
+        api_key: string;
+        provider_keys: Record<string, string>;
+        provider_base_urls: Record<string, string>;
+        provider_models: Record<string, string>;
+        enabled_providers: Record<string, boolean>;
+      }>('ai_get_settings');
+
       this.provider = c.provider;
-      this.model = c.model_name || c.model;
-      aiStore.set('currentModel', c.model_name || c.model);
+
+      const providerApiKey = c.provider_keys[c.provider] || c.api_key || '';
+      const providerBaseUrl = c.provider_base_urls[c.provider] || c.base_url || '';
+      const providerModel = c.provider_models[c.provider] || c.model_name || c.model || '';
+
+      this.apiKey = providerApiKey;
+      this.baseUrl = providerBaseUrl;
+      this.model = providerModel;
+      aiStore.set('currentModel', providerModel);
+
+      await this._loadModels();
     } catch (e) {
       console.debug('Failed to load AI config:', e);
+    }
+  }
+
+  private async _loadModels() {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const loadedModels = await invoke<Array<{ id: string; name: string }>>('ai_list_models', {
+        providerId: this.provider,
+        apiKey: this.apiKey || null,
+        baseUrl: this.baseUrl || null,
+      });
+      this.models = loadedModels;
+      const found = this.models.find(m => m.id === this.model);
+      this.modelName = found ? found.name : this.model;
+    } catch (e) {
+      console.error('[AI Panel] Failed to load models:', e);
+      this.models = [];
     }
   }
 
@@ -669,6 +846,36 @@ export class AIPanel extends LitElement {
     }
   }
 
+  private toggleModelDropdown() {
+    if (!this.showModelDropdown) {
+      const trigger = this.shadowRoot?.querySelector('.model-dropdown-trigger') as HTMLElement;
+      if (trigger) {
+        const rect = trigger.getBoundingClientRect();
+        this.dropdownPos = {
+          bottom: window.innerHeight - rect.top + 4,
+          left: rect.left,
+        };
+      }
+    }
+    this.showModelDropdown = !this.showModelDropdown;
+    if (!this.showModelDropdown) this.modelSearch = '';
+  }
+
+  private async selectModel(modelId: string) {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const model = this.models.find(m => m.id === modelId);
+    this.model = modelId;
+    this.modelName = model ? model.name : modelId;
+    this.showModelDropdown = false;
+    aiStore.set('currentModel', modelId);
+    try {
+      const current = await invoke<{ provider: string; api_key: string; base_url: string; model: string; model_name: string }>('ai_get_config');
+      await invoke('ai_set_config', { config: { ...current, model: modelId, model_name: model ? model.name : modelId } });
+    } catch (e) {
+      console.error('[AI Panel] Failed to save model:', e);
+    }
+  }
+
   private onKey(e: KeyboardEvent) {
     if (this.showFileSuggestions) {
       if (e.key === 'ArrowDown') {
@@ -733,12 +940,12 @@ export class AIPanel extends LitElement {
 
       await invoke('ai_chat', {
         providerId: this.provider,
-        model: this.state.currentModel || 'minimax-m3:cloud',
+        model: this.state.currentModel || this.model || 'gpt-4o',
         message: msg,
         projectPath: this.projectPath,
         history,
-        apiKey: null,
-        baseUrl: null,
+        apiKey: this.apiKey || null,
+        baseUrl: this.baseUrl || null,
       });
     } catch (err) {
       console.error('[AI Panel] Send failed:', err);
@@ -896,6 +1103,47 @@ export class AIPanel extends LitElement {
                     rows="1"
                   ></textarea>
                   <div class="input-actions">
+                    <!-- Model Selector -->
+                    <div class="model-dropdown-wrap ${this.showModelDropdown ? 'open' : ''}">
+                      <button class="model-dropdown-trigger ${this.showModelDropdown ? 'open' : ''}" @click=${this.toggleModelDropdown}>
+                        <span class="model-dropdown-trigger-text">${this.modelName || 'Select model'}</span>
+                        <span class="model-dropdown-chevron"><iconify-icon icon="mdi:chevron-up" width="12"></iconify-icon></span>
+                      </button>
+                      ${this.showModelDropdown ? html`
+                        <div class="model-dropdown-list" style="bottom: ${this.dropdownPos.bottom}px; left: ${this.dropdownPos.left}px;">
+                          ${this.models.length > 3 ? html`
+                            <div class="model-dropdown-search-wrap">
+                              <iconify-icon icon="mdi:magnify" width="13" class="model-dropdown-search-icon"></iconify-icon>
+                              <input
+                                type="text"
+                                class="model-dropdown-search-input"
+                                placeholder="Search models..."
+                                .value=${this.modelSearch}
+                                @input=${(e: Event) => { this.modelSearch = (e.target as HTMLInputElement).value; }}
+                                @click=${(e: Event) => e.stopPropagation()}
+                              />
+                            </div>
+                          ` : ''}
+                          ${(() => {
+                            const filtered = this.modelSearch
+                              ? this.models.filter(m => m.name.toLowerCase().includes(this.modelSearch.toLowerCase()) || m.id.toLowerCase().includes(this.modelSearch.toLowerCase()))
+                              : this.models;
+                            return filtered.length === 0
+                              ? html`<div class="model-dropdown-empty">No models found</div>`
+                              : filtered.map(m => html`
+                                <div class="model-dropdown-item ${m.id === this.model ? 'selected' : ''}"
+                                     @click=${() => this.selectModel(m.id)}>
+                                  <span class="model-dropdown-item-icon">${m.id === this.model
+                                    ? html`<iconify-icon icon="mdi:check" width="14"></iconify-icon>`
+                                    : html`<iconify-icon icon="mdi:circle-outline" width="14"></iconify-icon>`}</span>
+                                  <span>${m.name}</span>
+                                </div>
+                              `);
+                          })()}
+                        </div>
+                      ` : ''}
+                    </div>
+
                     ${this.state.isStreaming ? html`
                       <button class="input-btn stop" @click=${this.abort} title="Stop generation">
                         <iconify-icon class="input-btn-icon" icon="mdi:stop" width="14"></iconify-icon>

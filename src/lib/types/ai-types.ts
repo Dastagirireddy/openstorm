@@ -63,12 +63,10 @@ export interface ProviderInfo {
 }
 
 export interface AiProviderConfig {
-  provider: string;
+  enabled: boolean;
   api_key: string;
   base_url: string;
   model: string;
-  model_name?: string;
-  provider_keys?: Record<string, string>;
 }
 
 export interface AIState {

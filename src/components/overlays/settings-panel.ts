@@ -1,8 +1,6 @@
 import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
-import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-shell';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
@@ -11,11 +9,9 @@ import { ThemeService } from '../../lib/services/theme-service.js';
 import { settingsStore } from '../../lib/services/settings-store.js';
 import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
 import type { UserSettings } from '../../lib/services/settings-store.js';
-import type { AiProviderConfig, ProviderInfo, ModelInfo } from '../../lib/types/ai-types.js';
 import '../layout/icon.js';
-import '../settings/provider-card.js';
 
-type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'models' | 'about';
+type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'about';
 
 const SHORTCUTS = [
   { keys: ['Cmd', 'P'], description: 'Quick file search' },
@@ -49,13 +45,6 @@ export class SettingsPanel extends TailwindElement() {
   @state() private currentThemeMode: ThemeMode = 'system';
   @state() private previewTheme: string | null = null;
   @state() private settings: UserSettings = settingsStore.getAll();
-  @state() private aiConfig: AiProviderConfig = { provider: 'ollama', api_key: '', base_url: 'http://localhost:11434', model: '' };
-  @state() private aiProviders: ProviderInfo[] = [];
-  @state() private aiModels: ModelInfo[] = [];
-  @state() private aiConnectionStatus: boolean | null = null;
-  @state() private aiLoading = false;
-  @state() private expandedProvider: string | null = null;
-  @state() private providerConfigs: Record<string, { api_key: string; base_url: string; model: string }> = {};
   @state() private appVersion = '';
   @state() private updateStatus: 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'completed' | 'none' | 'error' = 'idle';
   @state() private updateVersion = '';
@@ -125,7 +114,6 @@ export class SettingsPanel extends TailwindElement() {
 
   open(): void {
     this.loadThemes();
-    this.loadAiConfig();
     this.isOpen = true;
     this.activeTab = 'general';
     this.requestUpdate();
@@ -246,7 +234,6 @@ export class SettingsPanel extends TailwindElement() {
               ${this.tabBtn('general', 'settings', 'General')}
               ${this.tabBtn('themes', 'palette', 'Themes')}
               ${this.tabBtn('shortcuts', 'keyboard', 'Shortcuts')}
-              ${this.tabBtn('models', 'cpu', 'Models')}
               ${this.tabBtn('about', 'info', 'About')}
             </div>
 
@@ -259,7 +246,6 @@ export class SettingsPanel extends TailwindElement() {
             ${this.activeTab === 'general' ? this.renderGeneralTab() : ''}
             ${this.activeTab === 'themes' ? this.renderThemesTab() : ''}
             ${this.activeTab === 'shortcuts' ? this.renderShortcutsTab() : ''}
-            ${this.activeTab === 'models' ? this.renderModelsTab() : ''}
             ${this.activeTab === 'about' ? this.renderAboutTab() : ''}
           </div>
         </div>
@@ -485,218 +471,6 @@ export class SettingsPanel extends TailwindElement() {
             </div>
           `)}
         </div>
-      </div>
-    `;
-  }
-
-  private async loadAiConfig() {
-    try {
-      const [config, providers] = await Promise.all([
-        invoke<AiProviderConfig>('ai_get_config'),
-        invoke<ProviderInfo[]>('ai_list_providers'),
-      ]);
-      this.aiConfig = config;
-      this.aiProviders = providers;
-
-      // Initialize per-provider configs from presets
-      const providerDefaults: Record<string, string> = {
-        ollama: 'http://localhost:11434',
-        lmstudio: 'http://localhost:1234/v1',
-        nvidia: 'https://integrate.api.nvidia.com/v1',
-        openai: 'https://api.openai.com/v1',
-        openrouter: 'https://openrouter.ai/api/v1',
-        deepseek: 'https://api.deepseek.com',
-        qwen: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
-        groq: 'https://api.groq.com/openai/v1',
-        sambanova: 'https://api.sambanova.ai/v1',
-        together: 'https://api.together.xyz/v1',
-        mistral: 'https://api.mistral.ai/v1',
-        cerebras: 'https://api.cerebras.ai/v1',
-        fireworks: 'https://api.fireworks.ai/inference/v1',
-        anthropic: 'https://api.anthropic.com',
-        google: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      };
-
-      const configs: Record<string, { api_key: string; base_url: string; model: string }> = {};
-      const providerKeys = config.provider_keys || {};
-      for (const p of providers) {
-        configs[p.id] = {
-          api_key: providerKeys[p.id] || (p.id === config.provider ? (config.api_key || '') : ''),
-          base_url: providerDefaults[p.id] || '',
-          model: p.id === config.provider ? config.model : '',
-        };
-      }
-      this.providerConfigs = configs;
-
-      // Auto-expand the configured provider
-      this.expandedProvider = config.provider || 'ollama';
-
-      await this.testAndFetch();
-    } catch (e) {
-      console.error('[Settings] Failed to load AI config:', e);
-    }
-  }
-
-  private async testAndFetch() {
-    this.aiLoading = true;
-    this.aiConnectionStatus = null;
-    this.aiModels = [];
-    try {
-      this.aiConnectionStatus = await invoke<boolean>('ai_check_connection', {
-        providerId: this.aiConfig.provider,
-        apiKey: this.aiConfig.api_key || null,
-        baseUrl: this.aiConfig.base_url || null,
-      });
-      if (this.aiConnectionStatus) {
-        this.aiModels = await invoke<ModelInfo[]>('ai_list_models', {
-          providerId: this.aiConfig.provider,
-          apiKey: this.aiConfig.api_key || null,
-          baseUrl: this.aiConfig.base_url || null,
-        });
-      }
-    } catch (e) {
-      this.aiConnectionStatus = false;
-    } finally {
-      this.aiLoading = false;
-    }
-  }
-
-  private async saveAiConfig() {
-    try {
-      await invoke('ai_set_config', { config: this.aiConfig });
-    } catch (e) {
-      console.error('[Settings] Failed to save AI config:', e);
-    }
-  }
-
-  private handleProviderConfigChanged(e: CustomEvent): void {
-    const { providerId, field, value } = e.detail;
-    if (!this.providerConfigs[providerId]) return;
-    this.providerConfigs[providerId] = { ...this.providerConfigs[providerId], [field]: value };
-
-    // Save api_key to per-provider store in global config
-    const providerKeys = { ...(this.aiConfig.provider_keys || {}), [providerId]: this.providerConfigs[providerId].api_key };
-    this.aiConfig = {
-      ...this.aiConfig,
-      provider: providerId,
-      api_key: this.providerConfigs[providerId].api_key,
-      provider_keys: providerKeys,
-    };
-    this.saveAiConfig();
-  }
-
-  private handleProviderModelsChanged(e: CustomEvent): void {
-    const { providerId, models } = e.detail;
-    if (!this.providerConfigs[providerId]) return;
-    this.providerConfigs[providerId] = {
-      ...this.providerConfigs[providerId],
-      model: models[0] || '',
-    };
-
-    // Update active config and save
-    this.aiConfig = {
-      ...this.aiConfig,
-      provider: providerId,
-      model: models[0] || '',
-    };
-    this.saveAiConfig();
-  }
-
-  private handleProviderExpanded(e: CustomEvent): void {
-    const newProvider = e.detail.providerId;
-    // Clear stale model when switching providers
-    if (this.expandedProvider !== newProvider && this.aiConfig.provider !== newProvider) {
-      this.aiConfig = { ...this.aiConfig, provider: newProvider, model: '', model_name: '' };
-      this.saveAiConfig();
-    }
-    this.expandedProvider = newProvider;
-  }
-
-  private renderModelsTab() {
-    const localProviders = this.aiProviders.filter(p =>
-      ['ollama', 'lmstudio'].includes(p.id)
-    );
-    const cloudFreeProviders = this.aiProviders.filter(p =>
-      !['ollama', 'lmstudio', 'anthropic', 'openai'].includes(p.id) && p.is_free
-    );
-    const cloudPaidProviders = this.aiProviders.filter(p =>
-      !['ollama', 'lmstudio'].includes(p.id) && !p.is_free
-    );
-
-    return html`
-      <div>
-        <div class="mb-10">
-          <h1 class="text-xl font-bold mb-1">AI Providers</h1>
-          <p class="text-sm" style="color: var(--app-disabled-foreground);">
-            Configure providers and API keys. Models you enable appear in the chat panel.
-          </p>
-        </div>
-
-        <!-- Local Models -->
-        ${localProviders.length > 0 ? html`
-          <div class="mb-8">
-            <h3 class="text-xs font-semibold mb-3 flex items-center gap-2" style="color: var(--app-disabled-foreground); text-transform: uppercase; letter-spacing: 0.05em;">
-              <os-icon name="hard-drive" size="13"></os-icon>
-              Local
-            </h3>
-            <div class="flex flex-col gap-2">
-              ${localProviders.map(p => html`
-                <provider-card
-                  .provider=${p}
-                  .config=${this.providerConfigs[p.id] || { api_key: '', base_url: '', model: '' }}
-                  .isExpanded=${this.expandedProvider === p.id}
-                  @provider-config-changed=${this.handleProviderConfigChanged}
-                  @provider-models-changed=${this.handleProviderModelsChanged}
-                  @provider-expanded=${this.handleProviderExpanded}>
-                </provider-card>
-              `)}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Free Cloud -->
-        ${cloudFreeProviders.length > 0 ? html`
-          <div class="mb-8">
-            <h3 class="text-xs font-semibold mb-3 flex items-center gap-2" style="color: var(--app-disabled-foreground); text-transform: uppercase; letter-spacing: 0.05em;">
-              <os-icon name="cloud" size="13"></os-icon>
-              Free Cloud
-            </h3>
-            <div class="flex flex-col gap-2">
-              ${cloudFreeProviders.map(p => html`
-                <provider-card
-                  .provider=${p}
-                  .config=${this.providerConfigs[p.id] || { api_key: '', base_url: '', model: '' }}
-                  .isExpanded=${this.expandedProvider === p.id}
-                  @provider-config-changed=${this.handleProviderConfigChanged}
-                  @provider-models-changed=${this.handleProviderModelsChanged}
-                  @provider-expanded=${this.handleProviderExpanded}>
-                </provider-card>
-              `)}
-            </div>
-          </div>
-        ` : ''}
-
-        <!-- Paid Cloud -->
-        ${cloudPaidProviders.length > 0 ? html`
-          <div>
-            <h3 class="text-xs font-semibold mb-3 flex items-center gap-2" style="color: var(--app-disabled-foreground); text-transform: uppercase; letter-spacing: 0.05em;">
-              <os-icon name="sparkles" size="13"></os-icon>
-              Cloud
-            </h3>
-            <div class="flex flex-col gap-2">
-              ${cloudPaidProviders.map(p => html`
-                <provider-card
-                  .provider=${p}
-                  .config=${this.providerConfigs[p.id] || { api_key: '', base_url: '', model: '' }}
-                  .isExpanded=${this.expandedProvider === p.id}
-                  @provider-config-changed=${this.handleProviderConfigChanged}
-                  @provider-models-changed=${this.handleProviderModelsChanged}
-                  @provider-expanded=${this.handleProviderExpanded}>
-                </provider-card>
-              `)}
-            </div>
-          </div>
-        ` : ''}
       </div>
     `;
   }
