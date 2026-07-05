@@ -2,6 +2,7 @@ import { html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { getVersion } from '@tauri-apps/api/app';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-shell';
 import { TailwindElement } from '../../tailwind-element.js';
 import { dispatch } from '../../lib/types/events.js';
@@ -10,11 +11,11 @@ import { ThemeService } from '../../lib/services/theme-service.js';
 import { settingsStore } from '../../lib/services/settings-store.js';
 import type { ThemeDefinition, ThemeMode } from '../../lib/services/theme-service.js';
 import type { UserSettings } from '../../lib/services/settings-store.js';
-import type { AiProviderConfig, ProviderInfo, ModelInfo, McpServerConfig, McpServerStatus, McpToolInfo } from '../../lib/types/ai-types.js';
+import type { AiProviderConfig, ProviderInfo, ModelInfo } from '../../lib/types/ai-types.js';
 import '../layout/icon.js';
 import '../settings/provider-card.js';
 
-type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'models' | 'mcp' | 'about';
+type SettingsTab = 'general' | 'themes' | 'shortcuts' | 'models' | 'about';
 
 const SHORTCUTS = [
   { keys: ['Cmd', 'P'], description: 'Quick file search' },
@@ -55,12 +56,6 @@ export class SettingsPanel extends TailwindElement() {
   @state() private aiLoading = false;
   @state() private expandedProvider: string | null = null;
   @state() private providerConfigs: Record<string, { api_key: string; base_url: string; model: string }> = {};
-  @state() private mcpServers: McpServerStatus[] = [];
-  @state() private mcpTools: McpToolInfo[] = [];
-  @state() private mcpLoading = false;
-  @state() private mcpNewName = '';
-  @state() private mcpNewCommand = 'npx';
-  @state() private mcpNewArgs = '-y @playwright/mcp@latest';
   @state() private appVersion = '';
   @state() private updateStatus: 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'completed' | 'none' | 'error' = 'idle';
   @state() private updateVersion = '';
@@ -131,7 +126,6 @@ export class SettingsPanel extends TailwindElement() {
   open(): void {
     this.loadThemes();
     this.loadAiConfig();
-    this.loadMcpServers();
     this.isOpen = true;
     this.activeTab = 'general';
     this.requestUpdate();
@@ -253,7 +247,6 @@ export class SettingsPanel extends TailwindElement() {
               ${this.tabBtn('themes', 'palette', 'Themes')}
               ${this.tabBtn('shortcuts', 'keyboard', 'Shortcuts')}
               ${this.tabBtn('models', 'cpu', 'Models')}
-              ${this.tabBtn('mcp', 'server', 'MCP')}
               ${this.tabBtn('about', 'info', 'About')}
             </div>
 
@@ -267,7 +260,6 @@ export class SettingsPanel extends TailwindElement() {
             ${this.activeTab === 'themes' ? this.renderThemesTab() : ''}
             ${this.activeTab === 'shortcuts' ? this.renderShortcutsTab() : ''}
             ${this.activeTab === 'models' ? this.renderModelsTab() : ''}
-            ${this.activeTab === 'mcp' ? this.renderMcpTab() : ''}
             ${this.activeTab === 'about' ? this.renderAboutTab() : ''}
           </div>
         </div>
@@ -701,172 +693,6 @@ export class SettingsPanel extends TailwindElement() {
                   @provider-models-changed=${this.handleProviderModelsChanged}
                   @provider-expanded=${this.handleProviderExpanded}>
                 </provider-card>
-              `)}
-            </div>
-          </div>
-        ` : ''}
-      </div>
-    `;
-  }
-
-  private async loadMcpServers() {
-    this.mcpLoading = true;
-    try {
-      const [servers, tools] = await Promise.all([
-        invoke<McpServerStatus[]>('ai_mcp_list_servers'),
-        invoke<McpToolInfo[]>('ai_mcp_list_tools'),
-      ]);
-      this.mcpServers = servers;
-      this.mcpTools = tools;
-    } catch (e) {
-      console.error('[Settings] Failed to load MCP servers:', e);
-      this.mcpServers = [];
-      this.mcpTools = [];
-    } finally {
-      this.mcpLoading = false;
-    }
-  }
-
-  private async addMcpServer() {
-    if (!this.mcpNewName || !this.mcpNewCommand) return;
-    const config: McpServerConfig = {
-      name: this.mcpNewName,
-      command: this.mcpNewCommand,
-      args: this.mcpNewArgs.split(' ').filter(Boolean),
-      env: {},
-      enabled: true,
-    };
-    try {
-      await invoke('ai_mcp_add_server', { config });
-      this.mcpNewName = '';
-      this.mcpNewCommand = 'npx';
-      this.mcpNewArgs = '-y @playwright/mcp@latest';
-      await this.loadMcpServers();
-    } catch (e) {
-      console.error('[Settings] Failed to add MCP server:', e);
-    }
-  }
-
-  private async removeMcpServer(name: string) {
-    try {
-      await invoke('ai_mcp_remove_server', { name });
-      await this.loadMcpServers();
-    } catch (e) {
-      console.error('[Settings] Failed to remove MCP server:', e);
-    }
-  }
-
-  private renderMcpTab() {
-    return html`
-      <div class="space-y-7">
-        <div>
-          <h1 class="text-xl font-bold mb-1">MCP Servers</h1>
-          <p class="text-sm" style="color: var(--app-disabled-foreground);">Configure Model Context Protocol servers for external tools.</p>
-        </div>
-
-        <!-- Add Server Form -->
-        <div class="rounded-lg p-4" style="background-color: var(--app-hover-background); border: 1px solid var(--app-border);">
-          <h3 class="text-sm font-semibold mb-3">Add New Server</h3>
-          <div class="grid grid-cols-3 gap-3 mb-3">
-            <div>
-              <label class="text-xs mb-1 block" style="color: var(--app-disabled-foreground);">Name</label>
-              <input
-                type="text"
-                class="w-full px-2 py-1.5 text-sm rounded-md outline-none"
-                style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-foreground);"
-                placeholder="playwright"
-                .value=${this.mcpNewName}
-                @input=${(e: Event) => { this.mcpNewName = (e.target as HTMLInputElement).value; }}
-              />
-            </div>
-            <div>
-              <label class="text-xs mb-1 block" style="color: var(--app-disabled-foreground);">Command</label>
-              <input
-                type="text"
-                class="w-full px-2 py-1.5 text-sm rounded-md outline-none font-mono"
-                style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-foreground);"
-                placeholder="npx"
-                .value=${this.mcpNewCommand}
-                @input=${(e: Event) => { this.mcpNewCommand = (e.target as HTMLInputElement).value; }}
-              />
-            </div>
-            <div>
-              <label class="text-xs mb-1 block" style="color: var(--app-disabled-foreground);">Arguments (space-separated)</label>
-              <input
-                type="text"
-                class="w-full px-2 py-1.5 text-sm rounded-md outline-none font-mono"
-                style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-foreground);"
-                placeholder="-y @playwright/mcp@latest"
-                .value=${this.mcpNewArgs}
-                @input=${(e: Event) => { this.mcpNewArgs = (e.target as HTMLInputElement).value; }}
-              />
-            </div>
-          </div>
-          <button
-            class="px-3 py-1.5 text-sm font-medium rounded-md transition-colors"
-            style="background: var(--app-button-background); color: var(--app-button-foreground);"
-            @click=${() => this.addMcpServer()}>
-            <span class="flex items-center gap-1.5">
-              <os-icon name="plus" size="13"></os-icon>
-              Add Server
-            </span>
-          </button>
-        </div>
-
-        <!-- Server List -->
-        <div>
-          <h3 class="text-sm font-semibold mb-3" style="color: var(--app-disabled-foreground);">Connected Servers</h3>
-          ${this.mcpLoading ? html`
-            <div class="flex items-center gap-2 text-sm" style="color: var(--app-disabled-foreground);">
-              <div class="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-              Loading...
-            </div>
-          ` : this.mcpServers.length === 0 ? html`
-            <p class="text-sm" style="color: var(--app-disabled-foreground); opacity: 0.7;">No MCP servers configured.</p>
-          ` : html`
-            <div class="space-y-2">
-              ${this.mcpServers.map(server => html`
-                <div
-                  class="flex items-center justify-between p-3 rounded-lg"
-                  style="border: 1px solid var(--app-border);">
-                  <div class="flex items-center gap-3">
-                    <span class="w-2 h-2 rounded-full shrink-0 ${server.connected ? 'bg-green-500' : 'bg-red-500'}"></span>
-                    <div>
-                      <div class="text-sm font-medium">${server.name}</div>
-                      <div class="text-xs" style="color: var(--app-disabled-foreground);">
-                        ${server.connected ? `${server.tool_count} tools` : server.error || 'Disconnected'}
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    class="p-1 rounded transition-colors hover:bg-red-500/20"
-                    @click=${() => this.removeMcpServer(server.name)}>
-                    <os-icon name="x" size="14" color="var(--app-disabled-foreground)"></os-icon>
-                  </button>
-                </div>
-              `)}
-            </div>
-          `}
-        </div>
-
-        <!-- Available Tools -->
-        ${this.mcpTools.length > 0 ? html`
-          <div>
-            <h3 class="text-sm font-semibold mb-3" style="color: var(--app-disabled-foreground);">Available MCP Tools</h3>
-            <div class="rounded-lg overflow-hidden" style="border: 1px solid var(--app-border);">
-              ${this.mcpTools.map((tool, i) => html`
-                <div
-                  class="flex items-center gap-3 px-4 py-2.5"
-                  style="${i > 0 ? `border-top: 1px solid var(--app-border);` : ''}">
-                  <os-icon name="server" size="13" color="var(--ai-accent)"></os-icon>
-                  <div class="flex-1 min-w-0">
-                    <div class="text-sm font-medium truncate">${tool.namespaced_name}</div>
-                    <div class="text-xs truncate" style="color: var(--app-disabled-foreground);">${tool.description}</div>
-                  </div>
-                  <span class="text-xs shrink-0 px-1.5 py-0.5 rounded" style="background: var(--app-hover-background); color: var(--app-disabled-foreground);">
-                    ${tool.server_name}
-                  </span>
-                </div>
               `)}
             </div>
           </div>

@@ -8,7 +8,7 @@ impl ToolRegistry {
             None => return format!("MCP not available (manager not initialized). Tool '{}'.", name),
         };
 
-        let manager = mcp_manager.lock().await;
+        let mut manager = mcp_manager.lock().await;
         match manager.call_tool(name, arguments).await {
             Ok(result) => result,
             Err(e) => format!("MCP tool '{}' failed: {}", name, e),

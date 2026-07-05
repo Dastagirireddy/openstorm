@@ -489,6 +489,10 @@ fn main() {
             let process_manager = app.state::<process::ProcessManager>();
             process_manager.set_app_handle(handle.clone());
 
+            // Start MCP background tasks (connect all, status events, idle shutdown)
+            let ai_state = handle.state::<ai::legacy::commands::AiState>();
+            ai_state.spawn_background_tasks(handle.clone());
+
             // Start DAP event polling loop
             spawn_dap_event_poller(handle.clone());
 
@@ -676,6 +680,10 @@ fn main() {
             ai::commands::ai_mcp_list_servers,
             ai::commands::ai_mcp_list_tools,
             ai::commands::ai_mcp_test_server,
+            ai::commands::ai_mcp_get_status,
+            ai::commands::ai_mcp_list_templates,
+            ai::commands::ai_mcp_install_template,
+            ai::commands::ai_mcp_toggle_server,
 
             // === AI File Operations (for @ mentions) ===
             ai::commands::ai_search_files,

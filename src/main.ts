@@ -49,6 +49,7 @@ import * as logos from '@iconify-json/logos/icons.json';
 import * as mdi from '@iconify-json/mdi/icons.json';
 import * as streamlineFlexColor from '@iconify-json/streamline-flex-color/icons.json';
 import * as lucide from '@iconify-json/lucide/icons.json';
+import * as codicon from '@iconify-json/codicon/icons.json';
 addCollection(devicon);
 addCollection(vscodeIcons);
 addCollection(tabler);
@@ -58,6 +59,7 @@ addCollection(logos);
 addCollection(mdi);
 addCollection(streamlineFlexColor);
 addCollection(lucide);
+addCollection(codicon);
 
 // Core components (always loaded)
 import "./components/header/app-header.js";
@@ -85,6 +87,9 @@ import { FEATURES } from "./lib/config/features.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
 import "./components/panels/data-sources/data-sources-panel.js";
+import "./components/panels/mcp/mcp-panel.js";
+import "./components/panels/mcp/mcp-server-card.js";
+import "./components/panels/mcp/mcp-add-modal.js";
 import "./components/panels/data-sources/database-multi-tree.js";
 import "./components/panels/data-sources/data-source-type-picker.js";
 import "./components/panels/data-sources/database-vendor-picker.js";
@@ -1785,6 +1790,7 @@ export class OpenStormApp extends TailwindElement() {
     const showDebugPanel = this.isDebugging;
     const showAppConsole = !isSingleFileMode && !this.isDebugging && this.activeStatusBarPanel === 'app-console';
     const showDatabase = !isSingleFileMode && this.activeRightActivity === 'database';
+    const showMcp = !isSingleFileMode && this.activeRightActivity === 'mcp';
 
     return html`
       <div class="flex flex-col h-screen w-screen overflow-hidden" style="background-color: var(--app-bg); color: var(--app-foreground);">
@@ -1826,7 +1832,7 @@ export class OpenStormApp extends TailwindElement() {
             <div class="flex flex-1 flex-col overflow-hidden min-h-0">
               <!-- Normal view: Explorer + Content (editor/terminal/openstorm) -->
               <div class="flex flex-1 overflow-hidden h-full">
-                ${showExplorer || showDatabase ? html`
+                ${showExplorer || showDatabase || showMcp ? html`
                   <resizable-container
                     direction="horizontal"
                     class="flex-1"
@@ -1859,6 +1865,11 @@ export class OpenStormApp extends TailwindElement() {
                   ${showDatabase ? html`
                     <div class="shrink-0 border-l" style="width: 250px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
                       <data-sources-panel class="h-full w-full" .projectPath=${this.projectPath}></data-sources-panel>
+                    </div>
+                  ` : nothing}
+                  ${showMcp ? html`
+                    <div class="shrink-0 border-l" style="width: 280px; background-color: var(--activitybar-background); border-color: var(--activitybar-border);">
+                      <mcp-panel class="h-full w-full"></mcp-panel>
                     </div>
                   ` : nothing}
                 ` : html`

@@ -99,9 +99,12 @@ export interface McpServerConfig {
   enabled: boolean;
 }
 
+export type McpConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
+
 export interface McpServerStatus {
   name: string;
   connected: boolean;
+  state: McpConnectionState;
   tool_count: number;
   error: string | null;
 }
@@ -111,4 +114,15 @@ export interface McpToolInfo {
   original_name: string;
   namespaced_name: string;
   description: string;
+}
+
+export type McpTemplateCategory = 'browser' | 'development' | 'productivity' | 'data';
+
+export interface McpTemplate {
+  id: string;
+  name: string;
+  description: string;
+  category: McpTemplateCategory;
+  icon: string;
+  config: McpServerConfig;
 }

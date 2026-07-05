@@ -51,7 +51,7 @@ export type ActivityItem = 'explorer' | 'terminal' | 'ai' | 'graph';
 /**
  * Right activity bar items
  */
-export type RightActivityItem = 'database' | '';
+export type RightActivityItem = 'database' | 'mcp' | '';
 
 /**
  * Save status states

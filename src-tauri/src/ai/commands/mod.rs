@@ -168,6 +168,39 @@ pub async fn ai_mcp_test_server(
     super::legacy::commands::ai_mcp_test_server(config).await
 }
 
+/// Get MCP server connection status
+#[command]
+pub async fn ai_mcp_get_status(
+    state: State<'_, super::legacy::commands::AiState>,
+) -> Result<Vec<super::legacy::mcp::McpServerStatus>, String> {
+    super::legacy::commands::ai_mcp_get_status(state).await
+}
+
+/// List available MCP server templates
+#[command]
+pub async fn ai_mcp_list_templates() -> Result<Vec<super::legacy::mcp::templates::McpTemplate>, String> {
+    super::legacy::commands::ai_mcp_list_templates().await
+}
+
+/// Install an MCP server from a template
+#[command]
+pub async fn ai_mcp_install_template(
+    state: State<'_, super::legacy::commands::AiState>,
+    template_id: String,
+) -> Result<super::legacy::mcp::McpServerStatus, String> {
+    super::legacy::commands::ai_mcp_install_template(state, template_id).await
+}
+
+/// Enable or disable an MCP server
+#[command]
+pub async fn ai_mcp_toggle_server(
+    state: State<'_, super::legacy::commands::AiState>,
+    name: String,
+    enabled: bool,
+) -> Result<(), String> {
+    super::legacy::commands::ai_mcp_toggle_server(state, name, enabled).await
+}
+
 /// Spawn a sub-agent
 #[command]
 pub async fn ai_spawn_agent(_request: SpawnAgentRequest) -> Result<String, String> {
