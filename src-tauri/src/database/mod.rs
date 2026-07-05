@@ -24,4 +24,3 @@ pub use error::{DatabaseError, Result};
 pub use manager::{DatabaseManager, AnyPool};
 pub use types::{ConnectionConfig, ConnectionInfo, ConnectionScope, DatabaseType};
 pub use providers::DatabaseProvider;
-pub use query::{QueryExecutor, QueryResult, SavedQuery};

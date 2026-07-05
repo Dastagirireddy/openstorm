@@ -26,7 +26,7 @@ impl FileWatcher {
         let app_handle = Arc::new(Mutex::new(None::<AppHandle>));
         let app_handle_clone = Arc::clone(&app_handle);
         let watched_path = Arc::new(Mutex::new(None::<PathBuf>));
-        let watched_path_for_closure = Arc::clone(&watched_path);
+        let _watched_path_for_closure = Arc::clone(&watched_path);
 
         let watcher = Arc::new(Mutex::new(
             RecommendedWatcher::new(

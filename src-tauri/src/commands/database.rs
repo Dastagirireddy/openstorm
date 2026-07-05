@@ -244,7 +244,7 @@ pub async fn db_execute_query(
     project_path: String,
     manager: State<'_, DatabaseManager>,
 ) -> Result<QueryResult, String> {
-    let mut config: ConnectionConfig;
+    let config: ConnectionConfig;
 
     // Check if this is a direct SQLite file path (format: "sqlite-file:/path/to/file.db")
     if connection_id.starts_with("sqlite-file:") {
@@ -347,7 +347,7 @@ pub async fn db_export_query(
     max_rows: Option<u64>,
     manager: State<'_, DatabaseManager>,
 ) -> Result<ExportResult, String> {
-    let mut config: ConnectionConfig;
+    let config: ConnectionConfig;
 
     // Check if this is a direct SQLite file path (format: "sqlite-file:/path/to/file.db")
     if connection_id.starts_with("sqlite-file:") {

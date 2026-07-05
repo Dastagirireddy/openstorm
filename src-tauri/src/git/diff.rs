@@ -105,7 +105,7 @@ pub fn get_word_diff(path: &str, staged: bool) -> Result<String, String> {
 
 /// Get diff stats for a specific file
 pub fn get_file_diff_stats(path: &str, file_path: &str, staged: bool) -> Result<DiffStats, String> {
-    let diff_arg = if staged { "--cached" } else { "" };
+    let _diff_arg = if staged { "--cached" } else { "" };
     let args = if staged {
         vec!["diff", "--cached", "--stat", "--", file_path]
     } else {

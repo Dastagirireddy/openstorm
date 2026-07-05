@@ -59,7 +59,7 @@ pub fn search_nodes(store: &GraphStore, query: &str, limit: usize) -> GraphResul
     END";
 
     // Path length penalty: shorter paths are more relevant
-    let path_penalty = "1.0 / (1.0 + LENGTH(file_path) * 0.1)";
+    let _path_penalty = "1.0 / (1.0 + LENGTH(file_path) * 0.1)";
 
     let sql = format!(
         "SELECT id, kind, name, file_path, start_line, end_line, language,

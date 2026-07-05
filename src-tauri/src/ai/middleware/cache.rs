@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::RwLock;
@@ -21,7 +20,7 @@ struct CacheEntry {
 }
 
 impl CacheEntry {
-    fn new(result: ToolResult, ttl: Duration) -> Self {
+    fn new(result: ToolResult, _ttl: Duration) -> Self {
         let now = Instant::now();
         Self {
             result,

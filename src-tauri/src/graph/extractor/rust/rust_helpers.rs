@@ -1,7 +1,7 @@
 use tree_sitter::Node;
 
 use crate::graph::extractor::create_node;
-use crate::graph::types::{EdgeKind, GraphEdge, GraphNode, NodeKind};
+use crate::graph::types::{GraphEdge, GraphNode, NodeKind};
 
 use super::RustExtractor;
 

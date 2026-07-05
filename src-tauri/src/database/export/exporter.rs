@@ -96,7 +96,7 @@ impl QueryExporter {
             .map_err(|e| DatabaseError::QueryFailed(format!("Failed to create file: {}", e)))?;
         let mut writer = BufWriter::new(file);
 
-        let (columns, row_count) = match pool {
+        let (_columns, row_count) = match pool {
             AnyPool::Postgres(pool) => Self::fetch_postgres_rows_csv(pool, query, &mut writer, options).await?,
             AnyPool::MySql(pool) => Self::fetch_mysql_rows_csv(pool, query, &mut writer, options).await?,
             AnyPool::Sqlite(pool) => Self::fetch_sqlite_rows_csv(pool, query, &mut writer, options).await?,
@@ -281,7 +281,7 @@ impl QueryExporter {
         pool: &sqlx::PgPool,
         query: &str,
         writer: &mut BufWriter<File>,
-        options: &ExportOptions,
+        _options: &ExportOptions,
     ) -> Result<u64, DatabaseError> {
         let rows = sqlx::query(query)
             .fetch_all(pool)
@@ -320,7 +320,7 @@ impl QueryExporter {
         pool: &sqlx::MySqlPool,
         query: &str,
         writer: &mut BufWriter<File>,
-        options: &ExportOptions,
+        _options: &ExportOptions,
     ) -> Result<u64, DatabaseError> {
         let rows = sqlx::query(query)
             .fetch_all(pool)
@@ -395,7 +395,7 @@ impl QueryExporter {
         for row in rows {
             write!(writer, "   <Row>")?;
             let cols = row.columns();
-            for (i, col) in cols.iter().enumerate() {
+            for (i, _col) in cols.iter().enumerate() {
                 let value = Self::format_pg_value(&row, i);
                 write!(writer, r#"<Cell><Data ss:Type="String">{}</Data></Cell>"#, Self::escape_xml(&value))?;
             }
@@ -446,7 +446,7 @@ impl QueryExporter {
         for row in rows {
             write!(writer, "   <Row>")?;
             let cols = row.columns();
-            for (i, col) in cols.iter().enumerate() {
+            for (i, _col) in cols.iter().enumerate() {
                 let value = Self::format_mysql_value(&row, i);
                 write!(writer, r#"<Cell><Data ss:Type="String">{}</Data></Cell>"#, Self::escape_xml(&value))?;
             }
@@ -584,7 +584,7 @@ impl QueryExporter {
         pool: &sqlx::SqlitePool,
         query: &str,
         writer: &mut BufWriter<File>,
-        options: &ExportOptions,
+        _options: &ExportOptions,
     ) -> Result<u64, DatabaseError> {
         let rows = sqlx::query(query)
             .fetch_all(pool)
@@ -659,7 +659,7 @@ impl QueryExporter {
         for row in rows {
             write!(writer, "   <Row>")?;
             let cols = row.columns();
-            for (i, col) in cols.iter().enumerate() {
+            for (i, _col) in cols.iter().enumerate() {
                 let value = Self::format_sqlite_value(&row, i);
                 write!(writer, r#"<Cell><Data ss:Type="String">{}</Data></Cell>"#, Self::escape_xml(&value))?;
             }

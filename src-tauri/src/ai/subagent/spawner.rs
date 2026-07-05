@@ -95,8 +95,8 @@ impl AgentSpawner for InMemorySpawner {
         let task_id = uuid::Uuid::new_v4().to_string();
         let agent_id = format!("{}-{}", config.parent_id, &task_id[..8]);
 
-        let (status_tx, status_rx) = watch::channel(TaskStatus::Pending);
-        let (result_tx, result_rx) = oneshot::channel();
+        let (status_tx, _status_rx) = watch::channel(TaskStatus::Pending);
+        let (result_tx, _result_rx) = oneshot::channel();
 
         let entry = TaskEntry {
             config: config.clone(),

@@ -1,4 +1,3 @@
-use std::path::Path;
 
 use tauri::{AppHandle, Emitter, State};
 

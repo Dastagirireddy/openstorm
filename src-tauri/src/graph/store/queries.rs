@@ -1,4 +1,3 @@
-use rusqlite::params;
 
 use crate::graph::errors::GraphResult;
 use crate::graph::types::{GraphData, GraphEdge, GraphNode, NodeKind};

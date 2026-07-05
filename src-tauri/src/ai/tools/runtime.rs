@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -6,7 +5,7 @@ use tokio::sync::mpsc;
 
 use super::super::messages::AnyMessage;
 use super::context::{AgentRole, ExecutionInfo, ToolContext};
-use super::tool_trait::{Tool, ToolResult};
+use super::tool_trait::Tool;
 
 /// ToolRuntime — injected into every tool call
 ///

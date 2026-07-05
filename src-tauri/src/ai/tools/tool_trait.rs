@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::context::AgentRole;
 
 /// Tool trait — every tool implements this
 #[async_trait]

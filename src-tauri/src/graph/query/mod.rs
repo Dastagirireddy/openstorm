@@ -4,7 +4,7 @@ pub mod search;
 
 use crate::graph::errors::GraphResult;
 use crate::graph::store::GraphStore;
-use crate::graph::types::{GraphEdge, GraphNode};
+use crate::graph::types::GraphNode;
 
 pub struct GraphQuery<'a> {
     store: &'a GraphStore,

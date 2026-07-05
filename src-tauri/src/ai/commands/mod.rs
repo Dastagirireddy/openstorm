@@ -1,14 +1,9 @@
 pub mod state;
 
-use std::sync::Arc;
-use tauri::{command, AppHandle, Emitter, State};
-use tokio::sync::mpsc;
+use tauri::{command, AppHandle, State};
 
-use super::agent::AgentRuntime;
 use super::messages::content::UsageMetadata;
-use super::response_filter::events::AgentEvent;
 use super::tools::question_types::QuestionAnswer;
-use state::AiV2State;
 
 // ═══════════════════════════════════════════════════════════════
 // TYPES
@@ -175,7 +170,7 @@ pub async fn ai_mcp_test_server(
 
 /// Spawn a sub-agent
 #[command]
-pub async fn ai_spawn_agent(request: SpawnAgentRequest) -> Result<String, String> {
+pub async fn ai_spawn_agent(_request: SpawnAgentRequest) -> Result<String, String> {
     Ok(format!("spawned-{}", uuid::Uuid::new_v4()))
 }
 
@@ -191,7 +186,7 @@ pub async fn ai_get_subagent_status(task_id: String) -> Result<SubAgentStatusRes
 
 /// Respond to a question from the AI
 #[command]
-pub async fn ai_question_response(request: QuestionResponseRequest) -> Result<(), String> {
+pub async fn ai_question_response(_request: QuestionResponseRequest) -> Result<(), String> {
     Ok(())
 }
 

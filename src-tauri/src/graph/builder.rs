@@ -29,7 +29,7 @@ impl GraphBuilder {
         self.edges.extend(result.edges);
     }
 
-    pub fn build(mut self) -> GraphData {
+    pub fn build(self) -> GraphData {
         let name_index = self.name_index.clone();
         let resolved: Vec<GraphEdge> = self
             .edges

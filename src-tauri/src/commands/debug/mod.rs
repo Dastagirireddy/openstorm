@@ -13,7 +13,7 @@ pub mod inspection;
 pub mod breakpoints;
 pub mod breakpoint_storage;
 
-pub use types::{DebugAction, AddBreakpointRequest, BreakpointInfo, SetBreakpointsForFileRequest};
+pub use types::BreakpointInfo;
 pub use session::*;
 pub use inspection::*;
 pub use breakpoints::*;

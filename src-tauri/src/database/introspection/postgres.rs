@@ -133,7 +133,7 @@ impl PostgresIntrospector {
         .unwrap_or(0);
 
         // Get schemas count
-        let schemas_count: i64 = sqlx::query_scalar(
+        let _schemas_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM information_schema.schemata
              WHERE schema_name NOT IN ('pg_catalog', 'information_schema')
              AND schema_name NOT LIKE 'pg_%'"
@@ -497,7 +497,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_extensions_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_extensions_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         // pg_extension is a global system catalog - get all extensions in the database
         let extensions: Vec<(String, String)> = sqlx::query_as(
             "SELECT e.extname as extension_name,
@@ -524,7 +524,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_access_methods_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_access_methods_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let access_methods: Vec<(String, String)> = sqlx::query_as(
             "SELECT amname, amhandler::regproc::text
              FROM pg_am
@@ -597,7 +597,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_languages_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_languages_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         // pg_language is a global system catalog - get all user-defined languages
         let languages: Vec<(String, bool)> = sqlx::query_as(
             "SELECT lanname, lanpltrusted
@@ -624,7 +624,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_roles_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_roles_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let roles: Vec<(String, bool, bool, bool)> = sqlx::query_as(
             "SELECT rolname, rolsuper, rolinherit, rolcreaterole
              FROM pg_roles
@@ -652,7 +652,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_tablespaces_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_tablespaces_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let tablespaces: Vec<(String, String, i64)> = sqlx::query_as(
             "SELECT spcname,
                     pg_catalog.pg_get_userbyid(spcowner) as owner,
@@ -681,7 +681,7 @@ impl PostgresIntrospector {
             .collect()
     }
 
-    async fn get_virtual_views_folder_children(&self, pool: &sqlx::PgPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_virtual_views_folder_children(&self, pool: &sqlx::PgPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         // Virtual Views = PostgreSQL system catalog views for monitoring (like IntelliJ's "Virtual Views")
         // These are dynamic system views that show real-time database state
         // See: https://www.postgresql.org/docs/current/monitoring-stats.html
@@ -1196,7 +1196,7 @@ impl DatabaseIntrospector for PostgresIntrospector {
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 // Check folder type FIRST (before checking kind)
-                let folder = parent.metadata.as_ref()
+                let _folder = parent.metadata.as_ref()
                     .and_then(|m| m.get("folder"))
                     .and_then(|v| v.as_str());
 

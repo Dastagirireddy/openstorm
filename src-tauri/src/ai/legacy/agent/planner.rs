@@ -37,7 +37,7 @@ fn parse_json_plan(text: &str) -> Option<Vec<PlanStep>> {
     let steps: Vec<PlanStep> = plan_array
         .iter()
         .enumerate()
-        .filter_map(|(i, item)| {
+        .filter_map(|(_i, item)| {
             let step_num = item.get("step")?.as_u64()? as u32;
             let description = item.get("description")?.as_str()?.to_string();
             Some(PlanStep {

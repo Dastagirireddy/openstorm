@@ -292,7 +292,7 @@ impl MySqlIntrospector {
         )).collect()
     }
 
-    async fn get_users_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_users_folder_children(&self, pool: &sqlx::MySqlPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let users: Vec<(String, String)> = sqlx::query_as(
             "SELECT CAST(user AS CHAR) AS user, CAST(host AS CHAR) AS host
              FROM mysql.user
@@ -316,7 +316,7 @@ impl MySqlIntrospector {
         )).collect()
     }
 
-    async fn get_engines_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_engines_folder_children(&self, pool: &sqlx::MySqlPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let engines: Vec<(String, String, String)> = sqlx::query_as(
             "SELECT CAST(engine AS CHAR) AS engine,
                     CAST(support AS CHAR) AS support,
@@ -343,7 +343,7 @@ impl MySqlIntrospector {
         )).collect()
     }
 
-    async fn get_plugins_folder_children(&self, pool: &sqlx::MySqlPool, parent: &DatabaseObject) -> Vec<DatabaseObject> {
+    async fn get_plugins_folder_children(&self, pool: &sqlx::MySqlPool, _parent: &DatabaseObject) -> Vec<DatabaseObject> {
         let plugins: Vec<(String, String, String)> = sqlx::query_as(
             "SELECT CAST(plugin_name AS CHAR) AS plugin_name,
                     CAST(plugin_type AS CHAR) AS plugin_type,

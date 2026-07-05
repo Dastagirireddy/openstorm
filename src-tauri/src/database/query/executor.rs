@@ -7,7 +7,6 @@ use crate::database::{DatabaseError, AnyPool};
 use super::types::{QueryResult, ColumnInfo};
 use sqlx::{Row, Column, TypeInfo};
 use std::time::Instant;
-use std::collections::HashSet;
 
 pub struct QueryExecutor;
 

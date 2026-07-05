@@ -195,7 +195,7 @@ impl PermissionService for DefaultPermissionService {
 
     fn grant(&self, agent_id: &str, tool_name: &str, args: &serde_json::Value, scope: GrantScope) {
         let memory = self.session_memory.clone();
-        let agent_id = agent_id.to_string();
+        let _agent_id = agent_id.to_string();
         let tool_name = tool_name.to_string();
         let args = args.clone();
 
@@ -205,7 +205,7 @@ impl PermissionService for DefaultPermissionService {
         });
     }
 
-    fn revoke(&self, agent_id: &str, tool_name: &str) {
+    fn revoke(&self, _agent_id: &str, tool_name: &str) {
         let memory = self.session_memory.clone();
         let tool_name = tool_name.to_string();
 
@@ -215,7 +215,7 @@ impl PermissionService for DefaultPermissionService {
         });
     }
 
-    fn is_approved(&self, agent_id: &str, tool_name: &str, args: &serde_json::Value) -> bool {
+    fn is_approved(&self, _agent_id: &str, _tool_name: &str, _args: &serde_json::Value) -> bool {
         // This would need to be async in production
         // For now, return false
         false

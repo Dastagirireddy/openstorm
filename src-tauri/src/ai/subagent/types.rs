@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::ai::agent::config::AgentConfig;
 
 /// Task status for sub-agent
 #[derive(Debug, Clone, PartialEq)]

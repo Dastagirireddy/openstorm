@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::mpsc;
 
 use super::AiState;
@@ -8,7 +8,6 @@ use super::super::orchestrator::Orchestrator;
 use super::super::providers::{LlmProvider, Message, ProviderRegistry};
 use super::super::permissions::PermissionProfile;
 use crate::config::AiProviderConfig;
-use crate::graph::commands::GraphState;
 
 pub async fn ai_chat(
     app: AppHandle,

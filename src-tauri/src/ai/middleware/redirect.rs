@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::sync::Arc;
 
 use super::pipeline::{MiddlewareError, NextFn, ToolCallRequest, ToolMiddleware};
 use crate::ai::tools::tool_trait::{ToolResult, ToolRuntime};
