@@ -232,6 +232,7 @@
   --ai-success: #22c55e;
   --ai-warning: #f59e0b;
   --ai-error: #ef4444;
+  --ai-orange: #f97316;
 
   /* AI Panel - Thinking */
   --ai-thinking-opacity: 1;
@@ -284,6 +285,30 @@
   --ai-button-hover: #4f46e5;
   --ai-button-danger: #ef4444;
   --ai-button-danger-foreground: #ffffff;
+
+  /* OS (OpenStorm) semantic variables for ai-v2 components */
+  --os-bg: var(--app-bg);
+  --os-text: var(--app-foreground);
+  --os-text-subtle: var(--app-secondary-foreground);
+  --os-text-dim: var(--app-disabled-foreground);
+  --os-text-sm: 13px;
+  --os-text-xs: 11px;
+  --os-border: var(--app-border);
+  --os-border-subtle: var(--app-border);
+  --os-surface: var(--app-workbench);
+  --os-surface-hover: var(--app-hover-background);
+  --os-primary: var(--brand-primary);
+  --os-success: var(--success);
+  --os-danger: var(--error);
+  --os-accent: var(--brand-primary);
+  --os-radius-sm: 4px;
+  --os-radius-md: 6px;
+  --os-radius-lg: 8px;
+  --os-font-mono: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+  --os-ai-user-bg: var(--brand-primary);
+  --os-ai-user-text: #ffffff;
+  --os-ai-agent-bg: var(--ai-tool-background);
+  --os-ai-agent-text: var(--ai-text);
 }
 
 /* Dark theme */
@@ -421,6 +446,7 @@
     --ai-success: #3fb950;
     --ai-warning: #d29922;
     --ai-error: #f85149;
+    --ai-orange: #fb923c;
 
     /* AI Panel - Thinking (dark) */
     --ai-thinking-opacity: 1;
@@ -462,6 +488,29 @@
     --ai-button-hover: #2ea043;
     --ai-button-danger: #da3633;
     --ai-button-danger-foreground: #ffffff;
+
+    /* OS (OpenStorm) semantic variables for ai-v2 components (dark) */
+    --os-bg: var(--app-bg);
+    --os-text: var(--app-foreground);
+    --os-text-subtle: var(--app-secondary-foreground);
+    --os-text-dim: var(--app-disabled-foreground);
+    --os-text-sm: 13px;
+    --os-text-xs: 11px;
+    --os-border: var(--app-border);
+    --os-border-subtle: var(--app-border);
+    --os-surface: var(--app-workbench);
+    --os-surface-hover: var(--app-hover-background);
+    --os-success: var(--success);
+    --os-danger: var(--error);
+    --os-accent: var(--brand-primary);
+    --os-radius-sm: 4px;
+    --os-radius-md: 6px;
+    --os-radius-lg: 8px;
+    --os-font-mono: 'SF Mono', 'Fira Code', 'Monaco', monospace;
+    --os-ai-user-bg: var(--brand-primary);
+    --os-ai-user-text: #1a1b26;
+    --os-ai-agent-bg: var(--ai-tool-background);
+    --os-ai-agent-text: var(--ai-text);
   }
 }
 

@@ -1,0 +1,1672 @@
+<!DOCTYPE html>
+<html lang="en" class="light" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenStorm AI v2 — Frontend Architecture Design</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lucide@latest"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-rust.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markup.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-markdown.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-json.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.9.0/mermaid.min.js"></script>
+<style>
+:root {
+  --primary: 22 31 52;
+  --primary-light: 127 200 255;
+  --primary-dark: 0 109 221;
+  --background-light: 255 255 255;
+  --background-dark: 3 7 16;
+  --gray-50: 243 243 244;
+  --gray-100: 238 238 239;
+  --gray-200: 223 223 224;
+  --gray-300: 206 206 207;
+  --gray-400: 159 159 160;
+  --gray-500: 112 112 113;
+  --gray-600: 80 80 81;
+  --gray-700: 63 63 64;
+  --gray-800: 38 38 38;
+  --gray-900: 23 23 24;
+  --gray-950: 10 11 11;
+  --accent-green: 30 166 98;
+  --accent-purple: 130 80 223;
+  --accent-orange: 234 88 12;
+  --accent-red: 220 38 38;
+  --accent-blue: 0 109 221;
+}
+html.light, html.light body { background: rgb(var(--background-light)); color: rgb(var(--gray-700)); }
+html.light h1 { color: rgb(var(--primary)); }
+html.light h2 { color: rgb(var(--primary-dark)); border-color: rgb(var(--gray-200)); }
+html.light h3 { color: rgb(var(--primary-dark)); }
+html.light h4 { color: rgb(var(--primary)); }
+html.light a { color: rgb(var(--primary-dark)); }
+html.light code:not([class*="language-"]) { background: rgb(var(--gray-50)); color: rgb(var(--primary-dark)); border: 1px solid rgb(var(--gray-200)); }
+html.light pre { background: rgb(var(--gray-950)); border: 1px solid rgb(var(--gray-200)); }
+html.light pre code { color: #e6edf3; background: none; border: none; }
+html.light blockquote { border-left: 3px solid rgb(var(--primary-dark)); }
+html.light .card { background: rgb(var(--background-light)); border: 1px solid rgb(var(--gray-200)); }
+html.light table th { background: rgb(var(--gray-50)); color: rgb(var(--primary-dark)); border-color: rgb(var(--gray-200)); }
+html.light table td { border-color: rgb(var(--gray-200)); }
+html.light .mermaid { background: rgb(var(--gray-50)); }
+html.light .badge-critical { background: rgb(220 38 38 / 0.1); color: rgb(var(--accent-red)); }
+html.light .badge-high { background: rgb(234 88 12 / 0.1); color: rgb(var(--accent-orange)); }
+html.light .badge-medium { background: rgb(0 109 221 / 0.1); color: rgb(var(--accent-blue)); }
+html.light .badge-low { background: rgb(30 166 98 / 0.1); color: rgb(var(--accent-green)); }
+html.light .callout-tip { background: rgb(var(--accent-green) / 0.06); border-left-color: rgb(var(--accent-green)); }
+html.light .callout-warning { background: rgb(var(--accent-orange) / 0.06); border-left-color: rgb(var(--accent-orange)); }
+html.light .callout-info { background: rgb(var(--accent-blue) / 0.06); border-left-color: rgb(var(--accent-blue)); }
+
+html.dark, html.dark body { background: rgb(var(--background-dark)); color: rgb(var(--gray-400)); }
+html.dark h1 { color: rgb(var(--gray-100)); }
+html.dark h2 { color: rgb(var(--gray-100)); border-color: rgb(var(--gray-800)); }
+html.dark h3 { color: rgb(var(--gray-100)); }
+html.dark h4 { color: rgb(var(--gray-200)); }
+html.dark a { color: rgb(var(--primary-light)); }
+html.dark code:not([class*="language-"]) { background: rgb(var(--gray-800)); color: rgb(var(--primary-light)); border: 1px solid rgb(var(--gray-700)); }
+html.dark pre { background: rgb(var(--gray-950)); border: 1px solid rgb(var(--gray-800)); }
+html.dark pre code { color: #e6edf3; background: none; border: none; }
+html.dark blockquote { border-left: 3px solid rgb(var(--primary-light)); }
+html.dark .card { background: rgb(var(--gray-900)); border: 1px solid rgb(var(--gray-800)); }
+html.dark table th { background: rgb(var(--gray-900)); color: rgb(var(--gray-100)); border-color: rgb(var(--gray-800)); }
+html.dark table td { border-color: rgb(var(--gray-800)); }
+html.dark .mermaid { background: rgb(var(--gray-900)); }
+html.dark .badge-critical { background: rgb(220 38 38 / 0.15); color: #fca5a5; }
+html.dark .badge-high { background: rgb(234 88 12 / 0.15); color: #fdba74; }
+html.dark .badge-medium { background: rgb(0 109 221 / 0.15); color: #93c5fd; }
+html.dark .badge-low { background: rgb(30 166 98 / 0.15); color: #86efac; }
+html.dark .callout-tip { background: rgb(30 166 98 / 0.08); border-left-color: rgb(var(--accent-green)); }
+html.dark .callout-warning { background: rgb(234 88 12 / 0.08); border-left-color: rgb(var(--accent-orange)); }
+html.dark .callout-info { background: rgb(0 109 221 / 0.08); border-left-color: rgb(var(--accent-blue)); }
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; line-height: 1.7; padding: 0 1.5rem; max-width: 900px; margin: 0 auto; padding-top: 2rem; padding-bottom: 4rem; }
+h1 { font-size: 2.25rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+h2 { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.01em; margin: 3rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid; }
+h3 { font-size: 1.15rem; font-weight: 600; margin: 2rem 0 0.75rem; }
+h4 { font-size: 1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; }
+p { margin: 0.5rem 0; }
+a { text-decoration: none; }
+a:hover { text-decoration: underline; }
+hr.section-divider { border: none; border-top: 1px solid; margin: 3rem 0; }
+code:not([class*="language-"]) { font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; padding: 0.15rem 0.4rem; border-radius: 5px; font-size: 0.85em; font-weight: 500; }
+pre { border-radius: 8px; padding: 1.25rem; overflow-x: auto; margin: 1rem 0; font-size: 0.82rem; line-height: 1.6; }
+pre code { background: none !important; border: none !important; padding: 0; font-size: inherit; }
+table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.875rem; }
+th, td { padding: 0.6rem 0.85rem; text-align: left; }
+th { font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.callout { border-left: 3px solid; padding: 0.85rem 1rem; margin: 1rem 0; border-radius: 0 6px 6px 0; font-size: 0.875rem; }
+.callout-title { font-weight: 600; margin-bottom: 0.25rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.card { border-radius: 8px; padding: 1.25rem; margin: 1rem 0; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
+@media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+.mermaid { border-radius: 8px; padding: 1.5rem; margin: 1rem 0; text-align: center; overflow-x: auto; }
+.mermaid svg { max-width: 100%; }
+.sidebar { position: fixed; top: 0; left: 0; width: 260px; height: 100vh; overflow-y: auto; padding: 1.5rem 1rem 2rem 1.5rem; z-index: 50; border-right: 1px solid; font-size: 0.82rem; }
+html.light .sidebar { background: rgb(var(--background-light)); border-color: rgb(var(--gray-200)); }
+html.dark .sidebar { background: rgb(var(--gray-950)); border-color: rgb(var(--gray-800)); }
+.sidebar-logo { font-weight: 700; font-size: 0.95rem; display: block; }
+html.light .sidebar-logo { color: rgb(var(--primary)); }
+html.dark .sidebar-logo { color: rgb(var(--gray-100)); }
+.sidebar-section { font-weight: 600; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; margin: 1rem 0 0.35rem 0; padding: 0 0.75rem; }
+html.light .sidebar-section { color: rgb(var(--gray-400)); }
+html.dark .sidebar-section { color: rgb(var(--gray-600)); }
+.sidebar .nav-item { display: flex; align-items: center; gap: 8px; padding: 0.4rem 0.75rem; border-radius: 6px; margin: 1px 0.5rem; text-decoration: none; font-size: 0.82rem; font-weight: 500; transition: all 0.15s ease; border-left: 2px solid transparent; }
+html.light .nav-item { color: rgb(var(--gray-600)); }
+html.light .nav-item:hover { background: rgb(var(--gray-50)); color: rgb(var(--primary-dark)); }
+html.light .nav-item.active { background: rgb(var(--accent-blue) / 0.08); color: rgb(var(--accent-blue)); border-left-color: rgb(var(--accent-blue)); }
+html.dark .nav-item { color: rgb(var(--gray-400)); }
+html.dark .nav-item:hover { background: rgb(var(--gray-800)); color: rgb(var(--gray-100)); }
+html.dark .nav-item.active { background: rgb(var(--accent-blue) / 0.12); color: rgb(var(--accent-blue)); border-left-color: rgb(var(--accent-blue)); }
+.sidebar .nav-item.sub { padding-left: 2rem; font-size: 0.78rem; font-weight: 400; }
+.theme-toggle-switch { width: 40px; height: 22px; border-radius: 11px; position: relative; transition: background 0.2s; }
+html.light .theme-toggle-switch { background: rgb(var(--gray-300)); }
+html.dark .theme-toggle-switch { background: rgb(var(--accent-blue)); }
+.theme-toggle-switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+html.dark .theme-toggle-switch::after { transform: translateX(18px); }
+body { padding-left: 270px; max-width: 1100px; }
+@media (max-width: 900px) { .sidebar { display: none; } body { padding-left: 1.5rem; max-width: 100%; } }
+html { scroll-behavior: smooth; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+html.light ::-webkit-scrollbar-thumb { background: rgb(var(--gray-300)); border-radius: 3px; }
+html.dark ::-webkit-scrollbar-thumb { background: rgb(var(--gray-700)); border-radius: 3px; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.content > * { animation: fadeIn 0.4s ease forwards; }
+.file-path { display: inline-flex; align-items: center; gap: 6px; padding: 0.35rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; margin: 0.25rem 0.25rem 0.25rem 0; }
+html.light .file-path { background: rgb(var(--gray-50)); color: rgb(var(--gray-600)); border: 1px solid rgb(var(--gray-200)); }
+html.dark .file-path { background: rgb(var(--gray-800)); color: rgb(var(--gray-400)); border: 1px solid rgb(var(--gray-700)); }
+.card-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.card-icon.blue { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); }
+.card-icon.green { background: rgb(var(--accent-green) / 0.1); color: rgb(var(--accent-green)); }
+.card-icon.purple { background: rgb(var(--accent-purple) / 0.1); color: rgb(var(--accent-purple)); }
+.card-icon.orange { background: rgb(var(--accent-orange) / 0.1); color: rgb(var(--accent-orange)); }
+.card-icon.red { background: rgb(var(--accent-red) / 0.1); color: rgb(var(--accent-red)); }
+.card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.card-title { font-size: 0.95rem; font-weight: 600; }
+html.light .card-title { color: rgb(var(--primary)); }
+html.dark .card-title { color: rgb(var(--gray-100)); }
+.card-subtitle { font-size: 0.78rem; }
+html.light .card-subtitle { color: rgb(var(--gray-500)); }
+html.dark .card-subtitle { color: rgb(var(--gray-500)); }
+ul, ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+li { margin: 0.25rem 0; }
+.diagram-wrap { position: relative; }
+.diagram-maximize { position: absolute; top: 12px; right: 12px; width: 30px; height: 30px; border-radius: 6px; border: 1px solid; cursor: pointer; z-index: 10; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+html.light .diagram-maximize { background: rgb(var(--gray-50)); border-color: rgb(var(--gray-200)); color: rgb(var(--gray-500)); }
+html.dark .diagram-maximize { background: rgb(var(--gray-800)); border-color: rgb(var(--gray-700)); color: rgb(var(--gray-400)); }
+.diagram-maximize:hover { background: rgb(var(--accent-blue) / 0.1); color: rgb(var(--accent-blue)); border-color: rgb(var(--accent-blue)); }
+</style>
+</head>
+<body>
+<!-- LEFT SIDEBAR -->
+<nav class="sidebar" id="sidebar">
+  <div style="padding: 1.25rem 1rem 1rem; border-bottom: 1px solid;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <div style="width: 32px; height: 32px; background: linear-gradient(135deg, rgb(var(--accent-blue)) 0%, rgb(var(--accent-purple)) 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <i data-lucide="layout-panel-left" style="width:18px;height:18px;color:white"></i>
+      </div>
+      <span class="sidebar-logo">AI v2 Frontend</span>
+    </div>
+  </div>
+
+  <div style="flex: 1; padding: 0.75rem 0; overflow-y: auto;">
+    <div class="sidebar-section">Research</div>
+    <a href="#industry" class="nav-item"><i data-lucide="globe" style="width:16px;height:16px"></i> 1. Industry Standards</a>
+    <a href="#industry-patterns" class="nav-item sub">Patterns</a>
+    <a href="#industry-libs" class="nav-item sub">Libraries</a>
+
+    <div class="sidebar-section">Architecture</div>
+    <a href="#component-tree" class="nav-item"><i data-lucide="git-branch" style="width:16px;height:16px"></i> 2. Component Tree</a>
+    <a href="#component-layers" class="nav-item sub">3-Layer Model</a>
+    <a href="#component-naming" class="nav-item sub">Naming</a>
+
+    <div class="sidebar-section">Design System</div>
+    <a href="#tokens" class="nav-item"><i data-lucide="palette" style="width:16px;height:16px"></i> 3. Design Tokens</a>
+    <a href="#tokens-colors" class="nav-item sub">Colors</a>
+    <a href="#tokens-typography" class="nav-item sub">Typography</a>
+    <a href="#tokens-spacing" class="nav-item sub">Spacing & Radius</a>
+
+    <div class="sidebar-section">State & Events</div>
+    <a href="#state" class="nav-item"><i data-lucide="database" style="width:16px;height:16px"></i> 4. State Management</a>
+    <a href="#events" class="nav-item"><i data-lucide="radio" style="width:16px;height:16px"></i> 5. Event System</a>
+
+    <div class="sidebar-section">Components</div>
+    <a href="#comp-panel" class="nav-item"><i data-lucide="layout" style="width:16px;height:16px"></i> 6. Component Specs</a>
+    <a href="#comp-panel-detail" class="nav-item sub">ai-panel</a>
+    <a href="#comp-header" class="nav-item sub">ai-header</a>
+    <a href="#comp-messages" class="nav-item sub">ai-message-list</a>
+    <a href="#comp-message" class="nav-item sub">ai-message</a>
+    <a href="#comp-composer" class="nav-item sub">ai-composer</a>
+    <a href="#comp-permission" class="nav-item sub">ai-permission-bar</a>
+    <a href="#comp-toolcall" class="nav-item sub">ai-tool-call</a>
+    <a href="#comp-typing" class="nav-item sub">ai-typing</a>
+
+    <div class="sidebar-section">Performance</div>
+    <a href="#perf-virtual" class="nav-item"><i data-lucide="zap" style="width:16px;height:16px"></i> 7. Virtual Scrolling</a>
+    <a href="#perf-streaming" class="nav-item sub">Streaming</a>
+    <a href="#perf-lazy" class="nav-item sub">Lazy Loading</a>
+
+    <div class="sidebar-section">Infrastructure</div>
+    <a href="#a11y" class="nav-item"><i data-lucide="accessibility" style="width:16px;height:16px"></i> 8. Accessibility</a>
+    <a href="#themes" class="nav-item"><i data-lucide="sun-moon" style="width:16px;height:16px"></i> 9. Theming</a>
+    <a href="#ipc" class="nav-item"><i data-lucide="cable" style="width:16px;height:16px"></i> 10. IPC Bridge</a>
+
+    <div class="sidebar-section">Layout</div>
+    <a href="#layout-position" class="nav-item"><i data-lucide="columns-3" style="width:16px;height:16px"></i> Right-Side Panel</a>
+    <a href="#wireframe" class="nav-item sub">Wireframe</a>
+  </div>
+
+  <div style="padding: 12px 16px; border-top: 1px solid;">
+    <div class="theme-toggle" onclick="toggleTheme()" style="display:flex; align-items:center; justify-content:space-between; padding: 10px 14px; border-radius: 8px; cursor: pointer;">
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500;">
+        <i data-lucide="sun" style="width:16px;height:16px"></i>
+        <span>Theme</span>
+      </div>
+      <div class="theme-toggle-switch"></div>
+    </div>
+  </div>
+</nav>
+
+<h1>OpenStorm AI v2 — Frontend Architecture</h1>
+<p>Complete frontend redesign using Web Components, Lit.js 3.x, and composable custom elements. Follows industry standards from Cursor, VS Code Copilot, and modern AI chat UIs.</p>
+<p style="opacity:0.6"><em>Design before implementation — all components, events, and flows defined for future coding.</em></p>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     1. INDUSTRY RESEARCH
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="industry">1. Industry Standards & Research</h2>
+
+<div class="callout callout-info">
+  <div class="callout-title">Design Philosophy</div>
+  We adopt proven patterns from the best AI coding tools (Cursor, VS Code Copilot, Claude Code) and modern WC libraries (Loquix, Chativa, Kitn AI). No re-invention — only integration of what works.
+</div>
+
+<h3 id="industry-patterns">Patterns to Adopt</h3>
+
+<table>
+  <tr><th>Pattern</th><th>Source</th><th>Why</th></tr>
+  <tr><td><strong>Agent-first sidebar</strong> with live status</td><td>Cursor 3 (2026)</td><td>Users need visibility into running sub-agents</td></tr>
+  <tr><td><strong>Unified <code>@</code> reference</strong> (files, code, symbols)</td><td>Cursor</td><td>Single trigger, clear categories — better than 15+ VS Code commands</td></tr>
+  <tr><td><strong>Tool confirmation carousel</strong> above input</td><td>VS Code Copilot (2026)</td><td>Funnel all approvals into unified UX</td></tr>
+  <tr><td><strong>Progressive disclosure</strong>: clean → detailed</td><td>Microsoft Copilot redesign</td><td>Start minimal, reveal complexity on demand</td></tr>
+  <tr><td><strong>Virtual scrolling</strong> for messages</td><td>VS Code #297349</td><td>Prevents DOM bloat in long sessions</td></tr>
+  <tr><td><strong>Streaming cursor</strong> for live text</td><td>Loquix, ChatGPT, Claude</td><td>Visual feedback during generation</td></tr>
+  <tr><td><strong>CSS custom properties</strong> for theming</td><td>Loquix, Carbon AI Chat</td><td>100+ tokens, zero hardcoded colors</td></tr>
+  <tr><td><strong>Shadow DOM</strong> encapsulation</td><td>All WC libraries</td><td>Style isolation, no CSS leaks</td></tr>
+  <tr><td><strong>Inline diff previews</strong> for file changes</td><td>Cursor, Copilot</td><td>Show what tools actually changed</td></tr>
+</table>
+
+<h3 id="industry-libs">Component Library References</h3>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon blue"><i data-lucide="box" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Loquix</div>
+        <div class="card-subtitle">Lit 3.x · 40 components · Shadow DOM</div>
+      </div>
+    </div>
+    <p>Slot-based composition, 100+ design tokens, <code>::part()</code> for deep styling. Light + dark themes included.</p>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green"><i data-lucide="message-square" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Chativa</div>
+        <div class="card-subtitle">LitElement · Pluggable connectors</div>
+      </div>
+    </div>
+    <p>Generative UI streaming, middleware pipeline, rich message types (text, image, card, carousel).</p>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple"><i data-lucide="layers" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Kitn AI Chat</div>
+        <div class="card-subtitle">SolidJS → WC facades · 50+ components</div>
+      </div>
+    </div>
+    <p>Three-layer: headless primitives → accessible UI → feature components. Framework-agnostic.</p>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange"><i data-lucide="building" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Carbon AI Chat</div>
+        <div class="card-subtitle">IBM Carbon · Lit WC</div>
+      </div>
+    </div>
+    <p>Float + custom layout modes. <code>cds-aichat-container</code> and <code>cds-aichat-custom-element</code>.</p>
+  </div>
+</div>
+
+<h3>Key Lesson from Failures</h3>
+
+<div class="callout callout-warning">
+  <div class="callout-title">VS Code Chat Performance Bug</div>
+  <p>Keeping all messages in DOM causes progressive lag. After hundreds of messages with code blocks, DOM grows to tens of thousands of nodes. <strong>Solution:</strong> Virtual scrolling — only render visible messages + buffer. Slack, Discord, and VS Code's own editor all use this pattern.</p>
+</div>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     2. COMPONENT TREE
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="component-tree">2. Component Tree</h2>
+
+<h3>Visual Layout</h3>
+
+<div class="mermaid">
+graph TB
+    subgraph Frontend["Frontend (Lit.js + Web Components)"]
+        A1["&lt;openstorm-ai-panel&gt;"]
+        A2["&lt;openstorm-ai-header&gt;"]
+        A3["&lt;openstorm-ai-message-list&gt;"]
+        A4["&lt;openstorm-ai-composer&gt;"]
+        A5["&lt;openstorm-ai-task-sidebar&gt;"]
+        A6["&lt;openstorm-ai-permission-bar&gt;"]
+        A7["&lt;openstorm-ai-status-bar&gt;"]
+        A1 --> A2
+        A1 --> A3
+        A1 --> A6
+        A1 --> A4
+        A1 --> A5
+        A1 --> A7
+    end
+
+    subgraph Messages["Message System"]
+        M1["&lt;openstorm-ai-message&gt;"]
+        M2["&lt;openstorm-ai-avatar&gt;"]
+        M3["&lt;openstorm-ai-content&gt;"]
+        M4["&lt;openstorm-ai-tool-call&gt;"]
+        M5["&lt;openstorm-ai-actions&gt;"]
+        M6["&lt;openstorm-ai-typing&gt;"]
+        A3 --> M1
+        A3 --> M6
+        M1 --> M2
+        M1 --> M3
+        M1 --> M4
+        M1 --> M5
+    end
+
+    subgraph Composer["Input System"]
+        C1["&lt;openstorm-ai-toolbar&gt;"]
+        C2["&lt;openstorm-ai-suggestions&gt;"]
+        A4 --> C1
+        A4 --> C2
+    end
+
+    A5 -->|"right side"| B1["Active Agents"]
+    A6 -->|"IPC Bridge"| B2["Tauri Commands"]
+    B2 -->|"Events"| A3
+
+    style A1 fill:#006ddd,color:#fff
+    style A2 fill:#8250df,color:#fff
+    style A3 fill:#1a7f37,color:#fff
+    style A4 fill:#ea580c,color:#fff
+    style A5 fill:#6e7681,color:#fff
+    style M1 fill:#1a7f37,color:#fff
+</div>
+
+<h3 id="component-layers">Three-Layer Component Model</h3>
+
+<div class="callout callout-info">
+  <div class="callout-title">Inspired by Kitn AI</div>
+  Headless primitives → accessible UI → feature components. Each layer depends only on the one below it.
+</div>
+
+<div class="grid">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon blue"><i data-lucide="brain" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Layer 1: Headless Primitives</div>
+        <div class="card-subtitle">Logic-only, no visual output</div>
+      </div>
+    </div>
+    <ul>
+      <li><code>useStreaming</code> — streaming text controller</li>
+      <li><code>useVirtualScroll</code> — virtual list logic</li>
+      <li><code>usePermission</code> — approval state machine</li>
+      <li><code>useMessageStore</code> — message CRUD</li>
+      <li><code>useAgentSpawner</code> — sub-agent lifecycle</li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon green"><i data-lucide="layout-grid" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Layer 2: UI Primitives</div>
+        <div class="card-subtitle">Generic, reusable, accessible</div>
+      </div>
+    </div>
+    <ul>
+      <li><code>&lt;os-button&gt;</code>, <code>&lt;os-input&gt;</code>, <code>&lt;os-badge&gt;</code></li>
+      <li><code>&lt;os-popover&gt;</code>, <code>&lt;os-tooltip&gt;</code></li>
+      <li><code>&lt;os-collapsible&gt;</code>, <code>&lt;os-tabs&gt;</code></li>
+      <li><code>&lt;os-avatar&gt;</code>, <code>&lt;os-spinner&gt;</code></li>
+      <li><code>&lt;os-code-block&gt;</code>, <code>&lt;os-markdown&gt;</code></li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon purple"><i data-lucide="bot" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Layer 3: AI Features</div>
+        <div class="card-subtitle">Domain-specific, composable</div>
+      </div>
+    </div>
+    <ul>
+      <li><code>&lt;openstorm-ai-panel&gt;</code></li>
+      <li><code>&lt;openstorm-ai-message-list&gt;</code></li>
+      <li><code>&lt;openstorm-ai-composer&gt;</code></li>
+      <li><code>&lt;openstorm-ai-permission-bar&gt;</code></li>
+      <li><code>&lt;openstorm-ai-tool-call&gt;</code></li>
+    </ul>
+  </div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon orange"><i data-lucide="columns-3" style="width:18px;height:18px"></i></div>
+      <div>
+        <div class="card-title">Layout</div>
+        <div class="card-subtitle">Panel arrangement & resizing</div>
+      </div>
+    </div>
+    <ul>
+      <li><code>&lt;openstorm-ai-panel&gt;</code> — full / panel / floating</li>
+      <li><code>&lt;openstorm-ai-split-view&gt;</code> — editor + chat</li>
+      <li><code>&lt;openstorm-ai-drawer&gt;</code> — slide-out details</li>
+    </ul>
+  </div>
+</div>
+
+<h3 id="component-naming">Naming Conventions</h3>
+
+<table>
+  <tr><th>Layer</th><th>Prefix</th><th>Example</th><th>Scope</th></tr>
+  <tr><td>Feature (AI)</td><td><code>openstorm-ai-</code></td><td><code>&lt;openstorm-ai-panel&gt;</code></td><td>AI panel specific</td></tr>
+  <tr><td>UI Primitive</td><td><code>os-</code></td><td><code>&lt;os-button&gt;</code></td><td>App-wide reusable</td></tr>
+  <tr><td>Layout</td><td><code>openstorm-</code></td><td><code>&lt;openstorm-split-view&gt;</code></td><td>App layout</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     3. DESIGN TOKENS
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="tokens">3. Design Tokens</h2>
+
+<div class="callout callout-info">
+  <div class="callout-title">How It Works</div>
+  All visual properties exposed as CSS custom properties on <code>:root</code>. Inherited CSS pierces Shadow DOM, so changing tokens on <code>:root</code> rebrands every component — no component code changes needed.
+</div>
+
+<h3 id="tokens-colors">Color Tokens</h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// DESIGN TOKENS — All colors, spacing, typography
+// ═══════════════════════════════════════════════════════════════
+
+// tokens.css — imported by TailwindElement base
+:root {
+  /* ── Base ── */
+  --os-bg:                  #0d1117;
+  --os-surface:             #161b22;
+  --os-surface-2:           #1c2128;
+  --os-surface-3:           #21262d;
+  --os-border:              #30363d;
+  --os-border-subtle:       #21262d;
+
+  /* ── Text ── */
+  --os-text:                #e6edf3;
+  --os-text-muted:          #8b949e;
+  --os-text-subtle:         #6e7681;
+
+  /* ── Brand ── */
+  --os-accent:              #58a6ff;
+  --os-accent-hover:        #79c0ff;
+  --os-success:             #3fb950;
+  --os-warning:             #d29922;
+  --os-danger:              #f85149;
+
+  /* ── AI Panel ── */
+  --os-ai-user-bg:          #1f6feb;
+  --os-ai-user-text:        #ffffff;
+  --os-ai-agent-bg:         #161b22;
+  --os-ai-agent-text:       #e6edf3;
+  --os-ai-tool-bg:          #1c2128;
+  --os-ai-tool-border:      #30363d;
+  --os-ai-permission-bg:    #1c2128;
+  --os-ai-composer-bg:      #0d1117;
+
+  /* ── Typography ── */
+  --os-font-sans:  -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --os-font-mono:  'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --os-text-xs:    0.75rem;
+  --os-text-sm:    0.8125rem;
+  --os-text-base:  0.875rem;
+  --os-text-lg:    1rem;
+
+  /* ── Spacing ── */
+  --os-space-1:    4px;
+  --os-space-2:    8px;
+  --os-space-3:    12px;
+  --os-space-4:    16px;
+  --os-space-5:    20px;
+  --os-space-6:    24px;
+
+  /* ── Radius ── */
+  --os-radius-sm:  4px;
+  --os-radius-md:  6px;
+  --os-radius-lg:  8px;
+  --os-radius-xl:  12px;
+
+  /* ── Shadows ── */
+  --os-shadow-sm:  0 1px 2px rgba(0,0,0,0.3);
+  --os-shadow-md:  0 4px 8px rgba(0,0,0,0.4);
+  --os-shadow-lg:  0 8px 16px rgba(0,0,0,0.5);
+
+  /* ── Transitions ── */
+  --os-transition-fast:    100ms ease;
+  --os-transition-normal:  200ms ease;
+  --os-transition-slow:    300ms ease;
+}</code></pre>
+
+<h3 id="tokens-typography">Typography</h3>
+
+<table>
+  <tr><th>Token</th><th>Value</th><th>Usage</th></tr>
+  <tr><td><code>--os-font-sans</code></td><td>Inter / system</td><td>Body text, UI labels</td></tr>
+  <tr><td><code>--os-font-mono</code></td><td>SF Mono / Fira Code</td><td>Code blocks, file paths</td></tr>
+  <tr><td><code>--os-text-xs</code></td><td>0.75rem (12px)</td><td>Badges, metadata</td></tr>
+  <tr><td><code>--os-text-sm</code></td><td>0.8125rem (13px)</td><td>Secondary text</td></tr>
+  <tr><td><code>--os-text-base</code></td><td>0.875rem (14px)</td><td>Body, messages</td></tr>
+  <tr><td><code>--os-text-lg</code></td><td>1rem (16px)</td><td>Headings</td></tr>
+</table>
+
+<h3 id="tokens-spacing">Spacing & Radius</h3>
+
+<div class="mermaid">
+graph LR
+    subgraph Spacing["Spacing Scale"]
+        S1["4px"]
+        S2["8px"]
+        S3["12px"]
+        S4["16px"]
+        S5["20px"]
+        S6["24px"]
+    end
+    subgraph Radius["Radius Scale"]
+        R1["4px-sm"]
+        R2["6px-md"]
+        R3["8px-lg"]
+        R4["12px-xl"]
+    end
+
+    style S1 fill:#1a7f37,color:#fff
+    style S4 fill:#006ddd,color:#fff
+    style R3 fill:#8250df,color:#fff
+    style R4 fill:#ea580c,color:#fff
+</div>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     4. STATE MANAGEMENT
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="state">4. State Management</h2>
+
+<h3>Central AI State Store</h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI STATE — Single source of truth
+// ═══════════════════════════════════════════════════════════════
+
+interface AIState {
+  // ── Session ──
+  sessionId:          string;
+  conversationId:     string;
+
+  // ── Messages ──
+  messages:           AIMessage[];
+  streamingMessage:   AIMessage | null;
+
+  // ── Agent ──
+  isStreaming:        boolean;
+  isThinking:         boolean;
+  currentModel:       string;
+  agentId:            string | null;
+
+  // ── Tools ──
+  pendingApprovals:   ToolApproval[];
+  activeToolCalls:    ToolCall[];
+
+  // ── Sub-agents ──
+  subAgents:          SubAgent[];
+
+  // ── Questions ──
+  pendingQuestions:   Question[];
+
+  // ── Context ──
+  projectPath:        string;
+  attachedFiles:      string[];
+  ragContext:         string | null;
+
+  // ── Metrics ──
+  totalTokens:        number;
+  totalCost:          number;
+  lastLatencyMs:      number;
+}
+
+interface AIMessage {
+  id:         string;
+  role:       'user' | 'assistant' | 'system' | 'tool';
+  content:    string;
+  timestamp:  number;
+  toolCalls?: ToolCall[];
+  metadata?:  MessageMetadata;
+  streaming?: boolean;
+}</code></pre>
+
+<h3>Component Subscription Pattern</h3>
+
+<pre><code class="language-typescript">// Components receive state via properties
+@customElement('openstorm-ai-panel')
+export class AIPanel extends TailwindElement {
+  @state() private state: AIState = DEFAULT_STATE;
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Subscribe to central store
+    aiStore.subscribe('messages', (msgs) => {
+      this.state = { ...this.state, messages: msgs };
+    });
+    aiStore.subscribe('isStreaming', (val) => {
+      this.state = { ...this.state, isStreaming: val };
+    });
+  }
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     5. EVENT SYSTEM
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="events">5. Event System</h2>
+
+<div class="callout callout-info">
+  <div class="callout-title">Rule</div>
+  All cross-component communication via typed CustomEvents. No direct method calls between components. Events use <code>bubbles: true, composed: true</code> to cross Shadow DOM boundaries.
+</div>
+
+<h3>Event Type Map</h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// EVENTS — Typed CustomEvents for all communication
+// ═══════════════════════════════════════════════════════════════
+
+// ── User → Panel ──
+'ai:send-message'         { message: string; attachments: string[] }
+'ai:cancel'               {}
+'ai:approve-tool'         { toolCallId: string; approved: boolean }
+'ai:answer-question'      { questionId: string; answers: Record }
+'ai:select-model'         { model: string }
+'ai:spawn-agent'          { task: string; role: string }
+
+// ── Panel → User ──
+'ai:text-delta'           { content: string; messageId: string }
+'ai:message-complete'     { message: AIMessage }
+'ai:tool-start'           { toolCall: ToolCall }
+'ai:tool-complete'        { toolCall: ToolCall; result: ToolResult }
+'ai:permission-request'   { approval: ToolApproval }
+'ai:permission-resolved'  { toolCallId: string; approved: boolean }
+'ai:question-asked'       { question: Question }
+'ai:stream-start'         { messageId: string }
+'ai:stream-end'           { messageId: string; usage: UsageMetadata }
+'ai:subagent-progress'    { task: string; status: string }
+'ai:error'                { message: string; code?: string }</code></pre>
+
+<h3>Event Flow Diagram</h3>
+
+<div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant P as Panel
+    participant ML as MessageList
+    participant C as Composer
+    participant IPC as IPC Bridge
+    participant B as Backend
+
+    U->>C: Type message + Enter
+    C->>P: ai:send-message event
+    P->>IPC: invoke('ai_v2_chat', ...)
+    IPC->>B: Tauri command
+    B-->>P: ai:text-delta events (streamed)
+    P->>ML: ai:text-delta → append to streamingMessage
+    B-->>P: ai:tool-start
+    P->>ML: ai:tool-start → render tool-call
+    B-->>P: ai:permission-request
+    P->>U: ai:permission-request → show approval card
+    U->>P: ai:approve-tool
+    P->>IPC: invoke('ai_v2_approve_tool', ...)
+    B-->>P: ai:stream-end
+    P->>ML: ai:stream-end → finalize message
+</div>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     6. COMPONENT SPECIFICATIONS
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="comp-panel">6. Component Specifications</h2>
+
+<h3 id="comp-panel-detail"><code>&lt;openstorm-ai-panel&gt;</code> — Root Orchestrator</h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI PANEL — Root component, manages layout + event routing
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-panel')
+export class AIPanel extends TailwindElement {
+  @property({ type: String })  layout: 'panel' | 'full' | 'floating' = 'panel';
+  @property({ type: String })  projectPath: string = '';
+  @state() private state: AIState = DEFAULT_STATE;
+
+  render() {
+    return html`
+      &lt;openstorm-ai-header
+        .model=${this.state.currentModel}
+        .isStreaming=${this.state.isStreaming}
+        @ai:select-model=${this.onModelSelect}
+      &gt;&lt;/openstorm-ai-header&gt;
+
+        &lt;div class="flex flex-1 min-h-0"&gt;
+          &lt;div class="flex flex-col flex-1 min-w-0"&gt;
+            &lt;openstorm-ai-message-list
+              .messages=${this.state.messages}
+              .streamingMessage=${this.state.streamingMessage}
+            &gt;&lt;/openstorm-ai-message-list&gt;
+
+            ${this.state.pendingQuestions.length
+              ? html\`&lt;openstorm-ai-question-card
+                  .questions=${this.state.pendingQuestions}
+                &gt;&lt;/openstorm-ai-question-card&gt;\`
+              : nothing}
+
+            ${this.state.pendingApprovals.length
+              ? html\`&lt;openstorm-ai-permission-bar
+                  .approvals=${this.state.pendingApprovals}
+                &gt;&lt;/openstorm-ai-permission-bar&gt;\`
+              : nothing}
+
+            &lt;openstorm-ai-composer
+              .isStreaming=${this.state.isStreaming}
+              .attachedFiles=${this.state.attachedFiles}
+            &gt;&lt;/openstorm-ai-composer&gt;
+
+            &lt;openstorm-ai-status-bar
+              .totalTokens=${this.state.totalTokens}
+              .totalCost=${this.state.totalCost}
+              .lastLatencyMs=${this.state.lastLatencyMs}
+            &gt;&lt;/openstorm-ai-status-bar&gt;
+          &lt;/div&gt;
+
+          &lt;openstorm-ai-task-sidebar
+            .subAgents=${this.state.subAgents}
+            class="w-[280px] flex-shrink-0 border-l border-[var(--os-border)]"
+          &gt;&lt;/openstorm-ai-task-sidebar&gt;
+        &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-header"><code>&lt;openstorm-ai-header&gt;</code></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI HEADER — Model selector, status, session controls
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-header')
+export class AIHeader extends TailwindElement {
+  @property({ type: String })  model: string = '';
+  @property({ type: Boolean }) isStreaming: boolean = false;
+  @property({ type: Boolean }) isConnected: boolean = true;
+
+  render() {
+    return html\`
+      &lt;div class="flex items-center justify-between px-4 py-2
+                  border-b border-[var(--os-border)]"&gt;
+        &lt;div class="flex items-center gap-2"&gt;
+          &lt;openstorm-ai-avatar role="agent" size="sm"&gt;&lt;/openstorm-ai-avatar&gt;
+          &lt;span class="text-sm font-semibold"&gt;OpenStorm AI&lt;/span&gt;
+          &lt;span class="w-2 h-2 rounded-full \${
+            this.isConnected ? 'bg-[var(--os-success)]' : 'bg-[var(--os-danger)]'
+          }"&gt;&lt;/span&gt;
+        &lt;/div&gt;
+
+        &lt;div class="flex items-center gap-2"&gt;
+          &lt;os-dropdown .value=\${this.model} @change=\${this.onModelChange}&gt;
+            \${MODELS.map(m =&gt; html\`&lt;os-option value=\${m.id}&gt;\${m.name}&lt;/os-option&gt;\`)}
+          &lt;/os-dropdown&gt;
+
+          \${this.isStreaming
+            ? html\`&lt;os-button variant="danger" size="sm" @click=\${this.onAbort}&gt;
+                &lt;iconify-icon icon="tabler:player-stop"&gt;&lt;/iconify-icon&gt; Stop
+              &lt;/os-button&gt;\`
+            : html\`&lt;os-button variant="ghost" size="sm" @click=\${this.onClear}&gt;
+                &lt;iconify-icon icon="tabler:trash"&gt;&lt;/iconify-icon&gt;
+              &lt;/os-button&gt;\`}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-messages"><code>&lt;openstorm-ai-message-list&gt;</code> <span class="badge badge-critical">Performance</span></h3>
+
+<div class="callout callout-warning">
+  <div class="callout-title">Virtual Scrolling Required</div>
+  This component MUST use virtual scrolling. Only visible messages + buffer are in the DOM at any time. See Section 7 for implementation details.
+</div>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI MESSAGE LIST — Virtual-scrolled message container
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-message-list')
+export class AIMessageList extends TailwindElement {
+  @property({ type: Array })  messages: AIMessage[] = [];
+  @property({ type: Object }) streamingMessage: AIMessage | null = null;
+  @query('.scroll-container') private scrollContainer!: HTMLElement;
+
+  private virtualScroll: VirtualScrollController;
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.virtualScroll = new VirtualScrollController({
+      itemHeight: 80,       // estimated
+      buffer: 5,            // extra items above/below
+      container: () =&gt; this.scrollContainer,
+      renderItem: (msg) =&gt; this.renderMessage(msg),
+    });
+  }
+
+  updated(changed) {
+    if (changed.has('messages')) {
+      this.virtualScroll.setItems(this.messages);
+      this.autoScroll();
+    }
+  }
+
+  private renderMessage(msg: AIMessage) {
+    return html\`
+      &lt;openstorm-ai-message
+        .message=\${msg}
+        @ai:approve-tool=\${this.onApprove}
+      &gt;&lt;/openstorm-ai-message&gt;
+    `;
+  }
+
+  render() {
+    return html\`
+      &lt;div class="scroll-container flex-1 overflow-y-auto px-4 py-3"&gt;
+        \${this.virtualScroll.render()}
+        \${this.streamingMessage
+          ? html\`&lt;openstorm-ai-message
+              .message=\${this.streamingMessage}
+              .streaming=\${true}
+            &gt;&lt;/openstorm-ai-message&gt;\`
+          : nothing}
+        &lt;div class="scroll-anchor"&gt;&lt;/div&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-message"><code>&lt;openstorm-ai-message&gt;</code></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI MESSAGE — Single message bubble
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-message')
+export class AIMessage extends TailwindElement {
+  @property({ type: Object }) message: AIMessage | null = null;
+  @property({ type: Boolean }) streaming: boolean = false;
+
+  render() {
+    if (!this.message) return nothing;
+    const isUser = this.message.role === 'user';
+
+    return html\`
+      &lt;div class="flex gap-3 py-3 \${isUser ? 'flex-row-reverse' : ''}"&gt;
+        &lt;openstorm-ai-avatar .role=\${this.message.role} size="sm"&gt;
+        &lt;/openstorm-ai-avatar&gt;
+
+        &lt;div class="flex flex-col \${isUser ? 'items-end' : 'items-start'} max-w-[85%]"&gt;
+          &lt;div class="text-xs text-[var(--os-text-subtle)] mb-1"&gt;
+            \${isUser ? 'You' : 'AI'} · \${this.formatTime(this.message.timestamp)}
+          &lt;/div&gt;
+
+          &lt;div class="rounded-lg px-3 py-2 \${isUser
+            ? 'bg-[var(--os-ai-user-bg)] text-[var(--os-ai-user-text)]'
+            : 'bg-[var(--os-ai-agent-bg)] text-[var(--os-ai-agent-text)]'}"&gt;
+
+            &lt;openstorm-ai-content
+              .content=\${this.message.content}
+              .streaming=\${this.streaming}
+            &gt;&lt;/openstorm-ai-content&gt;
+
+            \${this.message.toolCalls?.map(tc =&gt; html\`
+              &lt;openstorm-ai-tool-call .toolCall=\${tc} class="mt-2"&gt;
+              &lt;/openstorm-ai-tool-call&gt;
+            \`)}
+          &lt;/div&gt;
+
+          \${!isUser &amp;&amp; !this.streaming ? html\`
+            &lt;openstorm-ai-actions
+              .messageId=\${this.message.id}
+              .content=\${this.message.content}
+              class="mt-1"
+            &gt;&lt;/openstorm-ai-actions&gt;
+          \` : nothing}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-composer"><code>&lt;openstorm-ai-composer&gt;</code></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI COMPOSER — Input area with toolbar + suggestions
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-composer')
+export class AIComposer extends TailwindElement {
+  @property({ type: Boolean }) isStreaming: boolean = false;
+  @property({ type: Array })  attachedFiles: string[] = [];
+  @query('textarea') private textarea!: HTMLTextAreaElement;
+
+  render() {
+    return html\`
+      &lt;div class="border-t border-[var(--os-border)]
+                  bg-[var(--os-ai-composer-bg)]"&gt;
+
+        \${this.attachedFiles.length ? html\`
+          &lt;div class="flex gap-2 px-4 py-2
+                      border-b border-[var(--os-border-subtle)]"&gt;
+            \${this.attachedFiles.map(f =&gt; html\`
+              &lt;os-badge variant="info"&gt;
+                \${f.split('/').pop()}
+                &lt;os-icon icon="tabler:x"
+                  @click=\${() =&gt; this.removeFile(f)}&gt;
+                &lt;/os-icon&gt;
+              &lt;/os-badge&gt;
+            \`)}
+          &lt;/div&gt;
+        \` : nothing}
+
+        &lt;div class="flex items-end gap-2 p-3"&gt;
+          &lt;openstorm-ai-toolbar
+            @ai:attach-file=\${this.onAttach}
+          &gt;&lt;/openstorm-ai-toolbar&gt;
+
+          &lt;textarea
+            class="flex-1 bg-transparent text-[var(--os-text)]
+                   resize-none outline-none min-h-[40px] max-h-[200px] text-sm"
+            placeholder="Ask AI anything... (@ to reference files)"
+            @keydown=\${this.onKeyDown}
+            ?disabled=\${this.isStreaming}
+          &gt;&lt;/textarea&gt;
+
+          \${this.isStreaming
+            ? html\`&lt;os-button variant="danger" size="sm"
+                @click=\${this.onCancel}&gt;
+                &lt;iconify-icon icon="tabler:player-stop"&gt;&lt;/iconify-icon&gt;
+              &lt;/os-button&gt;\`
+            : html\`&lt;os-button variant="primary" size="sm"
+                @click=\${this.onSend}
+                ?disabled=\${!this.textarea?.value.trim()}&gt;
+                &lt;iconify-icon icon="tabler:send"&gt;&lt;/iconify-icon&gt;
+              &lt;/os-button&gt;\`}
+        &lt;/div&gt;
+
+        &lt;openstorm-ai-suggestions&gt;&lt;/openstorm-ai-suggestions&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-permission"><code>&lt;openstorm-ai-permission-bar&gt;</code> <span class="badge badge-high">New</span></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI PERMISSION BAR — Tool approval carousel (VS Code pattern)
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-permission-bar')
+export class AIPermissionBar extends TailwindElement {
+  @property({ type: Array }) approvals: ToolApproval[] = [];
+
+  render() {
+    if (!this.approvals.length) return nothing;
+
+    return html\`
+      &lt;div class="border-t border-[var(--os-border)]
+                  bg-[var(--os-ai-permission-bg)] px-4 py-3"&gt;
+
+        &lt;div class="text-xs font-semibold text-[var(--os-text-muted)] mb-2"&gt;
+          Tool Approval Required (\${this.approvals.length})
+        &lt;/div&gt;
+
+        &lt;div class="flex gap-2 overflow-x-auto"&gt;
+          \${this.approvals.map(a =&gt; html\`
+            &lt;div class="flex-shrink-0 border border-[var(--os-border)]
+                        rounded-lg p-3 min-w-[280px]
+                        bg-[var(--os-surface)]"&gt;
+
+              &lt;div class="flex items-center gap-2 mb-2"&gt;
+                &lt;iconify-icon icon="tabler:tool"
+                  class="text-[var(--os-warning)]"&gt;
+                &lt;/iconify-icon&gt;
+                &lt;span class="font-semibold text-sm"&gt;\${a.toolName}&lt;/span&gt;
+                &lt;os-badge variant="\${a.riskLevel === 'high'
+                  ? 'danger' : 'warning'}"&gt;
+                  \${a.riskLevel}
+                &lt;/os-badge&gt;
+              &lt;/div&gt;
+
+              &lt;div class="text-xs text-[var(--os-text-muted)] mb-3 line-clamp-2"&gt;
+                \${a.argsSummary}
+              &lt;/div&gt;
+
+              &lt;div class="flex gap-2"&gt;
+                &lt;os-button variant="danger" size="sm"
+                  @click=\${() =&gt; this.onDecision(a.toolCallId, false)}&gt;
+                  Deny
+                &lt;/os-button&gt;
+                &lt;os-button variant="ghost" size="sm"
+                  @click=\${() =&gt; this.onDecision(a.toolCallId, true)}&gt;
+                  Allow Once
+                &lt;/os-button&gt;
+                &lt;os-button variant="primary" size="sm"
+                  @click=\${() =&gt; this.onDecision(a.toolCallId, true)}&gt;
+                  Always Allow
+                &lt;/os-button&gt;
+              &lt;/div&gt;
+            &lt;/div&gt;
+          \`)}
+        &lt;/div&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-toolcall"><code>&lt;openstorm-ai-tool-call&gt;</code></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI TOOL CALL — Expandable tool invocation display
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-tool-call')
+export class AIToolCall extends TailwindElement {
+  @property({ type: Object }) toolCall: ToolCall | null = null;
+  @state() private expanded: boolean = false;
+
+  private get icon(): string {
+    const icons: Record&lt;string, string&gt; = {
+      'read_file':      'tabler:file-code',
+      'write_file':     'tabler:file-pencil',
+      'search_files':   'tabler:search',
+      'run_command':    'tabler:terminal',
+      'list_directory': 'tabler:folder-open',
+    };
+    return icons[this.toolCall?.name ?? ''] ?? 'tabler:tool';
+  }
+
+  render() {
+    if (!this.toolCall) return nothing;
+
+    return html\`
+      &lt;div class="rounded-md border border-[var(--os-ai-tool-border)]
+                  bg-[var(--os-ai-tool-bg)] text-xs"&gt;
+        &lt;button class="flex items-center gap-2 w-full px-3 py-2
+                       hover:bg-[var(--os-surface-2)] transition-colors"
+                @click=\${() =&gt; this.expanded = !this.expanded}&gt;
+          &lt;iconify-icon icon=\${this.icon}
+            class="text-[var(--os-accent)]"&gt;
+          &lt;/iconify-icon&gt;
+          &lt;span class="font-medium"&gt;\${this.toolCall.name}&lt;/span&gt;
+          &lt;span class="text-[var(--os-text-subtle)]"&gt;
+            \${this.toolCall.status}
+          &lt;/span&gt;
+          &lt;iconify-icon
+            icon=\${this.expanded ? 'tabler:chevron-up' : 'tabler:chevron-down'}
+            class="ml-auto text-[var(--os-text-subtle)]"&gt;
+          &lt;/iconify-icon&gt;
+        &lt;/button&gt;
+
+        \${this.expanded ? html\`
+          &lt;div class="px-3 pb-2 border-t
+                      border-[var(--os-border-subtle)]"&gt;
+            &lt;div class="mt-2 text-[var(--os-text-subtle)]"&gt;
+              &lt;strong&gt;Args:&lt;/strong&gt;
+              &lt;pre class="mt-1 text-xs overflow-x-auto"&gt;
+                \${JSON.stringify(this.toolCall.args, null, 2)}
+              &lt;/pre&gt;
+            &lt;/div&gt;
+            \${this.toolCall.result ? html\`
+              &lt;div class="mt-2 text-[var(--os-text-muted)]"&gt;
+                &lt;strong&gt;Result:&lt;/strong&gt;
+                &lt;pre class="mt-1 text-xs overflow-x-auto
+                            max-h-48 overflow-y-auto"&gt;
+                  \${this.toolCall.result.output}
+                &lt;/pre&gt;
+              &lt;/div&gt;
+            \` : nothing}
+          &lt;/div&gt;
+        \` : nothing}
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<h3 id="comp-typing"><code>&lt;openstorm-ai-typing&gt;</code></h3>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// AI TYPING — Animated streaming indicator
+// ═══════════════════════════════════════════════════════════════
+
+@customElement('openstorm-ai-typing')
+export class AITyping extends TailwindElement {
+  static styles = css\`
+    .typing-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--os-accent);
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+    .typing-dot:nth-child(1) { animation-delay: 0s; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+  \`;
+
+  render() {
+    return html\`
+      &lt;div class="flex items-center gap-1 px-3 py-2"&gt;
+        &lt;div class="typing-dot"&gt;&lt;/div&gt;
+        &lt;div class="typing-dot"&gt;&lt;/div&gt;
+        &lt;div class="typing-dot"&gt;&lt;/div&gt;
+      &lt;/div&gt;
+    `;
+  }
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     7. PERFORMANCE
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="perf-virtual">7. Performance Strategy</h2>
+
+<h3 id="perf-virtual-scroll">Virtual Scrolling</h3>
+
+<div class="mermaid">
+graph TD
+    A["Message List"] --> B{"Scroll Event"}
+    B --> C["Calculate Visible Range"]
+    C --> D["Render visible + buffer"]
+    C --> E["Top Spacer"]
+    C --> F["Bottom Spacer"]
+    D --> G["Only 50 DOM nodes max"]
+    E --> H["Correct scroll height"]
+    F --> H
+
+    style A fill:#006ddd,color:#fff
+    style D fill:#1a7f37,color:#fff
+    style G fill:#8250df,color:#fff
+</div>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// VIRTUAL SCROLL CONTROLLER — Headless logic for virtual lists
+// ═══════════════════════════════════════════════════════════════
+
+class VirtualScrollController {
+  private items: any[] = [];
+  private visibleRange = { start: 0, end: 50 };
+  private itemHeight: number;
+  private buffer: number;
+
+  constructor(config: { itemHeight: number; buffer: number }) {
+    this.itemHeight = config.itemHeight;
+    this.buffer = config.buffer;
+  }
+
+  // Only return visible items + buffer
+  getVisibleItems(): any[] {
+    return this.items.slice(
+      Math.max(0, this.visibleRange.start - this.buffer),
+      Math.min(this.items.length, this.visibleRange.end + this.buffer)
+    );
+  }
+
+  // Update range on scroll
+  onScroll(scrollTop: number, containerHeight: number) {
+    const start = Math.floor(scrollTop / this.itemHeight);
+    const end = start + Math.ceil(containerHeight / this.itemHeight);
+    this.visibleRange = { start, end };
+  }
+
+  // Spacer heights for correct scroll position
+  getTopSpacer(): number {
+    return Math.max(0, this.visibleRange.start - this.buffer) * this.itemHeight;
+  }
+
+  getBottomSpacer(): number {
+    return Math.max(0, this.items.length - this.visibleRange.end - this.buffer)
+      * this.itemHeight;
+  }
+}</code></pre>
+
+<h3 id="perf-streaming">Streaming Optimization</h3>
+
+<table>
+  <tr><th>Technique</th><th>Why</th></tr>
+  <tr><td><strong>Debounce text deltas</strong></td><td>Batch rapid deltas into single re-renders (16ms frame budget)</td></tr>
+  <tr><td><strong>Append-only DOM</strong></td><td>Never modify existing text nodes, only append new ones</td></tr>
+  <tr><td><strong>Lazy code highlighting</strong></td><td>Only syntax-highlight complete code blocks, not mid-stream fragments</td></tr>
+  <tr><td><strong>Deferred markdown</strong></td><td>Render markdown only when stream pauses or completes</td></tr>
+</table>
+
+<h3 id="perf-lazy">Bundle Splitting</h3>
+
+<pre><code class="language-typescript">// Lazy-load heavy components
+const AIToolCall = () =&gt; import('./ai/ai-tool-call.js');
+const AIMarkdown = () =&gt; import('./primitives/os-markdown.js');
+const OSCodeBlock = () =&gt; import('./primitives/os-code-block.js');
+
+// Dynamic import for code highlighting
+async function highlightCode(code: string, lang: string) {
+  const { highlight } = await import('./lib/code-highlighter.js');
+  return highlight(code, lang);
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     8. ACCESSIBILITY
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="a11y">8. Accessibility</h2>
+
+<table>
+  <tr><th>Requirement</th><th>Implementation</th></tr>
+  <tr><td><strong>Keyboard navigation</strong></td><td>All interactive elements focusable with Tab, arrow keys in lists</td></tr>
+  <tr><td><strong>ARIA roles</strong></td><td><code>role="log"</code> on message list, <code>role="article"</code> on messages, <code>role="complementary"</code> on sidebar</td></tr>
+  <tr><td><strong>Live regions</strong></td><td><code>aria-live="polite"</code> on message list, <code>"assertive"</code> for errors</td></tr>
+  <tr><td><strong>Focus management</strong></td><td>Focus returns to composer after sending, trapped in permission dialogs</td></tr>
+  <tr><td><strong>Color contrast</strong></td><td>All text meets WCAG AA (4.5:1), tokens designed for both themes</td></tr>
+  <tr><td><strong>Screen reader</strong></td><td>Tool calls announced: "AI is using tool: read_file on auth.rs"</td></tr>
+  <tr><td><strong>Reduced motion</strong></td><td><code>@media (prefers-reduced-motion)</code> disables all animations</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     9. THEMING
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="themes">9. Theming</h2>
+
+<h3>Dark Theme (Default)</h3>
+
+<pre><code class="language-typescript">// Tokens already defined in Section 3 — GitHub Dark default
+// Applied automatically via :root variables</code></pre>
+
+<h3>Light Theme</h3>
+
+<pre><code class="language-typescript">:root[data-theme="light"] {
+  --os-bg:                  #ffffff;
+  --os-surface:             #f6f8fa;
+  --os-surface-2:           #f0f2f5;
+  --os-border:              #d0d7de;
+  --os-text:                #1f2328;
+  --os-text-muted:          #656d76;
+  --os-text-subtle:         #8b949e;
+
+  --os-ai-user-bg:          #0969da;
+  --os-ai-user-text:        #ffffff;
+  --os-ai-agent-bg:         #f6f8fa;
+  --os-ai-agent-text:       #1f2328;
+  --os-ai-composer-bg:      #ffffff;
+  --os-ai-composer-border:  #d0d7de;
+}</code></pre>
+
+<h3>Theme Switching</h3>
+
+<pre><code class="language-typescript">// Toggle theme
+document.documentElement.setAttribute('data-theme', 'light');
+// Reset to dark
+document.documentElement.removeAttribute('data-theme');</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     10. IPC BRIDGE
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="ipc">10. IPC Bridge</h2>
+
+<div class="mermaid">
+graph LR
+    subgraph Frontend["Frontend"]
+        F1["Panel"]
+        F2["MessageList"]
+        F3["Composer"]
+    end
+    subgraph Bridge["IPC Bridge"]
+        B1["invoke()"]
+        B2["listen()"]
+    end
+    subgraph Backend["Backend (Rust)"]
+        R1["ai_v2_chat"]
+        R2["ai_v2_approve_tool"]
+        R3["ai_v2_abort"]
+    end
+
+    F3 -->|"send-message"| B1
+    B1 --> R1
+    R1 -->|"text-delta"| B2
+    B2 --> F2
+    F1 -->|"approve"| B1
+    B1 --> R2
+
+    style B1 fill:#006ddd,color:#fff
+    style B2 fill:#8250df,color:#fff
+    style R1 fill:#1a7f37,color:#fff
+    style R2 fill:#1a7f37,color:#fff
+</div>
+
+<pre><code class="language-typescript">// ═══════════════════════════════════════════════════════════════
+// IPC BRIDGE — Frontend ↔ Backend communication
+// ═══════════════════════════════════════════════════════════════
+
+import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
+
+// ── Commands (Frontend → Backend) ──
+export const aiCommands = {
+  sendMessage: (msg, history, project, model) =&gt;
+    invoke('ai_v2_chat', {
+      request: { message: msg, history, project_path: project, model }
+    }),
+
+  approveTool: (toolCallId, approved) =&gt;
+    invoke('ai_v2_approve_tool', {
+      request: { tool_call_id: toolCallId, approved }
+    }),
+
+  abort: () =&gt;
+    invoke('ai_v2_abort'),
+
+  spawnAgent: (task, role) =&gt;
+    invoke('ai_v2_spawn_agent', {
+      request: { task, role, parent_id: null }
+    }),
+
+  answerQuestion: (answers) =&gt;
+    invoke('ai_v2_question_response', {
+      request: { answers }
+    }),
+};
+
+// ── Events (Backend → Frontend) ──
+export function listenToAgentEvents(dispatch) {
+  const unlisteners = [
+    listen('ai-v2:text-delta', (e) =&gt;
+      dispatch({ type: 'text-delta', ...e.payload })),
+    listen('ai-v2:tool-use', (e) =&gt;
+      dispatch({ type: 'tool-use', toolCall: e.payload })),
+    listen('ai-v2:tool-result', (e) =&gt;
+      dispatch({ type: 'tool-result', ...e.payload })),
+    listen('ai-v2:tool-approval-required', (e) =&gt;
+      dispatch({ type: 'permission-request', approval: e.payload })),
+    listen('ai-v2:question-request', (e) =&gt;
+      dispatch({ type: 'question-asked', questions: e.payload })),
+    listen('ai-v2:error', (e) =&gt;
+      dispatch({ type: 'error', message: e.payload.message })),
+  ];
+  return () =&gt; unlisteners.forEach(unlisten =&gt; unlisten());
+}</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     11. FILE STRUCTURE
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="files">11. File Structure</h2>
+
+<pre><code>src/components/ai-v2/
+├── core/
+│   ├── ai-state.ts              # Central state store
+│   ├── ai-events.ts             # Event type definitions
+│   ├── ai-ipc.ts                # Tauri IPC bridge
+│   └── ai-stream.ts             # Streaming controller
+│
+├── primitives/                  # Layer 2: Generic UI
+│   ├── os-button.ts
+│   ├── os-badge.ts
+│   ├── os-avatar.ts
+│   ├── os-spinner.ts
+│   ├── os-dropdown.ts
+│   ├── os-collapsible.ts
+│   ├── os-code-block.ts
+│   └── os-markdown.ts
+│
+├── ai/                          # Layer 3: AI Features
+│   ├── ai-panel.ts              # Root orchestrator
+│   ├── ai-header.ts             # Model selector, status
+│   ├── ai-message-list.ts       # Virtual-scrolled messages
+│   ├── ai-message.ts            # Single message bubble
+│   ├── ai-content.ts            # Markdown + code rendering
+│   ├── ai-avatar.ts             # Role-based avatar
+│   ├── ai-actions.ts            # Copy, retry, feedback
+│   ├── ai-tool-call.ts          # Tool invocation display
+│   ├── ai-permission-bar.ts     # Approval carousel
+│   ├── ai-question-card.ts      # Interactive Q&A
+│   ├── ai-composer.ts           # Input area
+│   ├── ai-toolbar.ts            # Composer toolbar
+│   ├── ai-suggestions.ts        # Quick action chips
+│   ├── ai-typing.ts             # Streaming indicator
+│   └── ai-status-bar.ts         # Metrics display
+│
+├── layout/
+│   ├── ai-task-sidebar.ts       # Sub-agent list
+│   └── ai-split-view.ts         # Editor + chat split
+│
+├── styles/
+│   ├── tokens.css               # Design tokens
+│   ├── base.css                 # Base component styles
+│   └── animations.css           # Shared animations
+│
+└── lib/
+    ├── virtual-scroll.ts        # Virtual scrolling controller
+    ├── markdown-renderer.ts     # Markdown → HTML
+    ├── code-highlighter.ts      # Syntax highlighting
+    └── formatters.ts            # Time, token, cost formatters</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     12. IMPLEMENTATION PHASES
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="phases">12. Implementation Phases</h2>
+
+<div class="mermaid">
+graph LR
+    P1["Phase 1: Foundation"] --> P2["Phase 2: Primitives"]
+    P2 --> P3["Phase 3: Core AI"]
+    P3 --> P4["Phase 4: Tools"]
+    P3 --> P5["Phase 5: Interactions"]
+    P3 --> P6["Phase 6: Layout"]
+    P4 --> P7["Phase 7: Performance"]
+    P5 --> P7
+    P6 --> P7
+    P7 --> P8["Phase 8: Polish"]
+
+    style P1 fill:#006ddd,color:#fff
+    style P2 fill:#8250df,color:#fff
+    style P3 fill:#1a7f37,color:#fff
+    style P7 fill:#ea580c,color:#fff
+    style P8 fill:#f85149,color:#fff
+</div>
+
+<table>
+  <tr><th>Phase</th><th>Components</th><th>Dependencies</th></tr>
+  <tr><td><strong>1. Foundation</strong></td><td>Design tokens, <code>ai-state.ts</code>, <code>ai-events.ts</code>, <code>ai-ipc.ts</code></td><td>None</td></tr>
+  <tr><td><strong>2. Primitives</strong></td><td><code>os-button</code>, <code>os-badge</code>, <code>os-avatar</code>, <code>os-spinner</code>, <code>os-collapsible</code></td><td>Phase 1</td></tr>
+  <tr><td><strong>3. Core AI</strong></td><td><code>ai-panel</code>, <code>ai-header</code>, <code>ai-message-list</code>, <code>ai-message</code>, <code>ai-content</code>, <code>ai-composer</code></td><td>Phase 1+2</td></tr>
+  <tr><td><strong>4. Tools</strong></td><td><code>ai-tool-call</code>, <code>ai-permission-bar</code>, <code>ai-permission-card</code></td><td>Phase 3</td></tr>
+  <tr><td><strong>5. Interactions</strong></td><td><code>ai-question-card</code>, <code>ai-suggestions</code>, <code>ai-toolbar</code>, <code>ai-status-bar</code></td><td>Phase 3</td></tr>
+  <tr><td><strong>6. Layout</strong></td><td><code>ai-task-sidebar</code>, <code>ai-split-view</code></td><td>Phase 3</td></tr>
+  <tr><td><strong>7. Performance</strong></td><td>Virtual scrolling, streaming optimization, lazy loading</td><td>Phase 3</td></tr>
+  <tr><td><strong>8. Polish</strong></td><td>Themes (light/dark), animations, accessibility audit</td><td>All</td></tr>
+</table>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     13. WIREFRAME
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="wireframe">13. Wireframe Layout</h2>
+
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│ ┌─────────────────────────────────────────────────────────────┐ │
+│ │ [🤖] OpenStorm AI            [GPT-4 ▾] [●] [🗑] [⏹]       │ │
+│ ├─────────────────────────────────────────────────────────────┤ │
+│ │ ┌──────────────────────────────────────────┐ ┌──────────┐   │ │
+│ │ │                                          │ │ TASKS    │   │ │
+│ │ │  You                                     │ │          │   │ │
+│ │ │  What does auth.rs do?                  │ │ ● Agent1 │   │ │
+│ │ │                                          │ │ ○ Agent2 │   │ │
+│ │ ├──────────────────────────────────────────┤ │          │   │ │
+│ │ │                                          │ │          │   │ │
+│ │ │  AI                                      │ │          │   │ │
+│ │ │  The auth.rs file handles...             │ │          │   │ │
+│ │ │                                          │ ├──────────┤   │ │
+│ │ │  ┌────────────────────────────────────┐  │ │ STATUS   │   │ │
+│ │ │  │ 📄 read_file · auth.rs        done │  │ │          │   │ │
+│ │ │  │    ┌─ expanded result ──────────┐  │  │ │ Tok:1234 │   │ │
+│ │ │  │    │ pub fn authenticate()...   │  │  │ │ Cost:$.02│   │ │
+│ │ │  │    └────────────────────────────┘  │  │ │ Lat:1.2s │   │ │
+│ │ │  └────────────────────────────────────┘  │ │          │   │ │
+│ │ │                                          │ │          │   │ │
+│ │ │  [Copy] [Retry] [👍] [👎]              │ │          │   │ │
+│ │ │                                          │ │          │   │ │
+│ │ │  ⠋ ⠙ ⠹                                  │ │          │   │ │
+│ │ ├──────────────────────────────────────────┤ │          │   │ │
+│ │ │ ⚠ Tool Approval: write_file (HIGH RISK) │ │          │   │ │
+│ │ │ [Deny] [Allow Once] [Always Allow]       │ │          │   │ │
+│ │ ├──────────────────────────────────────────┤ │          │   │ │
+│ │ │ [📎] [RAG: ON] │ Ask anything...  │ [➤] │ │          │   │ │
+│ │ │                  (@ to reference files)  │ │          │   │ │
+│ │ └──────────────────────────────────────────┘ └──────────┘   │
+└─────────────────────────────────────────────────────────────────┘</code></pre>
+
+<hr class="section-divider">
+
+<!-- ══════════════════════════════════════════════════════════════
+     14. SUMMARY
+     ══════════════════════════════════════════════════════════════ -->
+<h2 id="summary">14. Summary</h2>
+
+<div class="grid">
+  <div class="stat" style="text-align:center;">
+    <div class="stat-icon" style="background:rgb(var(--accent-blue) / 0.1); color:rgb(var(--accent-blue)); margin:0 auto;">
+      <i data-lucide="layers" style="width:20px;height:20px"></i>
+    </div>
+    <div class="stat-value">29</div>
+    <div class="stat-label">Components</div>
+  </div>
+  <div class="stat" style="text-align:center;">
+    <div class="stat-icon" style="background:rgb(var(--accent-green) / 0.1); color:rgb(var(--accent-green)); margin:0 auto;">
+      <i data-lucide="file-code" style="width:20px;height:20px"></i>
+    </div>
+    <div class="stat-value">~40</div>
+    <div class="stat-label">Files</div>
+  </div>
+  <div class="stat" style="text-align:center;">
+    <div class="stat-icon" style="background:rgb(var(--accent-purple) / 0.1); color:rgb(var(--accent-purple)); margin:0 auto;">
+      <i data-lucide="palette" style="width:20px;height:20px"></i>
+    </div>
+    <div class="stat-value">100+</div>
+    <div class="stat-label">Design Tokens</div>
+  </div>
+  <div class="stat" style="text-align:center;">
+    <div class="stat-icon" style="background:rgb(var(--accent-orange) / 0.1); color:rgb(var(--accent-orange)); margin:0 auto;">
+      <i data-lucide="zap" style="width:20px;height:20px"></i>
+    </div>
+    <div class="stat-value">8</div>
+    <div class="stat-label">Phases</div>
+  </div>
+</div>
+
+<table>
+  <tr><th>Aspect</th><th>Decision</th></tr>
+  <tr><td><strong>Rendering</strong></td><td>Web Components (Custom Elements v1) with Shadow DOM</td></tr>
+  <tr><td><strong>Framework</strong></td><td>Lit.js 3.x + Tailwind CSS 4</td></tr>
+  <tr><td><strong>State</strong></td><td>Central store + CustomEvents (composed: true)</td></tr>
+  <tr><td><strong>Virtual scroll</strong></td><td>Custom controller, only visible messages in DOM</td></tr>
+  <tr><td><strong>Streaming</strong></td><td>Debounced deltas, append-only, lazy markdown</td></tr>
+  <tr><td><strong>Theming</strong></td><td>100+ CSS custom properties, dark + light themes</td></tr>
+  <tr><td><strong>Icons</strong></td><td>Iconify (tabler, lucide)</td></tr>
+  <tr><td><strong>Accessibility</strong></td><td>WCAG AA, ARIA live regions, keyboard nav</td></tr>
+  <tr><td><strong>Component breakdown</strong></td><td>17 AI features + 9 primitives + 3 layout = 29 total</td></tr>
+  <tr><td><strong>Backend commands</strong></td><td>6 Tauri commands (ai_v2_chat, approve, abort, spawn, status, question)</td></tr>
+</table>
+
+<div class="callout callout-tip">
+  <div class="callout-title">Next Steps</div>
+  <ol>
+    <li>Open this file in browser to view with sidebar navigation and mermaid diagrams</li>
+    <li>Review and approve the design before implementation begins</li>
+    <li>Start with Phase 1 (Foundation) — tokens, state, IPC bridge</li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     SCRIPTS
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+// Theme toggle
+function toggleTheme() {
+  const html = document.documentElement;
+  const isLight = html.classList.contains('light');
+  html.classList.toggle('light', !isLight);
+  html.classList.toggle('dark', isLight);
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  localStorage.setItem('theme', isLight ? 'dark' : 'light');
+}
+// Load saved theme
+const savedTheme = localStorage.getItem('theme') || 'light';
+document.documentElement.classList.toggle('light', savedTheme === 'light');
+document.documentElement.classList.toggle('dark', savedTheme === 'dark');
+document.documentElement.setAttribute('data-theme', savedTheme);
+
+// Initialize Lucide icons
+lucide.createIcons();
+
+// Initialize Mermaid
+mermaid.initialize({
+  startOnLoad: true,
+  theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default',
+  securityLevel: 'loose',
+});
+
+// Re-init mermaid on theme change
+const observer = new MutationObserver(() => {
+  const isDark = document.documentElement.classList.contains('dark');
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: isDark ? 'dark' : 'default',
+    securityLevel: 'loose',
+  });
+  document.querySelectorAll('.mermaid[data-processed]').forEach(el => {
+    el.removeAttribute('data-processed');
+  });
+  mermaid.run();
+});
+observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+
+// Sidebar active state on scroll
+const sections = document.querySelectorAll('h2[id]');
+const navItems = document.querySelectorAll('.nav-item[href]');
+window.addEventListener('scroll', () => {
+  let current = '';
+  sections.forEach(section => {
+    const sectionTop = section.offsetTop;
+    if (pageYOffset >= sectionTop - 100) {
+      current = section.getAttribute('id');
+    }
+  });
+  navItems.forEach(item => {
+    item.classList.remove('active');
+    if (item.getAttribute('href') === '#' + current) {
+      item.classList.add('active');
+    }
+  });
+});
+</script>
+
+</body>
+</html>

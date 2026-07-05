@@ -165,6 +165,11 @@ export class ImageViewer extends TailwindElement() {
     if (!this.isConnected) return;
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
+    // Only intercept when this component has focus
+    const path = e.composedPath();
+    const hasFocus = path.some(el => el === this || el instanceof ShadowRoot && el.host === this);
+    if (!hasFocus) return;
+
     const isMac = navigator.platform.toLowerCase().includes('mac');
     const modKey = isMac ? e.metaKey : e.ctrlKey;
 

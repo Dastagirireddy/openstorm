@@ -107,17 +107,19 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   private _boundHandleClear!: () => void;
   private _boundHandleClickOutside!: (e: MouseEvent) => void;
   private _boundHandleClearResults!: () => void;
+  private _boundHandleKeyDown!: (e: KeyboardEvent) => void;
 
   override connectedCallback(): void {
     super.connectedCallback();
-    document.addEventListener('keydown', this.handleKeyDown.bind(this));
     // Bind handlers
+    this._boundHandleKeyDown = this.handleKeyDown.bind(this);
     this._boundHandleRun = this.handleRun.bind(this);
     this._boundHandleCancel = this.handleCancel.bind(this);
     this._boundHandleFormatSql = this.handleFormatSql.bind(this);
     this._boundHandleClear = this.handleClear.bind(this);
     this._boundHandleClickOutside = this.handleClickOutside.bind(this);
     this._boundHandleClearResults = this.handleClearResults.bind(this);
+    document.addEventListener('keydown', this._boundHandleKeyDown);
     document.addEventListener('click', this._boundHandleClickOutside);
     document.addEventListener('clear-query-results', this._boundHandleClearResults);
     // Load saved queries
@@ -137,6 +139,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       this.editorView.destroy();
       this.editorView = null;
     }
+    document.removeEventListener('keydown', this._boundHandleKeyDown);
     document.removeEventListener('click', this._boundHandleClickOutside);
     document.removeEventListener('clear-query-results', this._boundHandleClearResults);
     super.disconnectedCallback();
@@ -402,6 +405,11 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   }
 
   private handleKeyDown(e: KeyboardEvent) {
+    // Only intercept when this component has focus
+    const path = e.composedPath();
+    const hasFocus = path.some(el => el === this || el instanceof ShadowRoot && el.host === this);
+    if (!hasFocus) return;
+
     if ((e.metaKey || e.ctrlKey) && e.key === 'c') {
       const activeFrame = this.frames.find(f => f.id === this.activeFrameId);
       if (activeFrame?.results) {

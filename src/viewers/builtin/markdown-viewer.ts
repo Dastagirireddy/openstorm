@@ -15,7 +15,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { ThemeService } from '../../lib/services/theme-service.js';
 import MarkdownIt from 'markdown-it';
 import markdownItKatex from '@traptitech/markdown-it-katex';
-import mermaid from 'mermaid';
+import { renderMermaid } from '../../lib/mermaid/mermaid-client.js';
 import hljs from 'highlight.js';
 import darkTheme from 'highlight.js/styles/atom-one-dark.css?inline';
 import lightTheme from 'highlight.js/styles/atom-one-light.css?inline';
@@ -52,7 +52,6 @@ class MarkdownPreviewInline extends LitElement {
   darkMode = false;
 
   private md: MarkdownIt;
-  private mermaidInitialized = false;
 
   constructor() {
     super();
@@ -126,30 +125,26 @@ class MarkdownPreviewInline extends LitElement {
     const mermaidBlocks = this.renderRoot.querySelectorAll('.mermaid');
     if (mermaidBlocks.length === 0) return;
 
-    if (!this.mermaidInitialized) {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'default',
-        securityLevel: 'loose',
-      });
-      this.mermaidInitialized = true;
-    }
-
-    for (let i = 0; i < mermaidBlocks.length; i++) {
-      const block = mermaidBlocks[i];
+    // Render all diagrams in parallel using the worker
+    const renderPromises = Array.from(mermaidBlocks).map(async (block, i) => {
       const graphDefinition = block.textContent?.trim() || '';
-
-      if (!graphDefinition) continue;
+      if (!graphDefinition) return;
 
       try {
-        const { svg } = await mermaid.render(`mermaid-${Date.now()}-${i}`, graphDefinition);
-        block.innerHTML = svg;
-        block.setAttribute('data-mermaid-rendered', 'true');
+        const svg = await renderMermaid(graphDefinition);
+        if (svg) {
+          block.innerHTML = svg;
+          block.setAttribute('data-mermaid-rendered', 'true');
+        } else {
+          block.innerHTML = `<div class="text-red-500 text-sm p-4 bg-red-50 rounded">Failed to render diagram</div>`;
+        }
       } catch (error) {
         console.error('[MarkdownPreviewInline] Failed to render Mermaid:', error);
         block.innerHTML = `<div class="text-red-500 text-sm p-4 bg-red-50 rounded">Failed to render diagram</div>`;
       }
-    }
+    });
+
+    await Promise.all(renderPromises);
   }
 
   render() {

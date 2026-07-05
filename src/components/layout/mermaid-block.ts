@@ -1,71 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import mermaid from 'mermaid';
-
-let mermaidInitialized = false;
-
-// Shared queue to limit concurrent mermaid renders
-const MAX_CONCURRENT_RENDERS = 1;
-let activeRenders = 0;
-const renderQueue: Array<() => void> = [];
-
-function enqueueRender(renderFn: () => void): void {
-  if (activeRenders < MAX_CONCURRENT_RENDERS) {
-    activeRenders++;
-    renderFn();
-  } else {
-    renderQueue.push(renderFn);
-  }
-}
-
-function onRenderComplete(): void {
-  activeRenders--;
-  if (renderQueue.length > 0) {
-    const next = renderQueue.shift()!;
-    activeRenders++;
-    next();
-  }
-}
-
-async function tryRender(code: string, component: AiMermaid): Promise<boolean> {
-  try {
-    const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-    const { svg } = await mermaid.render(id, code);
-    component.renderedSvg = svg;
-    component.error = '';
-    return true;
-  } catch {
-    return false;
-  } finally {
-    onRenderComplete();
-  }
-}
-
-function fixMermaidSyntax(code: string): string {
-  let fixed = code;
-
-  // Fix: escape pipe characters inside node labels that aren't edge labels
-  // e.g., A[utils::fibonacci(n)] -> A["utils::fibonacci(n)"]
-  fixed = fixed.replace(/\[([^\[\]]*::[^\[\]]*)\]/g, (_, content) => {
-    return `["${content.replace(/"/g, "'")}"]`;
-  });
-
-  // Fix: escape special chars in node labels
-  fixed = fixed.replace(/\[([^\[\]]*[()[\]<>]{1,}[^\[\]]*)\]/g, (_, content) => {
-    if (!content.startsWith('"')) {
-      return `["${content.replace(/"/g, "'")}"]`;
-    }
-    return `[${content}]`;
-  });
-
-  // Fix: ensure graph/direction declaration exists
-  if (!fixed.match(/^\s*(graph|flowchart|sequenceDiagram|classDiagram|stateDiagram|gantt|pie|gitGraph)/m)) {
-    fixed = `flowchart TD\n${fixed}`;
-  }
-
-  return fixed;
-}
+import { renderMermaid } from '../../lib/mermaid/mermaid-client.js';
 
 @customElement('ai-mermaid')
 export class AiMermaid extends LitElement {
@@ -92,12 +28,46 @@ export class AiMermaid extends LitElement {
       font-size: 11px;
     }
 
+    .mermaid-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+    }
+
     .mermaid-lang {
       color: var(--code-lang-color, #58a6ff);
       font-weight: 500;
     }
 
-    .mermaid-copy {
+    .mermaid-toggle {
+      background: none;
+      border: 1px solid var(--code-border, #30363d);
+      color: var(--code-text-dim, #8b949e);
+      cursor: pointer;
+      padding: 0.15em 0.5em;
+      border-radius: 3px;
+      font-size: 10px;
+      font-family: inherit;
+      transition: all 0.15s ease;
+    }
+
+    .mermaid-toggle:hover {
+      background: var(--code-border, #30363d);
+      color: var(--code-text, #e6edf3);
+    }
+
+    .mermaid-toggle.active {
+      background: var(--code-border, #30363d);
+      color: var(--code-text, #e6edf3);
+    }
+
+    .mermaid-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.25em;
+    }
+
+    .mermaid-btn {
       background: none;
       border: none;
       color: var(--code-text-dim, #8b949e);
@@ -110,12 +80,12 @@ export class AiMermaid extends LitElement {
       justify-content: center;
     }
 
-    .mermaid-copy:hover {
+    .mermaid-btn:hover {
       background: var(--code-border, #30363d);
       color: var(--code-text, #e6edf3);
     }
 
-    .mermaid-copy.copied {
+    .mermaid-btn.copied {
       color: var(--code-success, #3fb950);
     }
 
@@ -125,10 +95,25 @@ export class AiMermaid extends LitElement {
       overflow-x: auto;
     }
 
-    .mermaid-content :deep(svg) {
+    .mermaid-content svg {
       width: 100%;
       height: auto;
       min-height: 100px;
+    }
+
+    .mermaid-source {
+      text-align: left;
+      padding: 0.75em;
+      overflow-x: auto;
+    }
+
+    .mermaid-source pre {
+      margin: 0;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--code-text, #e6edf3);
+      white-space: pre;
     }
 
     .mermaid-error {
@@ -137,21 +122,6 @@ export class AiMermaid extends LitElement {
       font-family: monospace;
       font-size: 12px;
       white-space: pre-wrap;
-    }
-
-    .mermaid-raw {
-      text-align: left;
-      padding: 0.75em;
-      overflow-x: auto;
-    }
-
-    .mermaid-raw pre {
-      margin: 0;
-      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', 'Consolas', monospace;
-      font-size: 12px;
-      line-height: 1.5;
-      color: var(--code-text, #e6edf3);
-      white-space: pre;
     }
 
     .mermaid-placeholder {
@@ -177,26 +147,19 @@ export class AiMermaid extends LitElement {
   @state()
   private hasRendered = false;
 
+  @state()
+  private showSource = false;
+
   private observer: IntersectionObserver | null = null;
 
   connectedCallback() {
     super.connectedCallback();
-    if (!mermaidInitialized) {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'dark',
-        securityLevel: 'loose',
-      });
-      mermaidInitialized = true;
-    }
-    // Read code from script tag if code property is empty
     if (!this.code) {
       const script = this.querySelector('script[type="text/template"]');
       if (script) {
         this.code = script.textContent || '';
       }
     }
-    // Setup intersection observer for lazy rendering
     this.setupIntersectionObserver();
   }
 
@@ -212,14 +175,13 @@ export class AiMermaid extends LitElement {
         for (const entry of entries) {
           if (entry.isIntersecting && !this.isVisible) {
             this.isVisible = true;
-            // Start rendering when visible
             if (this.code && !this.hasRendered) {
               this.scheduleRender();
             }
           }
         }
       },
-      { rootMargin: '200px' } // Start rendering 200px before visible
+      { rootMargin: '200px' }
     );
     this.observer.observe(this);
   }
@@ -227,46 +189,47 @@ export class AiMermaid extends LitElement {
   private scheduleRender() {
     if (this.hasRendered) return;
     this.hasRendered = true;
-    
-    enqueueRender(async () => {
-      await this.renderMermaid();
-    });
+    this.renderDiagram();
   }
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('code') && this.isVisible) {
       this.hasRendered = false;
-      this.scheduleRender();
+      this.renderDiagram();
     }
   }
 
-  private async renderMermaid() {
+  private async renderDiagram() {
     if (!this.code) {
       this.renderedSvg = '';
       this.error = '';
       return;
     }
 
-    // Try rendering with the original code
-    let success = await tryRender(this.code, this);
-    if (success) return;
-
-    // Try common fixes for LLM-generated mermaid
-    const fixedCode = fixMermaidSyntax(this.code);
-    if (fixedCode !== this.code) {
-      success = await tryRender(fixedCode, this);
-      if (success) return;
+    try {
+      const svg = await renderMermaid(this.code);
+      if (svg) {
+        this.renderedSvg = svg;
+        this.error = '';
+      } else {
+        this.renderedSvg = '';
+        this.error = '';
+      }
+    } catch (err: any) {
+      console.error('[MermaidBlock] Render error:', err);
+      this.renderedSvg = '';
+      this.error = err?.message || 'Mermaid render failed';
     }
+  }
 
-    // All attempts failed - show raw code
-    this.renderedSvg = '';
-    this.error = '';
+  private toggleSource() {
+    this.showSource = !this.showSource;
   }
 
   private async copyToClipboard() {
     try {
       await navigator.clipboard.writeText(this.code);
-      const btn = this.shadowRoot?.querySelector('.mermaid-copy');
+      const btn = this.shadowRoot?.querySelector('.mermaid-btn');
       if (btn) {
         const icon = btn.querySelector('iconify-icon');
         if (icon) icon.setAttribute('icon', 'lucide:check');
@@ -281,27 +244,50 @@ export class AiMermaid extends LitElement {
     }
   }
 
+  private renderDiagramContent() {
+    if (this.renderedSvg) {
+      return unsafeHTML(this.renderedSvg);
+    }
+    if (this.error) {
+      return html`<div class="mermaid-error">${this.error}</div>`;
+    }
+    if (!this.isVisible) {
+      return html`<div class="mermaid-placeholder">Loading diagram...</div>`;
+    }
+    return html`<div class="mermaid-placeholder">No diagram to display</div>`;
+  }
+
+  private renderSourceContent() {
+    return html`<div class="mermaid-source"><pre>${this.code}</pre></div>`;
+  }
+
   render() {
-    const hasContent = this.renderedSvg || this.error || this.code;
+    const hasRendered = !!this.renderedSvg;
 
     return html`
       <div class="mermaid-container">
         <div class="mermaid-header">
-          <span class="mermaid-lang">mermaid</span>
-          <button class="mermaid-copy" @click=${this.copyToClipboard}>
-            <iconify-icon icon="lucide:clipboard" width="14"></iconify-icon>
-          </button>
+          <div class="mermaid-header-left">
+            <span class="mermaid-lang">mermaid</span>
+            ${hasRendered ? html`
+              <button
+                class="mermaid-toggle ${this.showSource ? 'active' : ''}"
+                @click=${this.toggleSource}
+              >
+                ${this.showSource ? 'Diagram' : 'Source'}
+              </button>
+            ` : ''}
+          </div>
+          <div class="mermaid-actions">
+            <button class="mermaid-btn" @click=${this.copyToClipboard}>
+              <iconify-icon icon="lucide:clipboard" width="14"></iconify-icon>
+            </button>
+          </div>
         </div>
         <div class="mermaid-content">
-          ${this.renderedSvg
-            ? unsafeHTML(this.renderedSvg)
-            : this.error
-              ? html`<div class="mermaid-raw"><pre>${this.code}</pre></div>`
-              : !this.isVisible
-                ? html`<div class="mermaid-placeholder">Loading diagram...</div>`
-                : this.code
-                  ? html`<div class="mermaid-raw"><pre>${this.code}</pre></div>`
-                  : ''}
+          ${this.showSource
+            ? this.renderSourceContent()
+            : this.renderDiagramContent()}
         </div>
       </div>
     `;

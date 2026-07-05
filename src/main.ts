@@ -80,7 +80,7 @@ import "./components/dialogs/unsaved-changes-dialog.js";
 import "./components/welcome-screen.js";
 import "./components/overlays/theme-palette.js";
 import "./components/overlays/settings-panel.js";
-import "./components/ai/v2/ai-panel-v2.js";
+import "./components/ai/panel/ai-panel.js";
 import { FEATURES } from "./lib/config/features.js";
 import "./components/layout/hover-tooltip.js";
 import "./components/git/git-not-found-banner.js";
@@ -1476,10 +1476,10 @@ export class OpenStormApp extends TailwindElement() {
 
     if (activeTabType === 'openstorm') {
       return html`
-        <ai-panel-v2
+        <openstorm-ai-panel
           class="flex-1 flex flex-col overflow-hidden min-h-0"
           .projectPath=${this.projectPath}>
-        </ai-panel-v2>
+        </openstorm-ai-panel>
       `;
     }
 
@@ -1554,10 +1554,10 @@ export class OpenStormApp extends TailwindElement() {
           const isActive = activeTab?.id === openstormTab.id;
           return html`
             <div class="${isActive ? 'flex-1 flex flex-col overflow-hidden min-h-0' : 'hidden'}">
-              <ai-panel-v2
+              <openstorm-ai-panel
                 class="flex-1 flex flex-col overflow-hidden min-h-0"
                 .projectPath=${this.projectPath}>
-              </ai-panel-v2>
+              </openstorm-ai-panel>
             </div>
           `;
         })}

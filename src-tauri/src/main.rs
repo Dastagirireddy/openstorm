@@ -1,7 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod old_ai;
-pub mod ai_v2;
+pub mod ai;
 mod commands;
 mod config;
 mod dap;
@@ -376,8 +375,8 @@ fn main() {
         .manage(Mutex::new(dap::DapClient::new()))
         .manage(dap_installer::DebugAdapterInstaller::new())
             .manage(database::DatabaseManager::new())
-            .manage(old_ai::commands::AiState::new())
-            .manage(ai_v2::commands::state::AiV2State::new())
+            .manage(ai::legacy::commands::AiState::new())
+            .manage(ai::commands::state::AiV2State::new())
             .manage(GraphState::new())
         .setup(|app| {
             let handle = app.handle().clone();
@@ -663,21 +662,29 @@ fn main() {
             session::list_sessions,
 
             // === AI / LLM ===
-            old_ai::commands::ai_get_config,
-            old_ai::commands::ai_set_config,
-            old_ai::commands::ai_list_providers,
-            old_ai::commands::ai_list_models,
-            old_ai::commands::ai_check_connection,
-            old_ai::commands::ai_chat,
-            old_ai::commands::ai_abort,
-            old_ai::commands::ai_reset,
-            old_ai::commands::ai_approve_tool,
-            old_ai::commands::ai_search_files,
-            old_ai::commands::ai_read_file,
+            ai::commands::ai_get_config,
+            ai::commands::ai_set_config,
+            ai::commands::ai_list_models,
+            ai::commands::ai_chat,
+            ai::commands::ai_abort,
+            ai::commands::ai_reset,
+            ai::commands::ai_approve_tool,
+
+            // === MCP (Model Context Protocol) ===
+            ai::commands::ai_mcp_add_server,
+            ai::commands::ai_mcp_remove_server,
+            ai::commands::ai_mcp_list_servers,
+            ai::commands::ai_mcp_list_tools,
+            ai::commands::ai_mcp_test_server,
+
+            // === AI File Operations (for @ mentions) ===
+            ai::commands::ai_search_files,
+            ai::commands::ai_read_file,
 
             // === AI Sub-agents ===
-            old_ai::commands::ai_get_orchestrator_status,
-            old_ai::commands::ai_abort_subagent,
+            ai::commands::ai_spawn_agent,
+            ai::commands::ai_get_subagent_status,
+            ai::commands::ai_question_response,
 
             // === Graph ===
             graph::commands::build_project::graph_build_project,
@@ -685,21 +692,6 @@ fn main() {
             graph::commands::get_neighbors::graph_get_neighbors,
             graph::commands::search::graph_search,
             graph::commands::navigate::graph_navigate_to,
-
-            // === MCP (Model Context Protocol) ===
-            old_ai::commands::ai_mcp_list_servers,
-            old_ai::commands::ai_mcp_add_server,
-            old_ai::commands::ai_mcp_remove_server,
-            old_ai::commands::ai_mcp_test_server,
-            old_ai::commands::ai_mcp_list_tools,
-
-            // === AI v2 Commands ===
-            ai_v2::commands::ai_v2_chat,
-            ai_v2::commands::ai_v2_approve_tool,
-            ai_v2::commands::ai_v2_abort,
-            ai_v2::commands::ai_v2_spawn_agent,
-            ai_v2::commands::ai_v2_get_subagent_status,
-            ai_v2::commands::ai_v2_question_response,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
