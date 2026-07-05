@@ -207,11 +207,6 @@ export class AIPanel extends LitElement {
       justify-content: space-between;
       margin-top: 4px;
     }
-    .input-btn-group {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
     .input-btn {
       display: flex;
       align-items: center;
@@ -223,15 +218,6 @@ export class AIPanel extends LitElement {
       cursor: pointer;
       transition: all 0.15s ease;
       border: 1px solid;
-    }
-    .input-btn.interrupt {
-      background: var(--ai-tool-background, #f9fafb);
-      border-color: var(--ai-panel-border, #e5e7eb);
-      color: var(--ai-text-muted, #6b7280);
-    }
-    .input-btn.interrupt:hover {
-      background: var(--ai-tool-header-background, #f3f4f6);
-      border-color: var(--ai-text-dim, #d1d5db);
     }
     .input-btn.send {
       background: color-mix(in srgb, var(--ai-primary, #3574f0) 10%, transparent);
@@ -245,6 +231,15 @@ export class AIPanel extends LitElement {
     .input-btn.send:disabled {
       opacity: 0.4;
       cursor: not-allowed;
+    }
+    .input-btn.stop {
+      background: color-mix(in srgb, var(--ai-error, #ef4444) 10%, transparent);
+      border-color: color-mix(in srgb, var(--ai-error, #ef4444) 30%, transparent);
+      color: var(--ai-error, #ef4444);
+    }
+    .input-btn.stop:hover {
+      background: color-mix(in srgb, var(--ai-error, #ef4444) 20%, transparent);
+      border-color: var(--ai-error, #ef4444);
     }
     .input-btn-icon {
       font-size: 12px;
@@ -839,7 +834,6 @@ export class AIPanel extends LitElement {
       <div class="panel">
         <openstorm-ai-header
           .model=${this.state.currentModel}
-          .isStreaming=${this.state.isStreaming}
           .isConnected=${true}
           .hasContent=${allMessages.length > 0}
           .projectPath=${this.projectPath}
@@ -902,17 +896,15 @@ export class AIPanel extends LitElement {
                     rows="1"
                   ></textarea>
                   <div class="input-actions">
-                    <div class="input-btn-group">
-                      ${this.state.isStreaming ? html`
-                        <button class="input-btn interrupt" @click=${this.abort}>
-                          <iconify-icon class="input-btn-icon" icon="mdi:pause" width="14"></iconify-icon>
-                          interrupt
-                        </button>
-                      ` : ''}
-                      <button class="input-btn send" @click=${this.send} ?disabled=${this.state.isStreaming || !this.inputValue.trim()}>
+                    ${this.state.isStreaming ? html`
+                      <button class="input-btn stop" @click=${this.abort} title="Stop generation">
+                        <iconify-icon class="input-btn-icon" icon="mdi:stop" width="14"></iconify-icon>
+                      </button>
+                    ` : html`
+                      <button class="input-btn send" @click=${this.send} ?disabled=${!this.inputValue.trim()}>
                         <iconify-icon class="input-btn-icon" icon="mdi:send" width="14"></iconify-icon>
                       </button>
-                    </div>
+                    `}
                   </div>
                 </div>
               </div>
@@ -941,12 +933,14 @@ export class AIPanel extends LitElement {
             </div>
           </div>
 
-          <div class="sidebar-wrap">
-            <openstorm-ai-task-sidebar
-              .subAgents=${this.state.subAgents}
-              .planSteps=${this.state.planSteps}
-            ></openstorm-ai-task-sidebar>
-          </div>
+          ${(this.state.planSteps?.length > 0 || this.state.subAgents?.length > 0) ? html`
+            <div class="sidebar-wrap">
+              <openstorm-ai-task-sidebar
+                .subAgents=${this.state.subAgents}
+                .planSteps=${this.state.planSteps}
+              ></openstorm-ai-task-sidebar>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;

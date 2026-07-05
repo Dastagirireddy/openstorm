@@ -125,6 +125,7 @@ impl Agent {
 
         loop {
             iteration += 1;
+            let mut tool_calls_this_iteration = 0u32;
 
             // Update progress context for subsequent iterations
             if iteration > 1 {
@@ -291,6 +292,7 @@ impl Agent {
                 let mut executed_this_turn: HashSet<(String, String)> = HashSet::new();
                 for call in &tool_calls {
                     total_tool_calls += 1;
+                    tool_calls_this_iteration += 1;
 
                     if consecutive_failures >= tool_executor::MAX_CONSECUTIVE_FAILURES {
                         let result = format!(
@@ -402,6 +404,37 @@ impl Agent {
                         content: "You have a plan with TODO items. Execute the first pending step now. Mark it as 'in_progress' with todo_write, then run the required tool.".to_string(),
                     });
                     continue;
+                }
+
+                // Hallucination detection: check if response claims to have done something
+                // but no tool calls were made in this iteration
+                if tool_calls_this_iteration == 0 && has_plan {
+                    let lower_content = full_content.to_lowercase();
+                    let claims_action = lower_content.contains("generated")
+                        || lower_content.contains("created")
+                        || lower_content.contains("wrote")
+                        || lower_content.contains("ran ")
+                        || lower_content.contains("executed")
+                        || lower_content.contains("visualized")
+                        || lower_content.contains("chart")
+                        || lower_content.contains("diagram")
+                        || lower_content.contains("above")
+                        || lower_content.contains("results are");
+
+                    if claims_action {
+                        session_log.log_flow(
+                            "Hallucination detected: response claims action but no tool calls made, re-prompting",
+                        );
+                        ctx.push(Message::Assistant {
+                            content: Some(full_content),
+                            tool_calls: None,
+                        });
+                        ctx.push(Message::System {
+                            content: "Your response claims to have done something (generated, created, ran, visualized, etc.) but you did not make any tool calls. You MUST actually execute the tools to complete the task. Do NOT claim results exist without producing them. Re-do the step properly using the required tools.".to_string(),
+                        });
+                        consecutive_text_only += 1;
+                        continue;
+                    }
                 }
 
                 let _ = tx

@@ -11,10 +11,12 @@ export class AIHeader extends LitElement {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 16px;
+      height: 35px;
+      padding: 0 16px;
       background: var(--ai-tool-header-background, #f3f4f6);
       border-bottom: 1px solid var(--ai-panel-border, #e5e7eb);
       flex-shrink: 0;
+      box-sizing: border-box;
     }
     .hdr-left { display: flex; align-items: center; gap: 10px; }
     .hdr-avatar {
@@ -35,27 +37,6 @@ export class AIHeader extends LitElement {
     .hdr-dot.off { background: var(--ai-error, #ef4444); }
     .hdr-provider { font-size: 12px; color: var(--ai-text-muted, #6b7280); font-weight: 500; }
     .hdr-actions { display: flex; align-items: center; gap: 8px; }
-    .hdr-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      font-weight: 500;
-      padding: 6px 12px;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      border: 1px solid;
-    }
-    .hdr-btn.stop {
-      background: color-mix(in srgb, var(--ai-error, #ef4444) 15%, transparent);
-      border-color: color-mix(in srgb, var(--ai-error, #ef4444) 30%, transparent);
-      color: var(--ai-error, #ef4444);
-    }
-    .hdr-btn.stop:hover {
-      background: color-mix(in srgb, var(--ai-error, #ef4444) 25%, transparent);
-      border-color: var(--ai-error, #ef4444);
-    }
     .hdr-btn-icon { font-size: 12px; }
     .hdr-btn-icon-only {
       display: flex;
@@ -189,7 +170,6 @@ export class AIHeader extends LitElement {
   `;
 
   @property({ type: String }) model = '';
-  @property({ type: Boolean }) isStreaming = false;
   @property({ type: Boolean }) isConnected = true;
   @property({ type: String }) projectPath = '';
 
@@ -280,10 +260,6 @@ export class AIHeader extends LitElement {
     }
   }
 
-  private onAbort() {
-    dispatchAIEvent(this, 'ai:cancel', {});
-  }
-
   private onClear() {
     this.dispatchEvent(new CustomEvent('ai-clear', { bubbles: true, composed: true }));
   }
@@ -343,12 +319,6 @@ export class AIHeader extends LitElement {
           ${this.hasContent ? html`
             <button class="hdr-btn-icon-only" @click=${this.onClear} title="Clear conversation and reset context">
               <iconify-icon icon="mdi:delete-outline" width="14"></iconify-icon>
-            </button>
-          ` : ''}
-          ${this.isStreaming ? html`
-            <button class="hdr-btn stop" @click=${this.onAbort}>
-              <iconify-icon class="hdr-btn-icon" icon="mdi:stop" width="14"></iconify-icon>
-              Stop
             </button>
           ` : ''}
         </div>
