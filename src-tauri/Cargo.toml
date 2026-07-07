@@ -1,6 +1,6 @@
 [package]
 name = "openstorm"
-version = "1.5.0"
+version = "2.0.0"
 description = "A high-performance, lightweight IDE built for modern development workflows"
 authors = ["OpenStorm Team"]
 edition = "2021"
