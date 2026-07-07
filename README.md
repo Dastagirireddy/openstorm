@@ -380,10 +380,13 @@ Customize every pixel with 100+ CSS variables:
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| **v1.3** | Editor, AI Chat, Database, Git, Terminal, Templates, Theming | Current |
-| **v1.4** | AI Agent Mode — autonomous multi-file editing with permission system | In Progress |
-| **v1.5** | Built-in Kanban board, Diagram editor (Mermaid + custom), Collaboration tools | Planned |
-| **v2.0** | Plugin marketplace, Cloud sync, Team workspaces | Future |
+| **v1.3** | Editor, AI Chat, Database, Git, Terminal, Templates, Theming | Shipped |
+| **v1.4** | AI Agent Mode — tool execution, permissions, streaming | Shipped |
+| **v1.5** | Graph RAG, MCP config, Right Activity Bar, Sub-agents | Shipped |
+| **v2.0** | Current release — all above features | Current |
+| **v2.1** | Plugin system (registry + loader), Interactive diagram editor | Next |
+| **v2.2** | Collaboration tools, Cloud sync | Planned |
+| **v3.0** | Plugin marketplace, Team workspaces | Future |
 
 ---
 
