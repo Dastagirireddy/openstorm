@@ -125,32 +125,40 @@ When you open a project, OpenStorm **automatically builds a code graph** in the 
 
 OpenStorm uses a **Graph-augmented RAG** system that gives the AI agent deep understanding of your codebase structure.
 
+<p align="center">
+  <img src="docs/ide/openstorm_rag.png" alt="Graph RAG in Action" width="80%">
+</p>
+
 ### How Graph RAG Works
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  User Query                                                 │
-│       │                                                     │
-│       ▼                                                     │
-│  ┌─────────────────┐                                        │
-│  │ Search Nodes    │ ← BM25 full-text search on node names  │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │ BFS Traversal   │ ← Find neighbors up to depth 2         │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │ Rank & Budget   │ ← Score by connectivity, fit in tokens │
-│  └────────┬────────┘                                        │
-│           │                                                 │
-│           ▼                                                 │
-│  ┌─────────────────┐                                        │
-│  │ Build Context   │ ← Nodes + Edges → LLM prompt           │
-│  └─────────────────┘                                        │
-└─────────────────────────────────────────────────────────────┘
+                         User Query
+                            │
+                ┌───────────┴───────────┐
+                ▼                       │
+         ┌─────────────┐                │
+         │  Graph RAG  │ ← Primary      │
+         │ (GraphStore)│                │
+         └──────┬──────┘                │
+                │                       │
+        ┌───────┴───────┐               │
+        ▼               ▼               │
+  ┌──────────┐   ┌──────────┐          │
+  │ Matches  │   │Neighbors │          │
+  │ (nodes)  │   │(BFS d=2) │          │
+  └────┬─────┘   └────┬─────┘          │
+       │              │                │
+       └──────┬───────┘                │
+              ▼                        │
+       ┌────────────┐                  │
+       │   Edges    │                  │
+       │(relations) │                  │
+       └─────┬──────┘                  │
+             ▼                         │
+      ┌────────────┐     Fallback      │
+      │  Context   │◄────(if no graph)─┘
+      │  (prompt)  │
+      └────────────┘
 ```
 
 ### RAG Pipeline
@@ -228,20 +236,23 @@ Built on CodeMirror 6 with full Language Server Protocol (LSP) support:
 Built-in AI assistant with tool execution — read files, search code, run commands, and more:
 
 - **Chat** — Ask questions about your code, get explanations, generate code
+- **@file Mentions** — Type `@` to search and attach files with autocomplete, enriching context with LSP symbols
 - **Tool Execution** — AI can read files, search code, run terminal commands
-- **File Editing** — AI proposes changes with diff preview before applying
-- **Sub-Agent Orchestration** — Complex tasks decomposed into parallel sub-tasks
-- **Streaming Responses** — Real-time token-by-token output
-- **Permission System** — Approve or deny each tool call before execution
-- **Execution Timeline** — Visual timeline of agent steps and decisions
+- **File Editing** — AI proposes changes with inline diff preview (add/remove/context lines with stats)
+- **Sub-Agent Orchestration** — Complex tasks decomposed into parallel sub-tasks with synthesis
+- **Streaming Responses** — Real-time token-by-token output with thinking indicator
+- **Permission System** — Approve or deny each tool call (Allow once / Allow always / Reject)
+- **Execution Summary** — Status, tool calls, duration, tokens, and cost after completion
+- **Plan Steps Sidebar** — Visual execution plan showing agent progress and sub-agent status
+- **Graph RAG** — Code graph-aware context retrieval for accurate architecture understanding
 
 **Supported Providers:**
 
 | Type | Providers |
 |------|-----------|
 | **Local** | Ollama, LM Studio |
-| **Free Cloud** | NVIDIA NIM, OpenRouter, DeepSeek, Qwen, Groq, SambaNova, Together, Mistral, Cerebras, Fireworks |
-| **Paid Cloud** | OpenAI, Anthropic, Google |
+| **Free Cloud** | NVIDIA NIM, Groq, SambaNova |
+| **Cloud** | OpenAI, Anthropic, Google, OpenRouter, DeepSeek, Qwen, Cerebras, Mistral, Together, Fireworks |
 
 ### Database Client
 
@@ -259,6 +270,33 @@ Connect to databases without leaving the editor:
 - **Query Editor** — SQL editor with syntax highlighting, result tables, JSON view
 - **Saved Queries** — Save and reuse frequently run queries
 - **Schema Browser** — Navigate tables, columns, indexes across connections
+
+### MCP Configuration
+
+<p align="center">
+  <img src="docs/ide/MCP.png" alt="MCP Panel" width="80%">
+</p>
+
+Extend AI capabilities with Model Context Protocol (MCP) servers. Configure from the **MCP** panel in the right activity bar:
+
+- **8 Pre-built Templates** — Install popular servers with one click
+- **Custom Servers** — Add any MCP-compatible server with custom commands
+- **Tool Namespacing** — Tools namespaced as `mcp__<server>__<tool>` for clarity
+- **Real-time Status** — Live connection status with tool count display
+- **Auto-disconnect** — Idle servers timeout after 300 seconds to save resources
+
+#### Available Templates
+
+| Category | Templates |
+|----------|-----------|
+| **Browser** | Chrome DevTools, Playwright, Puppeteer |
+| **Development** | Filesystem, GitHub |
+| **Productivity** | Brave Search, Memory (Knowledge Graph) |
+| **Data** | PostgreSQL |
+
+<p align="center">
+  <img src="docs/ide/MCP_config.png" alt="MCP Server Templates" width="80%">
+</p>
 
 ### Integrated Terminal
 
@@ -325,7 +363,7 @@ Each template includes pre-configured files, dependencies, and a ready-to-run pr
 ### Theming
 
 <p align="center">
-  <img src="docs/ide/Models_config.png" alt="Theme Settings" width="80%">
+  <img src="docs/ide/welcome.png" alt="Theming" width="80%">
 </p>
 
 Customize every pixel with 100+ CSS variables:
@@ -352,14 +390,31 @@ Customize every pixel with 100+ CSS variables:
 ## AI Provider Configuration
 
 <p align="center">
-  <img src="docs/ide/Models_config.png" alt="AI Providers" width="80%">
+  <img src="docs/ide/ai_model_provider.png" alt="AI Provider Configuration" width="80%">
 </p>
 
-OpenStorm uses a **Bring Your Own Key (BYOK)** model. You connect to whichever AI provider you prefer:
+OpenStorm uses a **Bring Your Own Key (BYOK)** model. Configure providers directly from the **Models** panel in the right activity bar:
 
 - **Local models** — Run Ollama or LM Studio for free, unlimited usage
-- **Free cloud** — NVIDIA NIM, OpenRouter, DeepSeek, and others offer free tiers
+- **Free cloud** — NVIDIA NIM, Groq, SambaNova offer free tiers
 - **Paid cloud** — Use your own API keys for OpenAI, Anthropic, Google
+
+### Provider Categories
+
+| Category | Providers | Status |
+|----------|-----------|--------|
+| **Local** | Ollama, LM Studio | No API key required |
+| **Free Cloud** | NVIDIA NIM, Groq, SambaNova | API key required, free tier |
+| **Cloud** | OpenAI, Anthropic, Google, OpenRouter, DeepSeek, Qwen, Cerebras, Mistral, Together, Fireworks | API key required |
+
+### Configuration
+
+Click any provider in the Models panel to configure:
+
+- **API Key** — Enter your provider API key
+- **Base URL** — Custom endpoint (default for Ollama: `http://localhost:11434`)
+- **Model Selection** — Choose from available models with context window and tool support info
+- **Connection Test** — Verify your configuration before saving
 
 No subscriptions. No credit systems. Pay only for what you use, directly to the provider.
 
@@ -370,6 +425,7 @@ No subscriptions. No credit systems. Pay only for what you use, directly to the 
 | Shortcut | Action |
 |----------|--------|
 | `Cmd+P` | Quick file search |
+| `/` | Quick search (in welcome screen) |
 | `Cmd+Shift+T` | Switch theme |
 | `Cmd+Shift+N` | New project |
 | `Cmd+F` | Find in file |
@@ -377,6 +433,7 @@ No subscriptions. No credit systems. Pay only for what you use, directly to the 
 | `Ctrl+`` ` | Toggle terminal |
 | `Cmd+S` | Save file |
 | `Cmd+Shift+F` | Search across files |
+| `@` | Attach file in AI chat |
 
 ---
 
@@ -388,7 +445,7 @@ No subscriptions. No credit systems. Pay only for what you use, directly to the 
 | **Frontend** | TypeScript, Lit, Tailwind CSS |
 | **Editor** | CodeMirror 6 |
 | **Terminal** | xterm.js, portable-pty |
-| **AI** | OpenAI-compatible API, MCP protocol |
+| **AI** | OpenAI-compatible API, MCP protocol, rmcp |
 | **Graph** | SQLite, Tree-sitter, Sigma.js, Graphology |
 | **RAG** | Graph-augmented RAG, BM25 search, Louvain communities |
 | **Database** | sqlx (Postgres, MySQL, SQLite), mongodb, redis |
