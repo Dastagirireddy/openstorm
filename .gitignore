@@ -27,6 +27,7 @@ npm-debug.log*
 
 # Tauri
 src-tauri/target/
+.playwright-mcp/
 goal.png
 v2.png
 test-folder
