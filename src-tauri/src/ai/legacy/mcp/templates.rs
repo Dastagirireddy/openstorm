@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::types::McpServerConfig;
@@ -132,8 +134,14 @@ impl McpTemplate {
                     name: "mysql".into(),
                     command: "npx".into(),
                     args: vec!["-y".into(), "mysql-mcp-server".into()],
-                    env: Default::default(),
-                    enabled: true,
+                    env: HashMap::from([
+                        ("MYSQL_HOST".into(), "localhost".into()),
+                        ("MYSQL_PORT".into(), "3306".into()),
+                        ("MYSQL_USER".into(), "root".into()),
+                        ("MYSQL_PASSWORD".into(), "".into()),
+                        ("MYSQL_DATABASE".into(), "".into()),
+                    ]),
+                    enabled: false,
                 },
             },
             Self {
