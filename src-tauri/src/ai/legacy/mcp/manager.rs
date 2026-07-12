@@ -89,6 +89,7 @@ impl McpManager {
             Ok(conn) => {
                 self.connections.insert(name.clone(), conn);
                 self.errors.remove(&name);
+                self.last_used.insert(name.clone(), Instant::now());
                 self.set_state(&name, McpConnectionState::Connected);
             }
             Err(e) => {
@@ -259,6 +260,7 @@ impl McpManager {
 
     pub async fn ensure_connected(&mut self, server_name: &str) -> Result<(), String> {
         if self.connections.contains_key(server_name) {
+            self.last_used.insert(server_name.to_string(), Instant::now());
             return Ok(());
         }
 
