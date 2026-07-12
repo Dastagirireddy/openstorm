@@ -123,6 +123,20 @@ impl McpTemplate {
                 },
             },
             Self {
+                id: "mysql".into(),
+                name: "MySQL".into(),
+                description: "Read-only access to MySQL databases. Query and explore schemas.".into(),
+                category: McpTemplateCategory::Data,
+                icon: "database".into(),
+                config: McpServerConfig {
+                    name: "mysql".into(),
+                    command: "npx".into(),
+                    args: vec!["-y".into(), "@modelcontextprotocol/server-mysql".into()],
+                    env: Default::default(),
+                    enabled: true,
+                },
+            },
+            Self {
                 id: "puppeteer".into(),
                 name: "Puppeteer".into(),
                 description: "Minimal Chromium automation. Navigate, screenshot, and evaluate JS. Good for simple workflows.".into(),
