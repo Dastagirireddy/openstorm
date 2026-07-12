@@ -396,6 +396,10 @@ Customize every pixel with 100+ CSS variables:
   <img src="docs/ide/ai_model_provider.png" alt="AI Provider Configuration" width="80%">
 </p>
 
+<p align="center">
+  <img src="docs/ide/model_provider_config.png" alt="Configure Ollama" width="60%">
+</p>
+
 OpenStorm uses a **Bring Your Own Key (BYOK)** model. Configure providers directly from the **Models** panel in the right activity bar:
 
 - **Local models** — Run Ollama or LM Studio for free, unlimited usage
