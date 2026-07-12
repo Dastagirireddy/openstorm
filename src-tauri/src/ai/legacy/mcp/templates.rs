@@ -131,7 +131,7 @@ impl McpTemplate {
                 config: McpServerConfig {
                     name: "mysql".into(),
                     command: "npx".into(),
-                    args: vec!["-y".into(), "@modelcontextprotocol/server-mysql".into()],
+                    args: vec!["-y".into(), "mysql-mcp-server".into()],
                     env: Default::default(),
                     enabled: true,
                 },
