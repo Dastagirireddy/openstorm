@@ -1,9 +1,14 @@
+use std::time::Duration;
+
 use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::RunningService;
 use rmcp::ServiceExt;
 use tokio::process::Command;
+use tokio::time::timeout;
 
 use super::types::McpServerConfig;
+
+const MCP_CONNECT_TIMEOUT_SECS: u64 = 30;
 
 pub struct McpServerConnection {
     pub config: McpServerConfig,
@@ -30,15 +35,22 @@ impl McpServerConnection {
             cmd.process_group(0);
         }
 
-        let service = ()
-            .serve(rmcp::transport::TokioChildProcess::new(cmd)
-                .map_err(|e| format!("Failed to spawn MCP server '{}': {}", config.name, e))?)
-            .await
-            .map_err(|e| format!("MCP handshake failed for '{}': {}", config.name, e))?;
+        let connect_timeout = Duration::from_secs(MCP_CONNECT_TIMEOUT_SECS);
 
-        let tools = service
-            .list_all_tools()
+        let service = timeout(connect_timeout, async {
+            ()
+                .serve(rmcp::transport::TokioChildProcess::new(cmd)
+                    .map_err(|e| format!("Failed to spawn MCP server '{}': {}", config.name, e))?)
+                .await
+                .map_err(|e| format!("MCP handshake failed for '{}': {}", config.name, e))
+        })
+        .await
+        .map_err(|_| format!("MCP handshake timed out for '{}' after {}s", config.name, MCP_CONNECT_TIMEOUT_SECS))?
+        ?;
+
+        let tools = timeout(connect_timeout, service.list_all_tools())
             .await
+            .map_err(|_| format!("MCP list tools timed out for '{}' after {}s", config.name, MCP_CONNECT_TIMEOUT_SECS))?
             .map_err(|e| format!("Failed to list tools from '{}': {}", config.name, e))?;
 
         // Try to find the child PID by looking for the process
@@ -84,9 +96,10 @@ impl McpServerConnection {
         };
 
         let service = self.service.as_ref().ok_or("MCP service not connected")?;
-        let result = service
-            .call_tool(params)
+        let tool_timeout = Duration::from_secs(60);
+        let result = timeout(tool_timeout, service.call_tool(params))
             .await
+            .map_err(|_| format!("MCP tool call '{}' timed out after 60s", tool_name))?
             .map_err(|e| format!("MCP tool call failed: {}", e))?;
 
         let mut output = Vec::new();
