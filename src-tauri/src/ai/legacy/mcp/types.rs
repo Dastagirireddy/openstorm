@@ -14,6 +14,18 @@ pub struct McpServerConfig {
     pub enabled: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpConfigField {
+    pub key: String,
+    pub label: String,
+    #[serde(default)]
+    pub default: String,
+    #[serde(default = "default_true")]
+    pub required: bool,
+    #[serde(default)]
+    pub secret: bool,
+}
+
 fn default_true() -> bool {
     true
 }

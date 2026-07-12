@@ -116,6 +116,14 @@ export interface McpToolInfo {
 
 export type McpTemplateCategory = 'browser' | 'development' | 'productivity' | 'data';
 
+export interface McpConfigField {
+  key: string;
+  label: string;
+  default: string;
+  required: boolean;
+  secret: boolean;
+}
+
 export interface McpTemplate {
   id: string;
   name: string;
@@ -123,4 +131,5 @@ export interface McpTemplate {
   category: McpTemplateCategory;
   icon: string;
   config: McpServerConfig;
+  config_fields: McpConfigField[];
 }

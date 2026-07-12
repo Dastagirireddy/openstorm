@@ -229,8 +229,9 @@ pub async fn ai_mcp_list_templates() -> Result<Vec<super::legacy::mcp::templates
 pub async fn ai_mcp_install_template(
     state: State<'_, super::legacy::commands::AiState>,
     template_id: String,
+    env: Option<std::collections::HashMap<String, String>>,
 ) -> Result<super::legacy::mcp::McpServerStatus, String> {
-    super::legacy::commands::ai_mcp_install_template(state, template_id).await
+    super::legacy::commands::ai_mcp_install_template(state, template_id, env).await
 }
 
 /// Enable or disable an MCP server

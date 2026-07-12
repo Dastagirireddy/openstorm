@@ -1,8 +1,6 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
-use super::types::McpServerConfig;
+use super::types::{McpConfigField, McpServerConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct McpTemplate {
@@ -12,6 +10,8 @@ pub struct McpTemplate {
     pub category: McpTemplateCategory,
     pub icon: String,
     pub config: McpServerConfig,
+    #[serde(default)]
+    pub config_fields: Vec<McpConfigField>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -39,6 +39,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "playwright".into(),
@@ -53,6 +54,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "filesystem".into(),
@@ -67,6 +69,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "github".into(),
@@ -81,6 +84,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "brave-search".into(),
@@ -95,6 +99,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "memory".into(),
@@ -109,6 +114,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "postgres".into(),
@@ -123,6 +129,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
             Self {
                 id: "mysql".into(),
@@ -134,15 +141,46 @@ impl McpTemplate {
                     name: "mysql".into(),
                     command: "npx".into(),
                     args: vec!["-y".into(), "mysql-mcp-server".into()],
-                    env: HashMap::from([
-                        ("MYSQL_HOST".into(), "localhost".into()),
-                        ("MYSQL_PORT".into(), "3306".into()),
-                        ("MYSQL_USER".into(), "root".into()),
-                        ("MYSQL_PASSWORD".into(), "".into()),
-                        ("MYSQL_DATABASE".into(), "".into()),
-                    ]),
+                    env: Default::default(),
                     enabled: false,
                 },
+                config_fields: vec![
+                    McpConfigField {
+                        key: "MYSQL_HOST".into(),
+                        label: "Host".into(),
+                        default: "localhost".into(),
+                        required: true,
+                        secret: false,
+                    },
+                    McpConfigField {
+                        key: "MYSQL_PORT".into(),
+                        label: "Port".into(),
+                        default: "3306".into(),
+                        required: true,
+                        secret: false,
+                    },
+                    McpConfigField {
+                        key: "MYSQL_USER".into(),
+                        label: "Username".into(),
+                        default: "root".into(),
+                        required: true,
+                        secret: false,
+                    },
+                    McpConfigField {
+                        key: "MYSQL_PASSWORD".into(),
+                        label: "Password".into(),
+                        default: "".into(),
+                        required: false,
+                        secret: true,
+                    },
+                    McpConfigField {
+                        key: "MYSQL_DATABASE".into(),
+                        label: "Database".into(),
+                        default: "".into(),
+                        required: false,
+                        secret: false,
+                    },
+                ],
             },
             Self {
                 id: "puppeteer".into(),
@@ -157,6 +195,7 @@ impl McpTemplate {
                     env: Default::default(),
                     enabled: true,
                 },
+                config_fields: vec![],
             },
         ]
     }

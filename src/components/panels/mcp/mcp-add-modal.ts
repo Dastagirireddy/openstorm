@@ -2,7 +2,7 @@ import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
-import type { McpTemplate, McpServerStatus, McpServerConfig } from '../../../lib/types/ai-types.js';
+import type { McpTemplate, McpServerStatus, McpServerConfig, McpConfigField } from '../../../lib/types/ai-types.js';
 
 @customElement('mcp-add-modal')
 export class McpAddModal extends TailwindElement() {
@@ -15,6 +15,9 @@ export class McpAddModal extends TailwindElement() {
   @state() private customCommand = 'npx';
   @state() private customArgs = '-y @playwright/mcp@latest';
   @state() private customError = '';
+  @state() private configuringTemplate: McpTemplate | null = null;
+  @state() private configValues: Record<string, string> = {};
+  @state() private configError = '';
 
   private getFilteredTemplates() {
     if (this.selectedCategory === 'all') return this.templates;
@@ -26,6 +29,18 @@ export class McpAddModal extends TailwindElement() {
   }
 
   private async installTemplate(templateId: string) {
+    const template = this.templates.find(t => t.id === templateId);
+    if (!template) return;
+
+    if (template.config_fields && template.config_fields.length > 0) {
+      this.configuringTemplate = template;
+      this.configValues = {};
+      template.config_fields.forEach(field => {
+        this.configValues[field.key] = field.default;
+      });
+      return;
+    }
+
     if (this.installingId) return;
     this.installingId = templateId;
     try {
@@ -36,6 +51,39 @@ export class McpAddModal extends TailwindElement() {
     } finally {
       this.installingId = null;
     }
+  }
+
+  private async confirmConfig() {
+    if (!this.configuringTemplate || this.installingId) return;
+
+    const missingRequired = this.configuringTemplate.config_fields.filter(
+      field => field.required && !this.configValues[field.key]
+    );
+    if (missingRequired.length > 0) {
+      this.configError = `Required fields: ${missingRequired.map(f => f.label).join(', ')}`;
+      return;
+    }
+
+    this.configError = '';
+    this.installingId = this.configuringTemplate.id;
+    try {
+      await invoke('ai_mcp_install_template', {
+        templateId: this.configuringTemplate.id,
+        env: this.configValues,
+      });
+      this.dispatchEvent(new CustomEvent('install', { detail: { templateId: this.configuringTemplate.id } }));
+      this.configuringTemplate = null;
+    } catch (e) {
+      this.configError = String(e);
+    } finally {
+      this.installingId = null;
+    }
+  }
+
+  private cancelConfig() {
+    this.configuringTemplate = null;
+    this.configValues = {};
+    this.configError = '';
   }
 
   private async addCustom() {
@@ -110,7 +158,7 @@ export class McpAddModal extends TailwindElement() {
 
           <!-- Content -->
           <div class="flex-1 overflow-y-auto p-4">
-            ${this.activeTab === 'templates' ? this.renderTemplates(categories) : this.renderCustom()}
+            ${this.configuringTemplate ? this.renderConfigForm() : (this.activeTab === 'templates' ? this.renderTemplates(categories) : this.renderCustom())}
           </div>
         </div>
       </div>
@@ -207,6 +255,65 @@ export class McpAddModal extends TailwindElement() {
           @click=${() => this.addCustom()}>
           Add Server
         </button>
+      </div>
+    `;
+  }
+
+  private renderConfigForm() {
+    if (!this.configuringTemplate) return nothing;
+    const installing = this.installingId === this.configuringTemplate.id;
+
+    return html`
+      <div class="space-y-3">
+        <div class="flex items-center gap-2 mb-2">
+          <button
+            class="p-1 rounded hover:bg-[var(--app-hover-background)] cursor-pointer"
+            style="color: var(--app-disabled-foreground);"
+            @click=${() => this.cancelConfig()}>
+            <iconify-icon icon="codicon:arrow-left" width="14"></iconify-icon>
+          </button>
+          <span class="text-xs font-medium">Configure ${this.configuringTemplate.name}</span>
+        </div>
+
+        ${this.configuringTemplate.config_fields.map(field => html`
+          <div>
+            <label class="text-[10px] mb-1 block font-medium" style="color: var(--app-disabled-foreground);">
+              ${field.label}
+              ${field.required ? html`<span class="text-red-500">*</span>` : ''}
+            </label>
+            <input
+              type="${field.secret ? 'password' : 'text'}"
+              class="w-full px-2.5 py-1.5 text-xs rounded outline-none"
+              style="background: var(--app-bg); border: 1px solid var(--app-border); color: var(--app-foreground);"
+              placeholder=${field.default || `Enter ${field.label.toLowerCase()}`}
+              .value=${this.configValues[field.key] || ''}
+              @input=${(e: Event) => {
+                this.configValues = { ...this.configValues, [field.key]: (e.target as HTMLInputElement).value };
+              }} />
+          </div>
+        `)}
+
+        ${this.configError ? html`
+          <div class="text-[10px] p-2 rounded" style="background: rgba(239,68,68,0.1); color: #ef4444;">
+            ${this.configError}
+          </div>
+        ` : ''}
+
+        <div class="flex gap-2 pt-2">
+          <button
+            class="flex-1 px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-colors"
+            style="background: var(--app-hover-background); color: var(--app-foreground);"
+            @click=${() => this.cancelConfig()}>
+            Cancel
+          </button>
+          <button
+            class="flex-1 px-3 py-2 text-xs font-medium rounded-md cursor-pointer transition-colors"
+            style="background: var(--ai-accent); color: white; ${installing ? 'opacity: 0.5; cursor: not-allowed;' : ''}"
+            ?disabled=${installing}
+            @click=${() => this.confirmConfig()}>
+            ${installing ? 'Connecting...' : 'Connect'}
+          </button>
+        </div>
       </div>
     `;
   }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use tauri::State;
 
 use super::AiState;
@@ -72,6 +73,7 @@ pub async fn ai_mcp_list_templates() -> Result<Vec<McpTemplate>, String> {
 pub async fn ai_mcp_install_template(
     state: State<'_, AiState>,
     template_id: String,
+    env: Option<HashMap<String, String>>,
 ) -> Result<McpServerStatus, String> {
     let template = McpTemplate::find(&template_id)
         .ok_or_else(|| format!("Template '{}' not found", template_id))?;
@@ -85,7 +87,12 @@ pub async fn ai_mcp_install_template(
             .unwrap());
     }
 
-    manager.connect(template.config.clone()).await?;
+    let mut config = template.config.clone();
+    if let Some(user_env) = env {
+        config.env.extend(user_env);
+    }
+
+    manager.connect(config).await?;
 
     Ok(manager.list_servers()
         .into_iter()
