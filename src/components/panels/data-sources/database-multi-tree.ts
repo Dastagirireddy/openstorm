@@ -10,7 +10,7 @@ import { html, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
-import type { AnyDataSource } from './data-source-types.js';
+import type { AnyDataSource, DatabaseConfig } from './data-source-types.js';
 
 export interface DatabaseObject {
   id: string;
@@ -36,10 +36,36 @@ export class DatabaseMultiTree extends TailwindElement() {
   @state() private loadingConnections = new Set<string>();
   @state() private selectedNodeKey: string | null = null;
   @state() private hoveredNode: string | null = null;
+  @state() private contextMenu: { connectionId: string; x: number; y: number } | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
     this.addEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
+    this._boundCloseContextMenu = this.closeContextMenu.bind(this);
+    document.addEventListener('click', this._boundCloseContextMenu);
+  }
+
+  disconnectedCallback(): void {
+    this.removeEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
+    document.removeEventListener('click', this._boundCloseContextMenu);
+    super.disconnectedCallback();
+  }
+
+  private _boundCloseContextMenu!: () => void;
+
+  private openConnectionMenu(connectionId: string, e: Event) {
+    const rect = (e.target as HTMLElement).getBoundingClientRect();
+    const menuWidth = 140;
+    const menuHeight = 36;
+    let x = rect.right;
+    let y = rect.bottom;
+    if (x + menuWidth > window.innerWidth) x = rect.left - menuWidth;
+    if (y + menuHeight > window.innerHeight) y = rect.top - menuHeight;
+    this.contextMenu = { connectionId, x, y };
+  }
+
+  private closeContextMenu() {
+    this.contextMenu = null;
   }
 
   protected willUpdate(changedProperties: Map<string, unknown>): void {
@@ -50,11 +76,6 @@ export class DatabaseMultiTree extends TailwindElement() {
     if (changedProperties.has('projectPath')) {
       // Project path changed
     }
-  }
-
-  disconnectedCallback(): void {
-    this.removeEventListener('refresh-connection', this.handleRefreshConnection.bind(this));
-    super.disconnectedCallback();
   }
 
   private handleRefreshConnection(e: CustomEvent) {
@@ -68,6 +89,16 @@ export class DatabaseMultiTree extends TailwindElement() {
   private dispatchRemove(connectionId: string) {
     this.dispatchEvent(
       new CustomEvent('remove', {
+        detail: { id: connectionId },
+        bubbles: true,
+        composed: true,
+      })
+    );
+  }
+
+  private dispatchEdit(connectionId: string) {
+    this.dispatchEvent(
+      new CustomEvent('edit', {
         detail: { id: connectionId },
         bubbles: true,
         composed: true,
@@ -176,7 +207,9 @@ export class DatabaseMultiTree extends TailwindElement() {
   }
 
   private openQueryConsole(connectionId: string, connectionName: string, dbType: string) {
-    const dialect = dbType === 'mysql' ? 'mysql' : 'postgresql';
+    const dialect = dbType === 'mysql' ? 'mysql'
+      : dbType === 'clickhouse' ? 'standard'
+      : 'postgresql';
     this.dispatchEvent(
       new CustomEvent('open-query-editor', {
         detail: {
@@ -593,7 +626,8 @@ export class DatabaseMultiTree extends TailwindElement() {
     const isExpanded = this.expandedConnections.has(connection.id);
     const trees = this.connectionTrees.get(connection.id) || [];
     const isLoading = this.loadingConnections.has(connection.id);
-    const dbType = connection.config.dbType || 'database';
+    const cfg = connection.config as DatabaseConfig;
+    const dbType = cfg.dbType || 'database';
     const dbIcon = this.getDbIcon(dbType);
 
     return html`
@@ -654,11 +688,28 @@ export class DatabaseMultiTree extends TailwindElement() {
             title="Open Query Console"
             @click=${(e: Event) => {
               e.stopPropagation();
-              this.openQueryConsole(connection.id, connection.name, connection.config.dbType);
+              this.openQueryConsole(connection.id, connection.name, (connection.config as DatabaseConfig).dbType);
             }}
           >
             <iconify-icon
               icon="mdi:console"
+              width="14"
+              height="14"
+              style="color: var(--app-foreground);"
+            ></iconify-icon>
+          </button>
+
+          <!-- More Options Button (shown on hover) -->
+          <button
+            class="w-6 h-6 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+            title="More Options"
+            @click=${(e: Event) => {
+              e.stopPropagation();
+              this.openConnectionMenu(connection.id, e);
+            }}
+          >
+            <iconify-icon
+              icon="mdi:dots-vertical"
               width="14"
               height="14"
               style="color: var(--app-foreground);"
@@ -706,6 +757,40 @@ export class DatabaseMultiTree extends TailwindElement() {
               </div>
             `)}
       </div>
+
+      <!-- Connection Context Menu -->
+      ${this.contextMenu ? html`
+        <div
+          class="fixed z-50 min-w-[140px] py-1 rounded-md shadow-lg border"
+          style="left: ${this.contextMenu.x}px; top: ${this.contextMenu.y}px; background-color: var(--app-menu-background); border-color: var(--app-border);"
+          @click=${(e: Event) => e.stopPropagation()}
+        >
+          <button
+            class="w-full text-left px-3 py-1.5 text-[12px] hover:bg-[var(--app-hover-background)] flex items-center gap-2"
+            style="color: var(--app-foreground);"
+            @click=${() => {
+              const id = this.contextMenu?.connectionId;
+              this.closeContextMenu();
+              if (id) this.dispatchEdit(id);
+            }}
+          >
+            <iconify-icon icon="mdi:pencil-outline" width="14" style="color: var(--app-disabled-foreground);"></iconify-icon>
+            Edit
+          </button>
+          <button
+            class="w-full text-left px-3 py-1.5 text-[12px] hover:bg-[var(--app-hover-background)] flex items-center gap-2"
+            style="color: var(--app-foreground);"
+            @click=${() => {
+              const id = this.contextMenu?.connectionId;
+              this.closeContextMenu();
+              if (id) this.dispatchRemove(id);
+            }}
+          >
+            <iconify-icon icon="mdi:delete-outline" width="14" style="color: var(--app-disabled-foreground);"></iconify-icon>
+            Remove
+          </button>
+        </div>
+      ` : nothing}
     `;
   }
 }

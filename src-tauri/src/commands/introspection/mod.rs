@@ -183,6 +183,7 @@ fn get_introspector(db_type: crate::database::DatabaseType) -> Box<dyn DatabaseI
         crate::database::DatabaseType::PostgreSQL => Box::new(crate::database::introspection::PostgresIntrospector::new()),
         crate::database::DatabaseType::MySQL | crate::database::DatabaseType::MariaDB => Box::new(crate::database::introspection::MySqlIntrospector::new()),
         crate::database::DatabaseType::SQLite => Box::new(crate::database::introspection::SqliteIntrospector::new()),
+        crate::database::DatabaseType::ClickHouse => Box::new(crate::database::introspection::ClickHouseIntrospector::new()),
         _ => Box::new(crate::database::introspection::PostgresIntrospector::new()),
     }
 }

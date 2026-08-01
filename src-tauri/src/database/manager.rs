@@ -20,6 +20,7 @@ pub enum AnyPool {
     Postgres(PgPool),
     MySql(MySqlPool),
     Sqlite(SqlitePool),
+    ClickHouse(clickhouse::Client),
 }
 
 impl Clone for AnyPool {
@@ -28,6 +29,7 @@ impl Clone for AnyPool {
             AnyPool::Postgres(p) => AnyPool::Postgres(p.clone()),
             AnyPool::MySql(p) => AnyPool::MySql(p.clone()),
             AnyPool::Sqlite(p) => AnyPool::Sqlite(p.clone()),
+            AnyPool::ClickHouse(c) => AnyPool::ClickHouse(c.clone()),
         }
     }
 }
@@ -91,6 +93,45 @@ impl DatabaseManager {
                     .map_err(|e| DatabaseError::ConnectionError(format!("Failed to connect: {}", e)))?;
                 Ok(AnyPool::Sqlite(pool))
             }
+            DatabaseType::ClickHouse => {
+                eprintln!("[DatabaseManager] Creating ClickHouse pool");
+                let url = Self::build_clickhouse_url(config);
+                eprintln!("[DatabaseManager] ClickHouse URL: {}", url);
+                eprintln!("[DatabaseManager] Config: host={}, port={}, username={}, database={:?}",
+                    config.host, config.port, config.username, config.database);
+
+                let mut client = clickhouse::Client::default()
+                    .with_url(&url);
+
+                if !config.username.is_empty() {
+                    eprintln!("[DatabaseManager] Setting username: {}", config.username);
+                    client = client.with_user(&config.username);
+                }
+                if let Some(password) = &config.password {
+                    if !password.is_empty() {
+                        eprintln!("[DatabaseManager] Setting password: [present]");
+                        client = client.with_password(password);
+                    }
+                }
+                if let Some(database) = &config.database {
+                    eprintln!("[DatabaseManager] Setting database: {}", database);
+                    client = client.with_database(database);
+                }
+
+                // Test connection
+                eprintln!("[DatabaseManager] Executing test query: SELECT 1");
+                match client.query("SELECT 1").fetch_one::<u8>().await {
+                    Ok(val) => {
+                        eprintln!("[DatabaseManager] Test query succeeded, result: {}", val);
+                        Ok(AnyPool::ClickHouse(client))
+                    },
+                    Err(e) => {
+                        eprintln!("[DatabaseManager] Test query failed: {}", e);
+                        eprintln!("[DatabaseManager] Error debug: {:?}", e);
+                        Err(DatabaseError::ConnectionError(format!("ClickHouse connection failed: {}", e)))
+                    }
+                }
+            }
             _ => Err(DatabaseError::ConnectionError("Unsupported database type for pooling".to_string())),
         }
     }
@@ -146,6 +187,13 @@ impl DatabaseManager {
         config.file_path.clone().unwrap_or_else(|| ":memory:".to_string())
     }
 
+    /// Build ClickHouse HTTP connection URL
+    fn build_clickhouse_url(config: &ConnectionConfig) -> String {
+        let host = if config.host.is_empty() { "localhost" } else { &config.host };
+        let port = if config.port > 0 { config.port } else { 8123 };
+        format!("http://{}:{}", host, port)
+    }
+
     /// Close and remove a pool
     pub async fn close_pool(&self, connection_id: &str) -> Result<()> {
         if let Some((_, pool)) = self.active_pools.remove(connection_id) {
@@ -154,6 +202,10 @@ impl DatabaseManager {
                 AnyPool::Postgres(p) => p.close().await,
                 AnyPool::MySql(p) => p.close().await,
                 AnyPool::Sqlite(p) => p.close().await,
+                AnyPool::ClickHouse(_) => {
+                    // ClickHouse client doesn't have an explicit close method
+                    // Dropping the client is sufficient
+                }
             }
         }
         Ok(())
@@ -290,6 +342,7 @@ impl DatabaseManager {
             DatabaseType::SQLite => Box::new(SqliteProvider::new()),
             DatabaseType::MongoDB => Box::new(MongoDbProvider::new()),
             DatabaseType::Redis => Box::new(RedisProvider::new()),
+            DatabaseType::ClickHouse => Box::new(ClickHouseProvider::new()),
             // Default to Postgres for unknown types
             _ => Box::new(PostgresProvider::new()),
         }

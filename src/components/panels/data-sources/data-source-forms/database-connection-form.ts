@@ -4,7 +4,7 @@ import { TailwindElement } from '../../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
 import { getDatabaseVendor } from '../data-source-vendors.js';
 import { getDatabaseFormDefinition } from '../database-form-registry.js';
-import type { DatabaseType } from '../data-source-types.js';
+import type { DatabaseType, AnyDataSource, DatabaseConfig } from '../data-source-types.js';
 
 export interface DatabaseConnectionFormData {
   name: string;
@@ -23,6 +23,9 @@ export class DatabaseConnectionForm extends TailwindElement() {
   @property({ type: String })
   vendorId: DatabaseType = 'postgresql';
 
+  @property({ type: Object })
+  editData: AnyDataSource | null = null;
+
   @state() private name = '';
   @state() private host = 'localhost';
   @state() private port = 0;
@@ -38,7 +41,15 @@ export class DatabaseConnectionForm extends TailwindElement() {
 
   willUpdate(changedProperties: Map<string, unknown>) {
     super.willUpdate(changedProperties);
-    if (changedProperties.has('vendorId')) {
+    if (changedProperties.has('editData') && this.editData) {
+      const cfg = this.editData.config as DatabaseConfig;
+      this.name = this.editData.name;
+      this.host = cfg.host || 'localhost';
+      this.port = cfg.port || 0;
+      this.username = cfg.username || '';
+      this.database = cfg.database || '';
+      this.isGlobal = this.editData.scope === 'global';
+    } else if (changedProperties.has('vendorId')) {
       const formDef = getDatabaseFormDefinition(this.vendorId);
       if (formDef && formDef.defaultPort > 0) {
         this.port = formDef.defaultPort;
@@ -124,7 +135,7 @@ export class DatabaseConnectionForm extends TailwindElement() {
       this.testSuccessMessage = `Successfully connected to ${this.getVendorDisplayName()}`;
     } catch (err) {
       this.testResult = 'error';
-      this.testErrorMessage = err instanceof Error ? err.message : 'Failed to connect';
+      this.testErrorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
     } finally {
       this.isTesting = false;
     }
@@ -199,7 +210,9 @@ export class DatabaseConnectionForm extends TailwindElement() {
                       ? html`
                           <div class="mt-3 pt-3 border-t border-red-500/20">
                             <div class="text-[11px] text-red-400 space-y-1">
-                              <p><strong class="text-red-300">Connection Details:</strong></p>
+                              <p><strong class="text-red-300">Server Response:</strong></p>
+                              <p class="ml-4 font-mono text-[10px] break-all">${this.testErrorMessage}</p>
+                              <p class="mt-2"><strong class="text-red-300">Connection Details:</strong></p>
                               <ul class="ml-4 list-disc space-y-0.5">
                                 <li>Host: ${this.host}:${this.port}</li>
                                 <li>Username: ${this.username}</li>
@@ -363,7 +376,7 @@ export class DatabaseConnectionForm extends TailwindElement() {
               style="background-color: var(--brand-primary);"
               :class="${!this.isTesting ? 'hover:shadow-md hover:scale-[1.01] active:scale-[0.99]' : ''}"
             >
-              Add Connection
+              ${this.editData ? 'Save Changes' : 'Add Connection'}
             </button>
           </div>
         </div>

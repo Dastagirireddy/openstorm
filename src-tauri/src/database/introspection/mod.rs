@@ -10,8 +10,10 @@ mod traits;
 mod postgres;
 mod mysql;
 mod sqlite;
+mod clickhouse;
 
 pub use traits::{DatabaseIntrospector, DatabaseObject};
 pub use postgres::PostgresIntrospector;
 pub use mysql::MySqlIntrospector;
 pub use sqlite::SqliteIntrospector;
+pub use clickhouse::ClickHouseIntrospector;

@@ -311,6 +311,49 @@
   --os-ai-agent-text: var(--ai-text);
 }
 
+/* Shadow DOM support: :host makes CSS variables available inside shadow roots */
+:host {
+  --app-bg: #ffffff;
+  --app-background: #ffffff;
+  --app-foreground: #1a1a1a;
+  --app-secondary-foreground: #6b7280;
+  --app-disabled-foreground: #9ca3af;
+  --app-disabled-background: #e5e5e5;
+  --app-border: #e5e7eb;
+  --app-focus-border: #6366f1;
+  --app-hover-background: #f3f4f6;
+  --app-selection-background: #e8e0f5;
+  --app-selection: #e8e0f5;
+  --app-selection-foreground: #1a1a1a;
+  --app-input-background: #ffffff;
+  --app-input-foreground: #1a1a1a;
+  --app-input-border: #d0d0d0;
+  --app-input-placeholder: #9ca3af;
+  --app-button-background: #6366f1;
+  --app-button-foreground: #ffffff;
+  --app-button-hover: #4f46e5;
+  --app-toolbar-hover: #e8e8e8;
+  --app-toolbar-active: #d0d0d0;
+  --app-toolbar-background: #f3f4f6;
+  --app-tab-active: #ffffff;
+  --app-tab-inactive: #f3f4f6;
+  --app-tab-border: #e5e7eb;
+  --app-tab-active-border: #6366f1;
+  --app-scrollbar: #c1c1c1;
+  --app-scrollbar-hover: #a8a8a8;
+  --app-keyword: #0033b3;
+  --app-type: #00627a;
+  --app-string: #067d17;
+  --app-number: #1750eb;
+  --app-boolean: #0033b3;
+  --app-null: #808080;
+  --app-workbench: #f5f5f5;
+  --editor-background: #ffffff;
+  --error: #f44336;
+  --success: #22c55e;
+  --warning: #f59e0b;
+}
+
 /* Dark theme */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -511,6 +554,49 @@
     --os-ai-user-text: #1a1b26;
     --os-ai-agent-bg: var(--ai-tool-background);
     --os-ai-agent-text: var(--ai-text);
+  }
+
+  /* Shadow DOM support: dark mode variables */
+  :host {
+    --app-bg: #1a1b26;
+    --app-background: #1a1b26;
+    --app-foreground: #c0caf5;
+    --app-secondary-foreground: #565f89;
+    --app-disabled-foreground: #737aa2;
+    --app-disabled-background: #292e42;
+    --app-border: #292e42;
+    --app-focus-border: #7aa2f7;
+    --app-hover-background: #24283b;
+    --app-selection-background: #283457;
+    --app-selection: #292e42;
+    --app-selection-foreground: #c0caf5;
+    --app-input-background: #1a1b26;
+    --app-input-foreground: #c0caf5;
+    --app-input-border: #292e42;
+    --app-input-placeholder: #565f89;
+    --app-button-background: #7aa2f7;
+    --app-button-foreground: #1a1b26;
+    --app-button-hover: #3d59a1;
+    --app-toolbar-hover: #292e42;
+    --app-toolbar-active: #3b4261;
+    --app-toolbar-background: #16161e;
+    --app-tab-active: #1a1b26;
+    --app-tab-inactive: #16161e;
+    --app-tab-border: #292e42;
+    --app-tab-active-border: #7aa2f7;
+    --app-scrollbar: #3b4261;
+    --app-scrollbar-hover: #545c7e;
+    --app-keyword: #bb9af7;
+    --app-type: #2ac3de;
+    --app-string: #9ece6a;
+    --app-number: #ff9e64;
+    --app-boolean: #ff9e64;
+    --app-null: #737aa2;
+    --app-workbench: #16161e;
+    --editor-background: #1a1b26;
+    --error: #f7768e;
+    --success: #9ece6a;
+    --warning: #e0af68;
   }
 }
 

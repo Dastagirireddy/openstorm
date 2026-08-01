@@ -13,15 +13,15 @@ import { customElement, property, state } from 'lit/decorators.js';
 import { TailwindElement } from '../../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
 import { eventLog } from '../../../../services/event-log.js';
-import { EditorView, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { history, historyKeymap, defaultKeymap, indentMore } from '@codemirror/commands';
-import { sql, PostgreSQL, MySQL } from '@codemirror/lang-sql';
+import { sql, PostgreSQL, MySQL, StandardSQL } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { tags } from '@lezer/highlight';
+import { getSyntaxHighlighting } from '../../../../lib/editor/editor-syntax.js';
 
 export interface QueryResult {
+  kind?: 'select' | 'command';
   columns: ColumnInfo[];
   rows: Record<string, unknown>[];
   rowCount: number;
@@ -71,7 +71,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
   @property({ type: String }) projectPath: string | null = null;
   @property({ type: String }) connectionId: string | null = null;
   @property({ type: String }) connectionName: string = '';
-  @property({ type: String }) dialect: 'postgresql' | 'mysql' = 'postgresql';
+  @property({ type: String }) dialect: 'postgresql' | 'mysql' | 'standard' = 'postgresql';
   @property({ type: String }) tableName: string = '';
   @property({ type: String }) initialSql: string = '';
 
@@ -182,9 +182,11 @@ export class DatabaseQueryEditor extends TailwindElement(css`
 
     this.editorInitialized = true;
 
-    const sqlDialect = this.dialect === 'postgresql'
-      ? sql({ dialect: PostgreSQL })
-      : sql({ dialect: MySQL });
+    const sqlDialect = this.dialect === 'mysql'
+      ? sql({ dialect: MySQL })
+      : this.dialect === 'standard'
+        ? sql({ dialect: StandardSQL })
+        : sql({ dialect: PostgreSQL });
 
     const lightTheme = EditorView.theme({
       '&': {
@@ -208,8 +210,8 @@ export class DatabaseQueryEditor extends TailwindElement(css`
         backgroundColor: 'var(--app-bg)',
       },
       '.cm-cursor': {
-        borderLeft: '2px solid var(--app-foreground) !important',
-        caretColor: 'var(--app-foreground) !important',
+        borderLeft: '2px solid var(--app-foreground)',
+        caretColor: 'var(--app-foreground)',
       },
       '.cm-cursorLayer': {
         opacity: '1 !important',
@@ -218,20 +220,9 @@ export class DatabaseQueryEditor extends TailwindElement(css`
         backgroundColor: 'var(--app-selection)',
       },
       '.cm-selectionBackground': {
-        backgroundColor: 'var(--app-selection-background) !important',
+        backgroundColor: 'var(--app-selection-background)',
       },
     });
-
-    const lightHighlightStyle = HighlightStyle.define([
-      { tag: tags.keyword, color: 'var(--app-keyword)' },
-      { tag: tags.typeName, color: 'var(--app-type)' },
-      { tag: tags.string, color: 'var(--app-string)' },
-      { tag: tags.number, color: 'var(--app-number)' },
-      { tag: tags.bool, color: 'var(--app-boolean)' },
-      { tag: tags.null, color: 'var(--app-null)' },
-      { tag: tags.comment, color: 'var(--app-disabled-foreground)', fontStyle: 'italic' },
-      { tag: tags.function(tags.variableName), color: 'var(--app-keyword)' },
-    ]);
 
     this.editorView = new EditorView({
       doc: this.sql,
@@ -259,10 +250,15 @@ export class DatabaseQueryEditor extends TailwindElement(css`
         }, ...historyKeymap, ...defaultKeymap]),
         sqlDialect,
         lightTheme,
-        syntaxHighlighting(lightHighlightStyle),
+        getSyntaxHighlighting(),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             this.sql = update.state.doc.toString();
+            this.dispatchEvent(new CustomEvent('sql-changed', {
+              detail: { sql: this.sql },
+              bubbles: true,
+              composed: true,
+            }));
           }
         }),
       ],
@@ -521,7 +517,7 @@ export class DatabaseQueryEditor extends TailwindElement(css`
       // Update the existing frame with error
       this.frames = this.frames.map(f =>
         f.id === frame.id
-          ? { ...f, results: null, error: err instanceof Error ? err.message : 'Query execution failed', timestamp: Date.now() }
+          ? { ...f, results: null, error: typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err)), timestamp: Date.now() }
           : f
       );
     } finally {
@@ -1007,6 +1003,27 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
     // Table view - Modern high-fidelity data table
     const columns = frame.results?.columns || [];
 
+    // DDL/DML commands (CREATE/INSERT/UPDATE/DELETE/SET/USE/...) return no rows.
+    // Show a friendly success notice instead of an empty data table.
+    if (frame.results?.kind === 'command') {
+      return html`
+        <div class="flex items-center justify-center h-full p-8">
+          <div class="flex flex-col items-center text-center" style="color: var(--app-foreground);">
+            <div
+              class="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+              style="background: rgba(16, 185, 129, 0.1); color: rgb(16, 185, 129);"
+            >
+              <iconify-icon icon="mdi:check-circle-outline" width="28" height="28"></iconify-icon>
+            </div>
+            <p class="text-sm font-medium">Command executed successfully</p>
+            <p class="text-xs mt-1" style="color: var(--app-disabled-foreground);">
+              ${frame.executionTimeMs ?? frame.results?.executionTimeMs ?? 0}ms
+            </p>
+          </div>
+        </div>
+      `;
+    }
+
     return html`
       <div class="flex flex-col h-full">
         <div class="overflow-auto flex-1 relative">
@@ -1163,106 +1180,110 @@ ${JSON.stringify(frame.results?.rows, null, 2)}</pre>
     return html`
       <!-- Main Layout -->
       <div class="flex flex-col h-full w-full overflow-hidden" style="background: var(--app-bg);">
-        <!-- Editor Section: Left = Actions, Right = Editor -->
-        <div class="flex shrink-0 items-stretch border-b" style="background: var(--app-background); border-color: var(--app-border, rgba(255,255,255,0.1));">
-          <!-- Left Column: Primary Action Buttons (hidden in focus mode) -->
-          <div
-            class="${this.focusMode ? 'hidden' : 'w-12'} border-r flex flex-col items-center justify-start gap-1 py-2 shrink-0"
-            style="background: var(--app-toolbar-background); border-color: var(--app-border, rgba(255,255,255,0.1));"
+        <!-- Single Row Toolbar -->
+        <div class="flex items-center h-[34px] px-2 gap-0.5 border-b shrink-0" style="background: var(--app-toolbar-background); border-color: var(--app-border);">
+          <!-- Run -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+            style="color: var(--success);"
+            title="Run Query (⌘ + ↩)"
+            @click=${(e: MouseEvent) => {
+              e.preventDefault();
+              e.stopPropagation();
+              this._boundHandleRun();
+            }}
+            ?disabled=${this.isRunning || !this.sql.trim()}
           >
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
-              style="color: var(--success);"
-              title="Run Query (⌘ + ↩)"
-              @click=${(e: MouseEvent) => {
-                e.preventDefault();
-                e.stopPropagation();
-                this._boundHandleRun();
-              }}
-              ?disabled=${this.isRunning || !this.sql.trim()}
-            >
-              ${this.isRunning
-                ? html`<iconify-icon icon="line-md:loading-loop" width="16" height="16"></iconify-icon>`
-                : html`<iconify-icon icon="mdi:play" width="16" height="16"></iconify-icon>`}
-            </button>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all hover:bg-[var(--app-toolbar-hover)] ${this.isRunning ? 'cursor-pointer' : 'cursor-not-allowed'}"
-              style="color: ${this.isRunning ? 'var(--error)' : 'var(--app-disabled-foreground)'};"
-              title="Cancel Query"
-              @click=${this._boundHandleCancel}
-              ?disabled=${!this.isRunning}
-            >
-              <iconify-icon icon="mdi:stop" width="16" height="16"></iconify-icon>
-            </button>
-            <div class="w-6 h-[1px] my-1" style="background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.15), transparent);"></div>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
-              style="color: var(--app-keyword);"
-              title="Format SQL"
-              @click=${this._boundHandleFormatSql}
-            >
-              <iconify-icon icon="mdi:code-tags" width="16" height="16"></iconify-icon>
-            </button>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
-              style="color: var(--warning);"
-              title="Clear Editor"
-              @click=${() => {
-                this.sql = '';
-                if (this.editorView) {
-                  this.editorView.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: '' } });
-                }
-              }}
-            >
-              <iconify-icon icon="mdi:eraser" width="16" height="16"></iconify-icon>
-            </button>
-          </div>
-
-          <!-- Right Column: SQL Editor (takes maximum space) -->
-          <div class="flex-1 flex flex-col min-w-0 relative">
-            <!-- Editor Container -->
-            <div id="editor-container" class="w-full h-full" style="background-color: var(--app-bg);"></div>
-          </div>
-
-          <!-- Far Right: Secondary Actions -->
-          <div
-            class="w-12 border-l flex flex-col items-center justify-start gap-1 py-2 shrink-0"
-            style="background: var(--app-toolbar-background); border-color: var(--app-border);"
+            ${this.isRunning
+              ? html`<iconify-icon icon="line-md:loading-loop" width="15" height="15"></iconify-icon>`
+              : html`<iconify-icon icon="mdi:play" width="15" height="15"></iconify-icon>`}
+          </button>
+          <!-- Stop -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all hover:bg-[var(--app-toolbar-hover)] ${this.isRunning ? 'cursor-pointer' : 'cursor-not-allowed'}"
+            style="color: ${this.isRunning ? 'var(--error)' : 'var(--app-disabled-foreground)'};"
+            title="Cancel Query"
+            @click=${this._boundHandleCancel}
+            ?disabled=${!this.isRunning}
           >
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
-              style="color: var(--brand-primary);"
-              title="Save Query"
-              @click=${() => { this.showSaveQueryDialog = true; }}
-            >
-              <iconify-icon icon="mdi:content-save" width="16" height="16"></iconify-icon>
-            </button>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${this.showHistoryPanel ? 'bg-[var(--app-toolbar-active)]' : ''}"
-              style="color: var(--app-console-info);"
-              title="Query History"
-              @click=${() => { this.showHistoryPanel = !this.showHistoryPanel; this.showSavedQueriesPanel = false; this.requestUpdate(); }}
-            >
-              <iconify-icon icon="mdi:history" width="16" height="16"></iconify-icon>
-            </button>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${this.showSavedQueriesPanel ? 'bg-[var(--app-toolbar-active)]' : ''}"
-              style="color: var(--project-database);"
-              title="Saved Queries"
-              @click=${() => { this.showSavedQueriesPanel = !this.showSavedQueriesPanel; this.showHistoryPanel = false; this.requestUpdate(); }}
-            >
-              <iconify-icon icon="mdi:bookmark" width="16" height="16"></iconify-icon>
-            </button>
-            <div class="w-6 h-[1px] my-1" style="background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.15), transparent);"></div>
-            <button
-              class="w-8 h-8 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${!this.multiCardMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
-              style="color: var(--app-foreground);"
-              title="${this.multiCardMode ? 'Switch to single result view' : 'Switch to multi result view'}"
-              @click=${() => { this.multiCardMode = !this.multiCardMode; this.requestUpdate(); }}
-            >
-              <iconify-icon icon="${this.multiCardMode ? 'mdi:layers' : 'mdi:card-outline'}" width="16" height="16"></iconify-icon>
-            </button>
-          </div>
+            <iconify-icon icon="mdi:stop" width="15" height="15"></iconify-icon>
+          </button>
+
+          <div class="w-px h-4 mx-1" style="background: var(--app-border);"></div>
+
+          <!-- Format -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+            style="color: var(--app-keyword);"
+            title="Format SQL"
+            @click=${this._boundHandleFormatSql}
+          >
+            <iconify-icon icon="mdi:code-tags" width="15" height="15"></iconify-icon>
+          </button>
+          <!-- Clear -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+            style="color: var(--warning);"
+            title="Clear Editor"
+            @click=${() => {
+              this.sql = '';
+              if (this.editorView) {
+                this.editorView.dispatch({ changes: { from: 0, to: this.editorView.state.doc.length, insert: '' } });
+              }
+            }}
+          >
+            <iconify-icon icon="mdi:eraser" width="15" height="15"></iconify-icon>
+          </button>
+
+          <div class="w-px h-4 mx-1" style="background: var(--app-border);"></div>
+
+          <!-- Save -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)]"
+            style="color: var(--brand-primary);"
+            title="Save Query"
+            @click=${() => { this.showSaveQueryDialog = true; }}
+          >
+            <iconify-icon icon="mdi:content-save" width="15" height="15"></iconify-icon>
+          </button>
+
+          <div class="w-px h-4 mx-1" style="background: var(--app-border);"></div>
+
+          <!-- History -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${this.showHistoryPanel ? 'bg-[var(--app-toolbar-active)]' : ''}"
+            style="color: var(--app-console-info);"
+            title="Query History"
+            @click=${() => { this.showHistoryPanel = !this.showHistoryPanel; this.showSavedQueriesPanel = false; this.requestUpdate(); }}
+          >
+            <iconify-icon icon="mdi:history" width="15" height="15"></iconify-icon>
+          </button>
+          <!-- Saved Queries -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${this.showSavedQueriesPanel ? 'bg-[var(--app-toolbar-active)]' : ''}"
+            style="color: var(--project-database);"
+            title="Saved Queries"
+            @click=${() => { this.showSavedQueriesPanel = !this.showSavedQueriesPanel; this.showHistoryPanel = false; this.requestUpdate(); }}
+          >
+            <iconify-icon icon="mdi:bookmark" width="15" height="15"></iconify-icon>
+          </button>
+
+          <div class="flex-1"></div>
+
+          <!-- Multi-card mode toggle -->
+          <button
+            class="w-7 h-7 rounded flex items-center justify-center transition-all cursor-pointer hover:bg-[var(--app-toolbar-hover)] ${!this.multiCardMode ? 'bg-[var(--app-toolbar-active)]' : ''}"
+            style="color: var(--app-foreground);"
+            title="${this.multiCardMode ? 'Switch to single result view' : 'Switch to multi result view'}"
+            @click=${() => { this.multiCardMode = !this.multiCardMode; this.requestUpdate(); }}
+          >
+            <iconify-icon icon="${this.multiCardMode ? 'mdi:layers' : 'mdi:card-outline'}" width="15" height="15"></iconify-icon>
+          </button>
+        </div>
+
+        <!-- SQL Editor -->
+        <div class="flex-1 min-h-0 relative">
+          <div id="editor-container" class="w-full h-full" style="background-color: var(--app-bg);"></div>
         </div>
 
         <!-- Query History Panel -->

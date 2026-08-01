@@ -9,6 +9,7 @@ mod mysql;
 mod sqlite;
 mod mongodb;
 mod redis;
+mod clickhouse;
 
 pub use traits::DatabaseProvider;
 pub use postgres::PostgresProvider;
@@ -16,3 +17,4 @@ pub use mysql::MySqlProvider;
 pub use sqlite::SqliteProvider;
 pub use mongodb::MongoDbProvider;
 pub use redis::RedisProvider;
+pub use clickhouse::ClickHouseProvider;

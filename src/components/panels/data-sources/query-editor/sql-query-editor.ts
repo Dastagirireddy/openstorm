@@ -10,13 +10,13 @@ import { TailwindElement } from '../../../../tailwind-element.js';
 import { EditorView, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { history, historyKeymap, defaultKeymap } from '@codemirror/commands';
-import { sql, PostgreSQL, MySQL } from '@codemirror/lang-sql';
+import { sql, PostgreSQL, MySQL, StandardSQL } from '@codemirror/lang-sql';
 import { oneDark } from '@codemirror/theme-one-dark';
 
 @customElement('sql-query-editor')
 export class SqlQueryEditor extends TailwindElement() {
   @property({ type: String }) sql = '';
-  @property({ type: String }) dialect: 'postgresql' | 'mysql' = 'postgresql';
+  @property({ type: String }) dialect: 'postgresql' | 'mysql' | 'standard' = 'postgresql';
   @property({ type: String }) status: 'idle' | 'running' | 'complete' | 'error' = 'idle';
   @property({ type: String }) error: string | null = null;
 
@@ -111,7 +111,11 @@ export class SqlQueryEditor extends TailwindElement() {
   private initEditor() {
     if (!this.containerRef) return;
 
-    const sqlDialect = this.dialect === 'postgresql' ? sql({ dialect: PostgreSQL }) : sql({ dialect: MySQL });
+    const sqlDialect = this.dialect === 'mysql'
+      ? sql({ dialect: MySQL })
+      : this.dialect === 'standard'
+        ? sql({ dialect: StandardSQL })
+        : sql({ dialect: PostgreSQL });
 
     this.editorView = new EditorView({
       doc: this.sql,

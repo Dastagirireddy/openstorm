@@ -6,6 +6,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryResult {
+    /// `"select"` returns tabular rows; `"command"` indicates a DDL/DML/utility
+    /// statement (CREATE/INSERT/UPDATE/DELETE/SET/USE/etc.) that the frontend
+    /// should display as a success notice rather than a data table.
+    #[serde(default = "default_kind")]
+    pub kind: String,
     pub columns: Vec<ColumnInfo>,
     pub rows: Vec<serde_json::Value>,
     pub row_count: u64,
@@ -16,6 +21,10 @@ pub struct QueryResult {
     pub has_more: bool,
     #[serde(default)]
     pub limit_applied: Option<u64>,
+}
+
+fn default_kind() -> String {
+    "select".to_string()
 }
 
 /// Column information

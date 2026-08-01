@@ -4,7 +4,7 @@ import { TailwindElement } from '../../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
 import { getDatabaseVendor } from '../data-source-vendors.js';
 import { getDatabaseFormDefinition } from '../database-form-registry.js';
-import type { DatabaseType } from '../data-source-types.js';
+import type { DatabaseType, AnyDataSource, DatabaseConfig } from '../data-source-types.js';
 
 export interface SQLiteConnectionFormData {
   name: string;
@@ -20,6 +20,9 @@ export class SQLiteConnectionForm extends TailwindElement() {
   @property({ type: String })
   vendorId: DatabaseType = 'sqlite';
 
+  @property({ type: Object })
+  editData: AnyDataSource | null = null;
+
   @state() private name = '';
   @state() private filePath = '';
   @state() private readOnly = false;
@@ -33,6 +36,18 @@ export class SQLiteConnectionForm extends TailwindElement() {
 
   firstUpdated() {
     // SQLite doesn't use default port
+  }
+
+  willUpdate(changedProperties: Map<string, unknown>) {
+    super.willUpdate(changedProperties);
+    if (changedProperties.has('editData') && this.editData) {
+      const cfg = this.editData.config as DatabaseConfig;
+      this.name = this.editData.name;
+      this.filePath = cfg.filePath || '';
+      this.readOnly = cfg.options?.readOnly === 'true';
+      this.walMode = cfg.options?.walMode !== 'false';
+      this.isGlobal = this.editData.scope === 'global';
+    }
   }
 
   private async handleBrowseFile() {
@@ -119,7 +134,7 @@ export class SQLiteConnectionForm extends TailwindElement() {
       this.testSuccessMessage = 'Successfully connected to SQLite database';
     } catch (err) {
       this.testResult = 'error';
-      this.testErrorMessage = err instanceof Error ? err.message : 'Failed to connect';
+      this.testErrorMessage = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
       this.showErrorDetails = true; // Auto-expand on error
     } finally {
       this.isTesting = false;
@@ -186,7 +201,9 @@ export class SQLiteConnectionForm extends TailwindElement() {
                       ? html`
                           <div class="mt-3 pt-3 border-t border-red-500/20">
                             <div class="text-[11px] text-red-400 space-y-1">
-                              <p><strong class="text-red-300">Connection Details:</strong></p>
+                              <p><strong class="text-red-300">Server Response:</strong></p>
+                              <p class="ml-4 font-mono text-[10px] break-all">${this.testErrorMessage}</p>
+                              <p class="mt-2"><strong class="text-red-300">Connection Details:</strong></p>
                               <ul class="ml-4 list-disc space-y-0.5">
                                 <li>File: ${this.filePath}</li>
                                 <li>Read-only: ${this.readOnly ? 'Yes' : 'No'}</li>
@@ -338,7 +355,7 @@ export class SQLiteConnectionForm extends TailwindElement() {
               style="background-color: var(--brand-primary);"
               :class="${!this.isTesting ? 'hover:shadow-md hover:scale-[1.01] active:scale-[0.99]' : ''}"
             >
-              Add Connection
+              ${this.editData ? 'Save Changes' : 'Add Connection'}
             </button>
           </div>
         </div>

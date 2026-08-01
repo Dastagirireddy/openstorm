@@ -28,14 +28,9 @@ impl QueryExporter {
     ) -> Result<ExportResult, DatabaseError> {
         let start = Instant::now();
 
-        // Validate format support
+        // Validate format support (all pool types are supported)
         match pool {
-            AnyPool::Postgres(_) | AnyPool::MySql(_) | AnyPool::Sqlite(_) => {}
-            _ => {
-                return Err(DatabaseError::QueryFailed(
-                    "Export only supports PostgreSQL, MySQL, and SQLite".into()
-                ));
-            }
+            AnyPool::Postgres(_) | AnyPool::MySql(_) | AnyPool::Sqlite(_) | AnyPool::ClickHouse(_) => {}
         }
 
         // Apply max rows limit
@@ -100,6 +95,7 @@ impl QueryExporter {
             AnyPool::Postgres(pool) => Self::fetch_postgres_rows_csv(pool, query, &mut writer, options).await?,
             AnyPool::MySql(pool) => Self::fetch_mysql_rows_csv(pool, query, &mut writer, options).await?,
             AnyPool::Sqlite(pool) => Self::fetch_sqlite_rows_csv(pool, query, &mut writer, options).await?,
+            AnyPool::ClickHouse(client) => Self::fetch_clickhouse_rows_csv(client, query, &mut writer, options).await?,
         };
 
         writer.flush()
@@ -126,6 +122,7 @@ impl QueryExporter {
             AnyPool::Postgres(pool) => Self::fetch_postgres_rows_json(pool, query, &mut writer, options).await?,
             AnyPool::MySql(pool) => Self::fetch_mysql_rows_json(pool, query, &mut writer, options).await?,
             AnyPool::Sqlite(pool) => Self::fetch_sqlite_rows_json(pool, query, &mut writer, options).await?,
+            AnyPool::ClickHouse(client) => Self::fetch_clickhouse_rows_json(client, query, &mut writer, options).await?,
         };
 
         // Write closing bracket
@@ -160,6 +157,7 @@ impl QueryExporter {
             AnyPool::Postgres(pool) => Self::fetch_postgres_rows_xml(pool, query, &mut writer, options).await?,
             AnyPool::MySql(pool) => Self::fetch_mysql_rows_xml(pool, query, &mut writer, options).await?,
             AnyPool::Sqlite(pool) => Self::fetch_sqlite_rows_xml(pool, query, &mut writer, options).await?,
+            AnyPool::ClickHouse(client) => Self::fetch_clickhouse_rows_xml(client, query, &mut writer, options).await?,
         };
 
         writeln!(writer, r#"  </Table>"#)?;
@@ -693,5 +691,157 @@ impl QueryExporter {
             return val.to_string();
         }
         "null".to_string()
+    }
+
+    /// Fetch ClickHouse rows for CSV export
+    async fn fetch_clickhouse_rows_csv(
+        client: &clickhouse::Client,
+        query: &str,
+        writer: &mut BufWriter<File>,
+        options: &ExportOptions,
+    ) -> Result<(Vec<ColumnInfo>, u64), DatabaseError> {
+        let text = client
+            .query(query)
+            .fetch_one::<String>()
+            .await
+            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+
+        let lines: Vec<&str> = text.lines().collect();
+        if lines.is_empty() {
+            return Ok((Vec::new(), 0));
+        }
+
+        let headers: Vec<String> = lines[0].split('\t').map(|h| h.trim().to_string()).collect();
+        let columns: Vec<ColumnInfo> = headers.iter().map(|name| ColumnInfo {
+            name: name.clone(),
+            type_name: None,
+            nullable: None,
+        }).collect();
+
+        if options.include_headers {
+            let header: String = columns.iter()
+                .map(|c| Self::escape_csv_field(&c.name))
+                .collect::<Vec<_>>()
+                .join(",");
+            writeln!(writer, "{}", header)
+                .map_err(|e| DatabaseError::QueryFailed(format!("Failed to write CSV header: {}", e)))?;
+        }
+
+        let mut row_count = 0u64;
+        for line in &lines[1..] {
+            if line.is_empty() { continue; }
+            let values: Vec<String> = line.split('\t').map(|v| Self::escape_csv_field(v.trim())).collect();
+            writeln!(writer, "{}", values.join(","))
+                .map_err(|e| DatabaseError::QueryFailed(format!("Failed to write CSV row: {}", e)))?;
+            row_count += 1;
+        }
+
+        Ok((columns, row_count))
+    }
+
+    /// Fetch ClickHouse rows for JSON export
+    async fn fetch_clickhouse_rows_json(
+        client: &clickhouse::Client,
+        query: &str,
+        writer: &mut BufWriter<File>,
+        _options: &ExportOptions,
+    ) -> Result<u64, DatabaseError> {
+        let text = client
+            .query(query)
+            .fetch_one::<String>()
+            .await
+            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+
+        let lines: Vec<&str> = text.lines().collect();
+        if lines.is_empty() {
+            return Ok(0);
+        }
+
+        let headers: Vec<&str> = lines[0].split('\t').collect();
+        let mut row_count = 0u64;
+        let mut first = true;
+
+        for line in &lines[1..] {
+            if line.is_empty() { continue; }
+            if !first { writeln!(writer, ",")?; }
+            first = false;
+
+            let values: Vec<&str> = line.split('\t').collect();
+            write!(writer, "  {{")?;
+            let mut first_col = true;
+            for (i, header) in headers.iter().enumerate() {
+                if !first_col { write!(writer, ", ")?; }
+                first_col = false;
+                let value = values.get(i).map(|v| *v).unwrap_or("\\N");
+                let formatted = Self::format_clickhouse_value(value);
+                write!(writer, "\"{}\": {}", header, formatted)?;
+            }
+            write!(writer, "}}")?;
+            row_count += 1;
+        }
+        writeln!(writer)?;
+
+        Ok(row_count)
+    }
+
+    /// Fetch ClickHouse rows for XML/XLSX export
+    async fn fetch_clickhouse_rows_xml(
+        client: &clickhouse::Client,
+        query: &str,
+        writer: &mut BufWriter<File>,
+        options: &ExportOptions,
+    ) -> Result<u64, DatabaseError> {
+        let text = client
+            .query(query)
+            .fetch_one::<String>()
+            .await
+            .map_err(|e| DatabaseError::QueryFailed(e.to_string()))?;
+
+        let lines: Vec<&str> = text.lines().collect();
+        if lines.is_empty() {
+            return Ok(0);
+        }
+
+        let headers: Vec<&str> = lines[0].split('\t').collect();
+
+        if options.include_headers {
+            write!(writer, "   <Row>")?;
+            for header in &headers {
+                write!(writer, r#"<Cell ss:StyleID="sHeader"><Data ss:Type="String">{}</Data></Cell>"#, Self::escape_xml(header))?;
+            }
+            writeln!(writer, "</Row>")?;
+        }
+
+        let mut row_count = 0u64;
+        for line in &lines[1..] {
+            if line.is_empty() { continue; }
+            let values: Vec<&str> = line.split('\t').collect();
+            write!(writer, "   <Row>")?;
+            for (i, _header) in headers.iter().enumerate() {
+                let value = values.get(i).map(|v| *v).unwrap_or("");
+                write!(writer, r#"<Cell><Data ss:Type="String">{}</Data></Cell>"#, Self::escape_xml(value))?;
+            }
+            writeln!(writer, "</Row>")?;
+            row_count += 1;
+        }
+
+        Ok(row_count)
+    }
+
+    /// Format ClickHouse value for JSON output
+    fn format_clickhouse_value(raw: &str) -> String {
+        if raw == "\\N" || raw.is_empty() {
+            "null".to_string()
+        } else if raw == "true" || raw == "1" {
+            "true".to_string()
+        } else if raw == "false" || raw == "0" {
+            "false".to_string()
+        } else if let Ok(_) = raw.parse::<i64>() {
+            raw.to_string()
+        } else if let Ok(_) = raw.parse::<f64>() {
+            raw.to_string()
+        } else {
+            format!("\"{}\"", raw.replace('\\', "\\\\").replace('"', "\\\""))
+        }
     }
 }

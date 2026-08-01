@@ -21,9 +21,10 @@ import '../panels/data-sources/query-editor/database-query-editor.js';
 export interface QueryEditorTabInfo {
   connectionId: string;
   connectionName: string;
-  dialect: 'postgresql' | 'mysql';
+  dialect: 'postgresql' | 'mysql' | 'standard';
   tableName: string;
   projectPath?: string | null;
+  initialSql?: string;
 }
 
 @customElement('file-viewer-container')
@@ -177,6 +178,7 @@ export class FileViewerContainer extends TailwindElement() {
                 dialect: tab.metadata?.dialect || 'postgresql',
                 tableName,
                 projectPath: tab.metadata?.projectPath || this.projectPath,
+                initialSql: tab.metadata?.sql || '',
               };
               this.viewerTag = 'database-query-editor';
               this.filePath = tab.id;
@@ -210,6 +212,7 @@ export class FileViewerContainer extends TailwindElement() {
             connectionName: tab.name,
             dialect: tab.metadata?.dialect || 'postgresql',
             tableName,
+            initialSql: tab.metadata?.sql || '',
           };
           this.viewerTag = 'database-query-editor';
           this.filePath = tab.id;
@@ -242,6 +245,14 @@ export class FileViewerContainer extends TailwindElement() {
     this.viewerTag = 'database-query-editor';
     this.filePath = queryEditorId;
     this.requestUpdate();
+  }
+
+  private handleQuerySqlChanged(e: CustomEvent<{ sql: string }>): void {
+    if (!this.activeTabId) return;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (tab && tab.metadata) {
+      tab.metadata.sql = e.detail.sql;
+    }
   }
 
   private handleSaveFile(): void {
@@ -496,12 +507,15 @@ export class FileViewerContainer extends TailwindElement() {
         <div class="flex-1 overflow-hidden relative min-h-0">
           ${this.viewerTag === 'database-query-editor' && this.queryEditorInfo
             ? html`<database-query-editor
+                key=${this.filePath}
                 class="h-full w-full"
                 .projectPath=${this.queryEditorInfo.projectPath || this.projectPath}
                 .connectionId=${this.queryEditorInfo.connectionId}
                 .connectionName=${this.queryEditorInfo.connectionName}
                 .dialect=${this.queryEditorInfo.dialect}
                 .tableName=${this.queryEditorInfo.tableName}
+                .initialSql=${this.queryEditorInfo.initialSql || ''}
+                @sql-changed=${this.handleQuerySqlChanged}
               ></database-query-editor>`
             : this.viewerTag === 'text-viewer'
               ? html`<text-viewer key=${this.filePath} .filePath=${this.filePath} .content=${this.content} .projectPath=${this.projectPath} class="h-full"></text-viewer>`

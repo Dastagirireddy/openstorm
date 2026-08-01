@@ -67,6 +67,18 @@ export const DATABASE_VENDORS: DatabaseVendor[] = [
     defaultPort: 0,
     description: 'Embedded SQL database',
   },
+  {
+    id: 'clickhouse',
+    name: 'ClickHouse',
+    icon: 'simple-icons:clickhouse',
+    color: 'text-[#FADB14]',
+    bgColor: 'bg-[#FADB14]/10',
+    gradientFrom: 'from-[#FADB14]/25',
+    gradientTo: 'to-[#FADB14]/10',
+    borderColor: 'border-[#FADB14]/50',
+    defaultPort: 8123,
+    description: 'Real-time analytics DBMS',
+  },
 ];
 
 export function getDatabaseVendor(vendorId: DatabaseType): DatabaseVendor | undefined {

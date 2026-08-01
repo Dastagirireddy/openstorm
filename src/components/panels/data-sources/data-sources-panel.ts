@@ -2,7 +2,7 @@ import { html, nothing } from 'lit';
 import { customElement, state, property } from 'lit/decorators.js';
 import { TailwindElement } from '../../../tailwind-element.js';
 import { invoke } from '@tauri-apps/api/core';
-import type { AnyDataSource, DataSourceType, DatabaseType } from './data-source-types.js';
+import type { AnyDataSource, DataSourceType, DatabaseType, DatabaseConfig } from './data-source-types.js';
 import { getDatabaseFormDefinition } from './database-form-registry.js';
 import './database-multi-tree.js';
 import './data-source-type-picker.js';
@@ -20,6 +20,7 @@ export class DataSourcesPanel extends TailwindElement() {
   @state() private selectedType: DataSourceType | null = null;
   @state() private selectedVendor: DatabaseType | null = null;
   @state() private selectedConnectionId: string | null = null;
+  @state() private editingDataSource: AnyDataSource | null = null;
 
   connectedCallback(): void {
     super.connectedCallback();
@@ -40,7 +41,7 @@ export class DataSourcesPanel extends TailwindElement() {
       });
       this.dataSources = result;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load data sources';
+      this.error = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
     } finally {
       this.isLoading = false;
     }
@@ -67,7 +68,7 @@ export class DataSourcesPanel extends TailwindElement() {
 
       const payload = {
         config: {
-          id: null,
+          id: this.editingDataSource?.id || null,
           name: config.name,
           type: config.dbType || config.type,
           host: isFileBased ? null : (config.host || 'localhost'),
@@ -85,14 +86,15 @@ export class DataSourcesPanel extends TailwindElement() {
         projectPath,
       };
 
-      await invoke('db_add_connection', payload);
+      await invoke(this.editingDataSource ? 'db_update_connection' : 'db_add_connection', payload);
       await this.loadDataSources();
       this.showAddDialog = false;
       this.selectedType = null;
       this.selectedVendor = null;
+      this.editingDataSource = null;
     } catch (err) {
       console.error('Failed to add data source:', err);
-      this.error = err instanceof Error ? err.message : 'Failed to add data source';
+      this.error = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -105,14 +107,27 @@ export class DataSourcesPanel extends TailwindElement() {
       });
       await this.loadDataSources();
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to remove data source';
+      this.error = typeof err === 'string' ? err : (err instanceof Error ? err.message : String(err));
     }
+  }
+
+  private handleEditDataSource(id: string) {
+    const ds = this.dataSources.find(d => d.id === id);
+    if (!ds) return;
+    this.editingDataSource = ds;
+    // Pre-select the vendor based on the data source type
+    const cfg = ds.config as DatabaseConfig;
+    const dbType = cfg.dbType || 'postgresql';
+    this.selectedVendor = dbType as DatabaseType;
+    this.selectedType = 'database';
+    this.showAddDialog = true;
   }
 
   private handleCloseDialog() {
     this.showAddDialog = false;
     this.selectedType = null;
     this.selectedVendor = null;
+    this.editingDataSource = null;
   }
 
   private dispatchRefresh(connectionId: string) {
@@ -134,7 +149,10 @@ export class DataSourcesPanel extends TailwindElement() {
     const connection = this.dataSources.find(c => c.id === connectionId);
     if (!connection) return;
 
-    const dialect = connection.config.dbType === 'mysql' ? 'mysql' : 'postgresql';
+    const cfg = connection.config as DatabaseConfig;
+    const dialect = cfg.dbType === 'mysql' ? 'mysql'
+      : cfg.dbType === 'clickhouse' ? 'standard'
+      : 'postgresql';
 
     // Extract table name from nodeId (remove any prefix like "table:")
     const tableName = nodeId.includes(':') ? nodeId.split(':').pop() || nodeId : nodeId;
@@ -229,6 +247,7 @@ export class DataSourcesPanel extends TailwindElement() {
             .dataSources=${this.dataSources}
             .projectPath=${this.projectPath}
             @remove=${(e: CustomEvent) => this.handleRemoveDataSource(e.detail.id)}
+            @edit=${(e: CustomEvent) => this.handleEditDataSource(e.detail.id)}
             @node-select=${(e: CustomEvent) => this.handleNodeSelect(e)}
           ></database-multi-tree>
         </div>
@@ -300,6 +319,7 @@ export class DataSourcesPanel extends TailwindElement() {
                               ? html`
                                   <sqlite-connection-form
                                     vendorId="${this.selectedVendor}"
+                                    .editData=${this.editingDataSource}
                                     @submit=${(e: CustomEvent) => this.handleAddDataSource(e.detail)}
                                     @cancel=${() => this.handleCloseDialog()}
                                   ></sqlite-connection-form>
@@ -307,6 +327,7 @@ export class DataSourcesPanel extends TailwindElement() {
                               : html`
                                   <database-connection-form
                                     vendorId="${this.selectedVendor}"
+                                    .editData=${this.editingDataSource}
                                     @submit=${(e: CustomEvent) => this.handleAddDataSource(e.detail)}
                                     @cancel=${() => this.handleCloseDialog()}
                                   ></database-connection-form>

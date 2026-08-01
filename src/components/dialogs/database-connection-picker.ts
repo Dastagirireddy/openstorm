@@ -87,7 +87,7 @@ export class DatabaseConnectionPicker extends TailwindElement(css`
     dispatch('open-query-editor', {
       connectionId: connection.id,
       connectionName: connection.name,
-      dialect: connection.dbType as 'postgresql' | 'mysql',
+      dialect: connection.dbType === 'mysql' ? 'mysql' : connection.dbType === 'clickhouse' ? 'standard' : 'postgresql',
       tableName: '',
     });
   }
