@@ -28,6 +28,7 @@ pub trait DebugAdapter: Send + Sync {
     fn threads(&mut self) -> Result<Vec<Thread>, String>;
     fn terminate(&mut self) -> Result<(), String>;
     fn poll_events(&mut self) -> Vec<DapEvent>;
+    fn is_process_alive(&mut self) -> bool;
     fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter>;
     fn set_exception_breakpoints(&mut self, filter_ids: Vec<String>) -> Result<(), String>;
 }

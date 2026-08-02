@@ -427,6 +427,25 @@ export class OpenStormApp extends TailwindElement() {
 
     // Listen for file system changes from backend
     listen("file-change", (event: any) => {
+      const { paths, type } = event.payload;
+
+      // Reload open tabs when their files change on disk (only if not user-modified)
+      if (type === "modify" && Array.isArray(paths)) {
+        for (const filePath of paths) {
+          const openTab = this.tabs.find(t => t.path === filePath && t.tabType === 'file');
+          if (openTab && !openTab.modified) {
+            invoke<string>("read_file", { path: filePath }).then(content => {
+              this.tabs = this.tabs.map(t =>
+                t.path === filePath ? { ...t, content } : t
+              );
+              dispatch("open-file-external", { path: filePath, content });
+            }).catch(err => {
+              console.warn(`[FileChange] Failed to reload ${filePath}:`, err);
+            });
+          }
+        }
+      }
+
       dispatch("refresh-explorer", event.payload);
     }).catch(console.error);
 

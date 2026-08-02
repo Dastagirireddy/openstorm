@@ -57,6 +57,7 @@ export class FileViewerContainer extends TailwindElement() {
   private _boundHandleDebugSessionStarted!: () => void;
   private _boundHandleDebugSessionEnded!: () => void;
   private _boundHandleDebugStopped!: (e: CustomEvent) => void;
+  private _boundHandleDebugContinued!: () => void;
   private _boundHandleClearEditor!: () => void;
   private _boundHandleViewerActionsChanged!: (e: CustomEvent<{ actions: ViewerAction[] }>) => void;
   private _boundHandleOpenQueryEditor!: (e: CustomEvent<QueryEditorTabInfo>) => void;
@@ -72,6 +73,7 @@ export class FileViewerContainer extends TailwindElement() {
     this._boundHandleDebugSessionStarted = () => this.handleDebugSessionStarted();
     this._boundHandleDebugSessionEnded = () => this.handleDebugSessionEnded();
     this._boundHandleDebugStopped = (e: CustomEvent) => this.handleDebugStopped(e);
+    this._boundHandleDebugContinued = () => this.handleDebugContinued();
     this._boundHandleClearEditor = () => this.handleClearEditor();
     this._boundHandleViewerActionsChanged = (e: CustomEvent<{ actions: ViewerAction[] }>) => this.handleViewerActionsChanged(e);
     this._boundHandleOpenQueryEditor = (e: CustomEvent<QueryEditorTabInfo>) => this.handleOpenQueryEditor(e);
@@ -90,6 +92,7 @@ export class FileViewerContainer extends TailwindElement() {
     document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted as EventListener);
     document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded as EventListener);
     document.addEventListener('debug-stopped', this._boundHandleDebugStopped as EventListener);
+    document.addEventListener('debug-continued', this._boundHandleDebugContinued as EventListener);
     // Listen for clear-editor events (when all tabs are closed)
     document.addEventListener('clear-editor', this._boundHandleClearEditor as EventListener);
     // Listen for viewer actions changed events
@@ -108,6 +111,7 @@ export class FileViewerContainer extends TailwindElement() {
     document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted as EventListener);
     document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded as EventListener);
     document.removeEventListener('debug-stopped', this._boundHandleDebugStopped as EventListener);
+    document.removeEventListener('debug-continued', this._boundHandleDebugContinued as EventListener);
     document.removeEventListener('clear-editor', this._boundHandleClearEditor as EventListener);
     document.removeEventListener('viewer-actions-changed', this._boundHandleViewerActionsChanged as EventListener);
     document.removeEventListener('open-query-editor', this._boundHandleOpenQueryEditor as EventListener);
@@ -269,6 +273,11 @@ export class FileViewerContainer extends TailwindElement() {
     this.isDebugging = false;
     this.debugLine = null;
     this.getTextViewer()?.setDebugMode(false);
+    this.getTextViewer()?.setDebugLine(null);
+  }
+
+  private handleDebugContinued(): void {
+    this.debugLine = null;
     this.getTextViewer()?.setDebugLine(null);
   }
 

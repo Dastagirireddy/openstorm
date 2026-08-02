@@ -72,6 +72,55 @@ impl JavaScriptDetector {
         if deps.contains_key("express") { return Some("express"); }
         None
     }
+
+    /// Resolve the entry point file from an npm script command.
+    /// E.g., "node server.js" -> Some("server.js"), "nodemon app.js" -> Some("app.js")
+    fn resolve_npm_entry_point(script_cmd: &str, workspace_root: &Path) -> Option<String> {
+        let trimmed = script_cmd.trim();
+
+        // Handle "node <file>" commands
+        if trimmed.starts_with("node ") {
+            let file = trimmed.strip_prefix("node ")?.trim().split_whitespace().next()?;
+            let path = workspace_root.join(file);
+            if path.exists() {
+                return Some(file.to_string());
+            }
+        }
+
+        // Handle "nodemon <file>" or other watchers
+        if trimmed.starts_with("nodemon ") || trimmed.starts_with("ts-node ") || trimmed.starts_with("tsx ") {
+            let file = trimmed.split_whitespace().nth(1)?;
+            let path = workspace_root.join(file);
+            if path.exists() {
+                return Some(file.to_string());
+            }
+        }
+
+        // Handle "npx ts-node <file>" or "npx tsx <file>"
+        if trimmed.starts_with("npx ") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let tool = parts[1];
+                if tool == "ts-node" || tool == "tsx" {
+                    let file = parts[2];
+                    let path = workspace_root.join(file);
+                    if path.exists() {
+                        return Some(file.to_string());
+                    }
+                }
+            }
+        }
+
+        // Fallback: check common entry points
+        let common_entries = ["index.js", "app.js", "main.js", "server.js", "src/index.js", "src/app.js", "src/main.js", "src/server.js"];
+        for entry in &common_entries {
+            if workspace_root.join(entry).exists() {
+                return Some(entry.to_string());
+            }
+        }
+
+        None
+    }
 }
 
 impl LanguageDetector for JavaScriptDetector {
@@ -86,18 +135,25 @@ impl LanguageDetector for JavaScriptDetector {
             // Add npm scripts
             for (script_name, script_cmd) in &scripts {
                 let is_dev = script_name.contains("dev") || script_cmd.contains("--watch");
+
+                // Resolve the actual entry point from the npm script command
+                let entry_point = match Self::resolve_npm_entry_point(&script_cmd, workspace_root) {
+                    Some(ep) => ep,
+                    None => continue, // Skip scripts we can't resolve
+                };
+
                 configs.push(RunConfiguration {
                     id: format!("npm-{}", script_name),
                     name: format!("npm run {}", script_name),
                     language: Language::JavaScript,
-                    command: "npm".to_string(),
-                    args: vec!["run".to_string(), script_name.clone()],
+                    command: "node".to_string(),
+                    args: vec![entry_point],
                     cwd: Some(workspace_root.to_path_buf()),
                     env: HashMap::new(),
                     pre_launch_tasks: Vec::new(),
                     debug_adapter: if is_dev { None } else {
                         Some(crate::run_config::configuration::DebugAdapterConfig {
-                            adapter_type: "chrome".to_string(),
+                            adapter_type: "js-debug".to_string(),
                             executable: None,
                             args: vec![],
                             env: HashMap::new(),

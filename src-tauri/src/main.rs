@@ -249,6 +249,14 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                     continue;
                 }
 
+                // Check if the debug server process died (e.g., Node.js exited without breakpoints)
+                if client.get_session().is_some() && !client.is_process_alive() {
+                    client.clear_session();
+                    let _ = app_handle.emit("debug-session-ended", ());
+                    last_state = None;
+                    continue;
+                }
+
                 if let Some(session) = client.get_session() {
                     let state_str = format!("{:?}", session.state);
                     if last_state.as_ref() != Some(&state_str) {

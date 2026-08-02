@@ -109,6 +109,10 @@ impl DebugAdapter for GoAdapter {
         self.lifecycle.get_connection_mut().poll_events()
     }
 
+    fn is_process_alive(&mut self) -> bool {
+        self.lifecycle.get_connection_mut().is_process_alive()
+    }
+
     fn get_exception_breakpoint_filters(&mut self) -> Vec<ExceptionBreakpointFilter> {
         GoBreakpoints::new(&mut self.lifecycle).get_exception_breakpoint_filters()
     }

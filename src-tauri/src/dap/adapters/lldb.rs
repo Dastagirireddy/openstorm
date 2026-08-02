@@ -309,4 +309,8 @@ impl DebugAdapter for LldbAdapter {
     fn poll_events(&mut self) -> Vec<DapEvent> {
         self.connection.poll_events()
     }
+
+    fn is_process_alive(&mut self) -> bool {
+        self.connection.is_process_alive()
+    }
 }

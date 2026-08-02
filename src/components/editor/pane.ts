@@ -89,6 +89,7 @@ export class EditorPane extends TailwindElement() {
   private _boundHandleDebugSessionStarted = this._handleDebugSessionStarted.bind(this);
   private _boundHandleDebugSessionEnded = this._handleDebugSessionEnded.bind(this);
   private _boundHandleDebugStopped = ((e: Event) => this._handleDebugStopped(e as CustomEvent).catch(console.error)) as EventListener;
+  private _boundHandleDebugContinued = this._handleDebugContinued.bind(this);
   private _boundHandleDebugPanelRequestBreakpoints = this._handleDebugPanelRequestBreakpoints.bind(this);
   private _boundHandleBreakpointToggled = this._handleBreakpointToggled.bind(this);
   private _boundHandleBreakpointRemovedExternal = this._handleBreakpointRemovedExternal.bind(this);
@@ -938,6 +939,7 @@ export class EditorPane extends TailwindElement() {
     document.addEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
     document.addEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
     document.addEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.addEventListener('debug-continued', this._boundHandleDebugContinued);
     document.addEventListener('debug-panel-request-breakpoints', this._boundHandleDebugPanelRequestBreakpoints);
 
     // Listen for breakpoint events from panels
@@ -985,6 +987,7 @@ export class EditorPane extends TailwindElement() {
     document.removeEventListener('debug-session-started', this._boundHandleDebugSessionStarted);
     document.removeEventListener('debug-session-ended', this._boundHandleDebugSessionEnded);
     document.removeEventListener('debug-stopped', this._boundHandleDebugStopped);
+    document.removeEventListener('debug-continued', this._boundHandleDebugContinued);
     document.removeEventListener('debug-panel-request-breakpoints', this._boundHandleDebugPanelRequestBreakpoints);
     document.removeEventListener('breakpoint-toggled', this._boundHandleBreakpointToggled);
     document.removeEventListener('breakpoint-removed', this._boundHandleBreakpointRemovedExternal);
@@ -1049,6 +1052,10 @@ export class EditorPane extends TailwindElement() {
       });
     }
     console.log('[Editor] Debug session ended');
+  }
+
+  private _handleDebugContinued(): void {
+    this.setDebugLine(null);
   }
 
   private async _handleProjectOpened(event: Event): Promise<void> {

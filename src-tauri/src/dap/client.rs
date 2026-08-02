@@ -196,6 +196,15 @@ impl DapClient {
         all_events
     }
 
+    /// Check if the debug server process is still running
+    pub fn is_process_alive(&mut self) -> bool {
+        if let Some(adapter) = &mut self.adapter {
+            adapter.is_process_alive()
+        } else {
+            false
+        }
+    }
+
     /// Get thread_id, using cached value or falling back to adapter.threads()
     fn get_thread_id(&mut self) -> Result<i64, String> {
         if let Some(thread_id) = self.current_thread_id {

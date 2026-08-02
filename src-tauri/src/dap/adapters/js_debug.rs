@@ -104,43 +104,22 @@ impl DebugAdapter for JsDebugAdapter {
         let program = args.program.as_ref()
             .ok_or("No program specified in launch args")?;
 
-        let script_name = args.args.as_ref()
-            .and_then(|a| a.get(1).cloned())
-            .filter(|_| program == "run" || program == "dev" || program == "start" || program == "test");
-
-        let launch_args = if let Some(script) = script_name {
-            let cwd = args.cwd.as_ref().cloned().unwrap_or_else(|| ".".to_string());
-            serde_json::json!({
-                "type": "pwa-node",
-                "request": "launch",
-                "name": args.name,
-                "program": format!("{}/main.js", cwd),
-                "cwd": cwd,
-                "env": args.env.clone(),
-                "stopOnEntry": args.stop_on_entry.unwrap_or(false),
-                "console": "internalConsole",
-                "internalConsoleOptions": "openOnSessionStart",
-                "restart": true,
-                "timeout": 30000,
-                "outputCapture": "console",
-                "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
-                "autoAttachChildProcesses": true,
-            })
-        } else {
-            serde_json::json!({
-                "type": "pwa-node",
-                "request": "launch",
-                "name": args.name,
-                "program": program,
-                "cwd": args.cwd.as_ref().cloned().unwrap_or_else(|| ".".to_string()),
-                "args": args.args.clone().unwrap_or_default(),
-                "env": args.env.clone(),
-                "stopOnEntry": args.stop_on_entry.unwrap_or(false),
-                "console": "internalConsole",
-                "outputCapture": "console",
-                "autoAttachChildProcesses": true,
-            })
-        };
+        let launch_args = serde_json::json!({
+            "type": "pwa-node",
+            "request": "launch",
+            "name": args.name,
+            "program": program,
+            "cwd": args.cwd.as_ref().cloned().unwrap_or_else(|| ".".to_string()),
+            "args": args.args.clone().unwrap_or_default(),
+            "env": args.env.clone(),
+            "stopOnEntry": args.stop_on_entry.unwrap_or(false),
+            "console": "internalConsole",
+            "internalConsoleOptions": "openOnSessionStart",
+            "outputCapture": "console",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "autoAttachChildProcesses": true,
+            "timeout": 30000,
+        });
 
         // js-debug handles launch asynchronously and never sends a response to "launch".
         let _launch_seq = self.connection.send_request_no_wait("launch", Some(launch_args))?;
@@ -198,11 +177,22 @@ impl DebugAdapter for JsDebugAdapter {
     }
 
     fn terminate(&mut self) -> Result<(), String> {
+        // Fire-and-forget disconnect — js-debug closes the connection without responding
+        let _ = self.connection.send_request_no_wait("disconnect", Some(serde_json::json!({
+            "restart": false,
+            "terminateDebuggee": true,
+        })));
+        // Give the debug server time to kill the child process
+        std::thread::sleep(std::time::Duration::from_millis(300));
         self.connection.terminate()
     }
 
     fn poll_events(&mut self) -> Vec<crate::dap::adapter::DapEvent> {
         self.connection.poll_events()
+    }
+
+    fn is_process_alive(&mut self) -> bool {
+        self.connection.is_process_alive()
     }
 
     fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {

@@ -73,14 +73,22 @@ pub async fn start_debug_session(
         }
     }
 
+    let program = config.debug_adapter.as_ref().and_then(|da| da.args.first().cloned())
+        .or_else(|| config.args.first().cloned());
+
+    // Args should exclude the program itself — it's already in `program`
+    let args = config.debug_adapter.as_ref()
+        .and_then(|da| da.args.split_first().map(|(_, rest)| rest.to_vec()))
+        .or_else(|| config.args.split_first().map(|(_, rest)| rest.to_vec()))
+        .unwrap_or_default();
+
     let launch_args = LaunchRequestArgs {
         name: config.name.clone(),
         debug_type: adapter_type,
         request: "launch".to_string(),
-        program: config.debug_adapter.as_ref().and_then(|da| da.args.first().cloned())
-            .or_else(|| config.args.first().cloned()),
+        program,
         cwd: config.cwd.map(|p| p.to_string_lossy().to_string()),
-        args: Some(config.debug_adapter.as_ref().map(|da| da.args.clone()).unwrap_or_else(|| config.args.clone())),
+        args: Some(args),
         env: Some(config.env.clone()),
         stop_on_entry: Some(false),
         external_console: Some(false),

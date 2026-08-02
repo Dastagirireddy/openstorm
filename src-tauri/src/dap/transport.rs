@@ -289,6 +289,15 @@ impl DapConnection {
         }
         Ok(())
     }
+
+    /// Check if the debug server process is still running
+    pub fn is_process_alive(&mut self) -> bool {
+        if let Some(ref mut process) = self.process {
+            matches!(process.try_wait(), Ok(None))
+        } else {
+            false
+        }
+    }
 }
 
 fn handle_run_in_terminal_request(value: &Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
