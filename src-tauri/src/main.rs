@@ -20,7 +20,7 @@ mod templates;
 mod theme;
 
 
-use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu}};
+use tauri::{Manager, RunEvent, Emitter, menu::{Menu, MenuItem, Submenu, PredefinedMenuItem}};
 use tauri_plugin_updater::UpdaterExt;
 
 /// Mock update check for dev mode - always reports an update available
@@ -427,9 +427,14 @@ fn main() {
                     &MenuItem::with_id(app, "close-tab", "Close Tab", true, Some("Cmd+W")).unwrap(),
                 ]).unwrap(),
                 &Submenu::with_items(app, "Edit", true, &[
-                    &MenuItem::with_id(app, "undo", "Undo", true, Some("Cmd+Z")).unwrap(),
-                    &MenuItem::with_id(app, "redo", "Redo", true, Some("Cmd+Shift+Z")).unwrap(),
-                    &MenuItem::with_id(app, "separator", "", false, None::<&str>).unwrap(),
+                    &PredefinedMenuItem::undo(app, None).unwrap(),
+                    &PredefinedMenuItem::redo(app, None).unwrap(),
+                    &PredefinedMenuItem::separator(app).unwrap(),
+                    &PredefinedMenuItem::cut(app, None).unwrap(),
+                    &PredefinedMenuItem::copy(app, None).unwrap(),
+                    &PredefinedMenuItem::paste(app, None).unwrap(),
+                    &PredefinedMenuItem::select_all(app, None).unwrap(),
+                    &PredefinedMenuItem::separator(app).unwrap(),
                     &MenuItem::with_id(app, "find", "Find", true, Some("Cmd+F")).unwrap(),
                     &MenuItem::with_id(app, "replace", "Find and Replace", true, Some("Cmd+Option+F")).unwrap(),
                 ]).unwrap(),
