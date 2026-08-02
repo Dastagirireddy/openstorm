@@ -185,4 +185,17 @@ export const PROVIDER_INFO: Record<string, ProviderInfoData> = {
       'gemini-2.0-flash-lite',
     ],
   },
+  opencode: {
+    getApiKeyUrl: 'https://opencode.ai/settings/keys',
+    getApiKeyLabel: 'opencode.ai',
+    tip: 'OpenAI-compatible API with curated coding-agent models. Supports DeepSeek, GPT, Claude, and Gemini.',
+    freeModels: [
+      'deepseek-v4-pro',
+      'deepseek-v4-flash',
+      'deepseek-v3.2',
+      'deepseek-r1',
+      'kimi-k2.6',
+      'qwen3-coder',
+    ],
+  },
 };

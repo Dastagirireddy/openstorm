@@ -38,6 +38,7 @@ const PROVIDER_CATEGORIES: Record<string, Category> = {
   google: 'cloud',
   together: 'cloud',
   fireworks: 'cloud',
+  opencode: 'cloud',
 };
 
 const componentStyles = css`

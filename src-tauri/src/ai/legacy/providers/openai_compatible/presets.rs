@@ -128,6 +128,14 @@ const ALL_PRESETS: &[ProviderPreset] = &[
         is_free: true,
         requires_api_key: true,
     },
+    // ── OpenCode ─────────────────────────────────────────
+    ProviderPreset {
+        id: "opencode",
+        name: "OpenCode",
+        default_base_url: "https://opencode.ai/zen/go/v1",
+        is_free: false,
+        requires_api_key: true,
+    },
     // ── Local ──────────────────────────────────────────────
     ProviderPreset {
         id: "lmstudio",

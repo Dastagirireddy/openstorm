@@ -688,6 +688,7 @@ export class AIPanel extends LitElement {
         aiStore.set('streamingMessage', null);
         aiStore.set('isThinking', false);
         aiStore.set('isStreaming', false);
+        this.scrollToBottom();
         break;
       }
       case 'tool_use': {
@@ -783,6 +784,7 @@ export class AIPanel extends LitElement {
             content: summaryContent,
             timestamp: Date.now(),
           }]);
+          this.scrollToBottom();
         }
         break;
       }
@@ -1088,13 +1090,7 @@ export class AIPanel extends LitElement {
 
   private scrollToBottom() {
     if (this.scrollContainer) {
-      requestAnimationFrame(() => {
-        const { scrollHeight, clientHeight } = this.scrollContainer!;
-        const isNearBottom = scrollHeight - clientHeight - this.scrollContainer!.scrollTop < 300;
-        if (isNearBottom) {
-          this.scrollContainer!.scrollTop = scrollHeight;
-        }
-      });
+      this.scrollContainer.scrollTop = this.scrollContainer.scrollHeight;
     }
   }
 

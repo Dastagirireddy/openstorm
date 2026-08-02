@@ -26,6 +26,7 @@ const PROVIDER_DESCRIPTIONS: Record<string, string> = {
   fireworks: 'Fast inference on open models.',
   openrouter: 'Unified API for 100+ models.',
   github_copilot: 'AI pair programming assistant.',
+  opencode: 'OpenAI-compatible API with curated coding-agent models.',
   custom: 'Custom OpenAI-compatible endpoint.',
 };
 
@@ -44,6 +45,7 @@ const PROVIDER_ICONS: Record<string, string> = {
   fireworks: 'mdi:fire',
   openrouter: 'mdi:router-network',
   github_copilot: 'mdi:robot',
+  opencode: 'mdi:code-tags',
   custom: 'mdi:cog',
 };
 
