@@ -222,17 +222,13 @@ use graph::commands::GraphState;
 
 /// Poll DAP events and emit them to the frontend
 fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
-    println!("[DAP event_poller] Starting event poller thread...");
     std::thread::spawn(move || {
-        // Create a runtime for this thread
         let rt = tokio::runtime::Runtime::new().unwrap();
-        println!("[DAP event_poller] Runtime created, starting loop...");
         rt.block_on(async move {
             let mut last_state: Option<String> = None;
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
 
-                // Get the DAP client from app state
                 let dap_client = app_handle.state::<Mutex<dap::DapClient>>();
 
                 let mut client = match dap_client.try_lock() {
@@ -242,24 +238,20 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
 
                 let events = client.poll_events();
 
-                // Check if session is in Terminated state (set by terminate_session)
                 let session_terminated = client.get_session()
                     .map(|s| matches!(s.state, dap::DebugSessionState::Terminated))
                     .unwrap_or(false);
 
                 if session_terminated {
-                    println!("[DAP event_poller] Session is terminated, clearing and emitting event");
                     client.clear_session();
                     let _ = app_handle.emit("debug-session-ended", ());
                     last_state = None;
                     continue;
                 }
 
-                // Only log state on change
                 if let Some(session) = client.get_session() {
                     let state_str = format!("{:?}", session.state);
                     if last_state.as_ref() != Some(&state_str) {
-                        println!("[DAP event_poller] Session {} state: {:?}", session.id, session.state);
                         last_state = Some(state_str);
                     }
                 } else {
@@ -271,18 +263,30 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                 }
 
                 for event in &events {
-                    if event.event == "output" {
-                        let category = event.body.as_ref().and_then(|b| b.get("category")).and_then(|c| c.as_str()).unwrap_or("unknown");
-                        if category != "telemetry" {
-                            println!("[DAP] OUTPUT event body ({}): {}", category, serde_json::to_string_pretty(&event.body).unwrap_or_default());
-                        }
-                    }
-
                     let event_name = match event.event.as_str() {
-                        "initialized" => "debug-initialized",
+                        "startDebugging" => {
+                            if let Some(body) = &event.body {
+                                if let Some(args) = body.get("arguments") {
+                                    if let Some(config) = args.get("configuration") {
+                                        client.set_child_launch_config(config.clone());
+                                    }
+                                }
+                            }
+                            client.set_pending_child_session(true);
+                            if let Err(e) = client.initialize_child_session() {
+                                eprintln!("[DAP] Failed to initialize child session: {}", e);
+                            }
+                            continue;
+                        }
+                        "initialized" => {
+                            if client.is_pending_child_session() {
+                                if let Err(e) = client.resend_breakpoints_for_child() {
+                                    eprintln!("[DAP] Failed to resend breakpoints for child session: {}", e);
+                                }
+                            }
+                            "debug-initialized"
+                        },
                         "stopped" => {
-                            println!("[DAP] STOPPED event received! Reason: {:?}", event.body.as_ref().and_then(|b| b.get("reason")));
-                            // Auto-refresh watch expressions when stopped
                             let watches = client.get_watch_expressions();
                             if !watches.is_empty() {
                                 let mut evaluations = Vec::new();
@@ -301,14 +305,12 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                         "terminated" => {
                             client.clear_session();
                             let _ = app_handle.emit("debug-session-ended", ());
-                            println!("[DAP] Emitted debug-session-ended for terminated, session cleared");
                             last_state = None;
                             "debug-terminated"
                         },
                         "exited" => {
                             client.clear_session();
                             let _ = app_handle.emit("debug-session-ended", ());
-                            println!("[DAP] Emitted debug-session-ended for exited, session cleared");
                             last_state = None;
                             "debug-exited"
                         },
@@ -319,9 +321,7 @@ fn spawn_dap_event_poller(app_handle: tauri::AppHandle) {
                     let emit_body = event.body.clone().unwrap_or(serde_json::json!({}));
 
                     if let Err(e) = app_handle.emit(event_name, emit_body) {
-                        println!("[DAP] Failed to emit event {}: {}", event.event, e);
-                    } else {
-                        println!("[DAP] Emitted event to frontend: {}", event_name);
+                        eprintln!("[DAP] Failed to emit event {}: {}", event.event, e);
                     }
                 }
             }

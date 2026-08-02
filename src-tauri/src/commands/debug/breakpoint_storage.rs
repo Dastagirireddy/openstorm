@@ -38,7 +38,6 @@ pub fn load_breakpoints(project_root: &str) -> Result<BreakpointStore, String> {
     let file = breakpoints_file(project_root);
 
     if !file.exists() {
-        println!("[DAP breakpoint] No breakpoints file at {}", file.display());
         return Ok(HashMap::new());
     }
 
@@ -48,10 +47,6 @@ pub fn load_breakpoints(project_root: &str) -> Result<BreakpointStore, String> {
     let store: BreakpointStore = serde_json::from_str(&content)
         .map_err(|e| format!("Failed to parse breakpoints JSON: {}", e))?;
 
-    let total: usize = store.values().map(|v| v.len()).sum();
-    println!("[DAP breakpoint] Loaded {} files, {} total breakpoints from {}", 
-        store.len(), total, file.display());
-
     Ok(store)
 }
 
@@ -59,7 +54,6 @@ pub fn load_breakpoints(project_root: &str) -> Result<BreakpointStore, String> {
 pub fn save_breakpoints(project_root: &str, store: &BreakpointStore) -> Result<(), String> {
     let file = breakpoints_file(project_root);
 
-    // Ensure .openstorm directory exists
     if let Some(parent) = file.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
@@ -70,11 +64,6 @@ pub fn save_breakpoints(project_root: &str, store: &BreakpointStore) -> Result<(
 
     fs::write(&file, &content)
         .map_err(|e| format!("Failed to write breakpoints file: {}", e))?;
-
-    println!("[DAP breakpoint] Saved {} files, {} total breakpoints to {}", 
-        store.len(),
-        store.values().map(|v| v.len()).sum::<usize>(),
-        file.display());
 
     Ok(())
 }
@@ -89,10 +78,8 @@ pub fn add_persisted_breakpoint(
 
     let file_breakpoints = store.entry(source_path.to_string()).or_insert_with(Vec::new);
 
-    // Check if breakpoint already exists at this line
     let exists = file_breakpoints.iter().any(|bp| bp.line == breakpoint.line);
     if exists {
-        println!("[DAP breakpoint] Breakpoint at {}:{} already exists, skipping", source_path, breakpoint.line);
         return Ok(());
     }
 
@@ -105,7 +92,6 @@ pub fn add_persisted_breakpoint(
         log_message: breakpoint.log_message.clone(),
     });
 
-    println!("[DAP breakpoint] Saving breakpoint at {}:{} to {}", source_path, breakpoint.line, project_root);
     save_breakpoints(project_root, &store)
 }
 

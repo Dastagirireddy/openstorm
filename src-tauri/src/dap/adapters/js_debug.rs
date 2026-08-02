@@ -14,7 +14,6 @@ impl JsDebugAdapter {
     }
 
     fn find_js_debug() -> Option<String> {
-        // Check cache directory for js-debug
         let cache_dir = crate::config::get_paths().adapter_dir.clone();
         let debug_server = cache_dir.join("js-debug").join("src").join("dapDebugServer.js");
 
@@ -26,7 +25,6 @@ impl JsDebugAdapter {
     }
 
     fn kill_existing_debug_servers() {
-        // Use lsof to find processes listening on js-debug port (macOS syntax)
         let port = crate::config::get_ports().js_debug_port;
         let output = std::process::Command::new("lsof")
             .args(["-ti", &format!(":{}", port)])
@@ -39,10 +37,22 @@ impl JsDebugAdapter {
                     let _ = std::process::Command::new("kill")
                         .args(["-9", &pid_num.to_string()])
                         .output();
-                    println!("[DAP] Killed stale js-debug process (PID {})", pid_num);
                 }
             }
         }
+    }
+}
+
+impl JsDebugAdapter {
+    /// Connect to an existing js-debug server (for child sessions)
+    pub fn connect_only(&mut self) -> Result<(), String> {
+        let port = crate::config::get_ports().js_debug_port;
+        self.connection.connect_tcp(port)?;
+        Ok(())
+    }
+
+    pub fn send_request_no_wait(&mut self, command: &str, arguments: Option<serde_json::Value>) -> Result<u32, String> {
+        self.connection.send_request_no_wait(command, arguments)
     }
 }
 
@@ -55,22 +65,17 @@ impl DebugAdapter for JsDebugAdapter {
         let debug_server = Self::find_js_debug()
             .ok_or("js-debug debug server not found. Please install it first.")?;
 
-        // Kill any existing js-debug process on port 8123
         Self::kill_existing_debug_servers();
 
-        // Start node with the debug server
         self.connection.start_process("node", &vec![debug_server])?;
 
         // Give the server a moment to start listening
-        println!("[DAP] Waiting for js-debug server to start...");
         std::thread::sleep(std::time::Duration::from_millis(1000));
-        println!("[DAP] js-debug server should be ready");
 
         Ok(())
     }
 
     fn initialize(&mut self) -> Result<Capabilities, String> {
-        println!("[DAP] Sending initialize request...");
         let response = self.connection.send_request("initialize", Some(serde_json::json!({
             "clientID": "openstorm",
             "clientName": "OpenStorm IDE",
@@ -84,10 +89,8 @@ impl DebugAdapter for JsDebugAdapter {
             "supportsMemoryReferences": false,
         })))?;
 
-        println!("[DAP] Initialize response received");
         self.initialized = true;
 
-        // Access body field directly from Response
         let body: &serde_json::Value = response.body.as_ref()
             .ok_or("No body in initialize response")?;
 
@@ -101,14 +104,11 @@ impl DebugAdapter for JsDebugAdapter {
         let program = args.program.as_ref()
             .ok_or("No program specified in launch args")?;
 
-        // Get the actual script name from args if available (e.g., ["run", "dev"] -> "dev")
         let script_name = args.args.as_ref()
             .and_then(|a| a.get(1).cloned())
             .filter(|_| program == "run" || program == "dev" || program == "start" || program == "test");
 
         let launch_args = if let Some(script) = script_name {
-            println!("[DAP] Launching npm script: {}", script);
-            // For npm scripts, run node directly with the main.js file
             let cwd = args.cwd.as_ref().cloned().unwrap_or_else(|| ".".to_string());
             serde_json::json!({
                 "type": "pwa-node",
@@ -124,12 +124,9 @@ impl DebugAdapter for JsDebugAdapter {
                 "timeout": 30000,
                 "outputCapture": "console",
                 "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
-                // Critical: Enable child process attachment
                 "autoAttachChildProcesses": true,
             })
         } else {
-            println!("[DAP] Launching program: {}", program);
-            // Direct file debugging
             serde_json::json!({
                 "type": "pwa-node",
                 "request": "launch",
@@ -145,20 +142,14 @@ impl DebugAdapter for JsDebugAdapter {
             })
         };
 
-        println!("[DAP] Sending launch request...");
-        // Send launch - DO NOT send configurationDone yet, caller will set breakpoints first
+        // js-debug handles launch asynchronously and never sends a response to "launch".
         let _launch_seq = self.connection.send_request_no_wait("launch", Some(launch_args))?;
-        println!("[DAP] Launch sent, waiting for breakpoints to be set before configurationDone");
 
-        // Don't send configurationDone here - caller will call finalize_launch() after setting breakpoints
-        println!("[DAP] Launch request sent (configurationDone pending)");
         Ok(())
     }
 
     fn finalize_launch(&mut self) -> Result<(), String> {
-        println!("[DAP] Sending configurationDone...");
         let _config_seq = self.connection.send_request_no_wait("configurationDone", None)?;
-        println!("[DAP] configurationDone sent - debugging started");
         Ok(())
     }
 
@@ -215,7 +206,6 @@ impl DebugAdapter for JsDebugAdapter {
     }
 
     fn get_exception_breakpoint_filters(&mut self) -> Vec<crate::dap::ExceptionBreakpointFilter> {
-        // JavaScript/V8 debugger supports exception breakpoints
         vec![
             crate::dap::ExceptionBreakpointFilter {
                 filter_id: "all".to_string(),

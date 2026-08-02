@@ -266,6 +266,15 @@ export class DebugToolbar extends TailwindElement() {
       await this.refreshStackTrace();
       await this.refreshVariables();
     });
+
+    document.addEventListener("debug-state-changed", ((e: CustomEvent) => {
+      console.log("[debug-toolbar] debug-state-changed received:", e.detail);
+      if (e.detail?.isDebugging !== undefined) {
+        this.isDebugging = e.detail.isDebugging;
+        this.showDebugToolbar(this.isDebugging);
+        this.requestUpdate();
+      }
+    }) as EventListener);
   }
 
   private showDebugToolbar(show: boolean) {

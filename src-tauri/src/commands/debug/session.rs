@@ -18,8 +18,6 @@ pub async fn start_debug_session(
     _workspace_root: String,
     config: RunConfiguration,
 ) -> Result<u32, String> {
-    println!("[DAP] Starting debug session for: {} (language: {:?})", config.name, config.language);
-
     let mut client = dap_client.lock().await;
 
     let adapter_type = config.debug_adapter
@@ -39,14 +37,11 @@ pub async fn start_debug_session(
         })
         .unwrap_or_else(|| "lldb".to_string());
 
-    println!("[DAP] Using adapter type: {}", adapter_type);
-
     let adapters = dap_installer::AdapterRegistry::get_all_adapters();
     let adapter_info = adapters.iter().find(|a| a.id == adapter_type);
 
     if let Some(adapter) = adapter_info {
         let is_installed = installer.is_adapter_installed(adapter);
-        println!("[DAP] Adapter '{}' installed: {}", adapter.name, is_installed);
         if !is_installed {
             return Err(format!(
                 "{} is not installed. Please install the debug adapter first.",
@@ -55,14 +50,11 @@ pub async fn start_debug_session(
         }
     }
 
-    println!("[DAP] Creating adapter...");
     client.create_adapter(&adapter_type)?;
 
-    // Save project root before config.cwd is moved into launch_args
     let project_root = config.cwd.clone().map(|p| p.to_string_lossy().to_string());
 
     if config.language == crate::run_config::configuration::Language::Rust {
-        println!("[DAP] Building Rust binary before debug...");
         let build_output = std::process::Command::new("cargo")
             .arg("build")
             .current_dir(config.cwd.as_ref().map(|p| p.as_path()).unwrap_or_else(|| Path::new(".")))
@@ -74,7 +66,6 @@ pub async fn start_debug_session(
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     return Err(format!("Build failed: {}", stderr));
                 }
-                println!("[DAP] Build successful");
             }
             Err(e) => {
                 return Err(format!("Failed to run cargo build: {}", e));
@@ -96,15 +87,10 @@ pub async fn start_debug_session(
         debug_adapter_path: None,
     };
 
-    println!("[DAP] Starting session with program: {:?}", launch_args.program);
     let result = client.start_session(&launch_args);
     match &result {
         Ok(id) => {
-            println!("[DAP] Session started with ID: {}", id);
-
-            // Load persisted breakpoints from disk if we have a project root
             if let Some(ref project_root_str) = project_root {
-                println!("[DAP] Loading persisted breakpoints from: {}", project_root_str);
                 match breakpoint_storage::load_breakpoints(project_root_str) {
                     Ok(store) => {
                         let mut count = 0;
@@ -120,29 +106,23 @@ pub async fn start_debug_session(
                                 count += 1;
                             }
                         }
-                        if count > 0 {
-                            println!("[DAP] Loaded {} persisted breakpoints from disk", count);
-                        }
                     }
-                    Err(e) => {
-                        println!("[DAP] Failed to load persisted breakpoints: {}", e);
-                    }
+                    Err(_) => {}
                 }
             }
 
             flush_pending_breakpoints(&mut client);
-            println!("[DAP] Finalizing launch...");
             if let Err(e) = client.finalize_launch() {
-                println!("[DAP] Failed to finalize launch: {}", e);
                 let _ = app_handle.emit("debug-error", serde_json::json!({
                     "message": format!("Failed to start debugging: {}", e)
                 }));
             } else {
-                println!("[DAP] Launch finalized successfully");
+                let _ = app_handle.emit("debug-session-started", serde_json::json!({
+                    "session_id": id
+                }));
             }
         },
         Err(e) => {
-            println!("[DAP] Session failed: {}", e);
             let _ = app_handle.emit("debug-error", serde_json::json!({
                 "message": format!("Failed to start debugging session: {}", e)
             }));
@@ -154,11 +134,8 @@ pub async fn start_debug_session(
 fn flush_pending_breakpoints(client: &mut DapClient) {
     let pending = get_pending_breakpoints();
     if pending.is_empty() {
-        println!("[DAP] No pending breakpoints to flush");
         return;
     }
-
-    println!("[DAP] Flushing {} pending breakpoints", pending.len());
 
     let mut breakpoints_by_path: std::collections::HashMap<String, Vec<crate::dap::SourceBreakpoint>> = std::collections::HashMap::new();
     for bp in pending {
@@ -172,12 +149,13 @@ fn flush_pending_breakpoints(client: &mut DapClient) {
         });
     }
 
-    for (path, bps) in breakpoints_by_path {
-        println!("[DAP] Setting {} breakpoints for {}", bps.len(), path);
-        if let Err(e) = client.set_breakpoints(&path, bps) {
-            println!("[DAP] Failed to set breakpoints: {}", e);
+    for (path, bps) in &breakpoints_by_path {
+        if let Err(e) = client.set_breakpoints(path, bps.clone()) {
+            eprintln!("[DAP] Failed to set breakpoints: {}", e);
         }
     }
+
+    client.store_breakpoints(breakpoints_by_path);
 
     clear_pending_breakpoints();
 }
@@ -188,7 +166,6 @@ pub async fn debug_action(
     dap_client: tauri::State<'_, tokio::sync::Mutex<DapClient>>,
     action: super::types::DebugAction,
 ) -> Result<(), String> {
-    println!("[DAP] debug_action called: {:?}", action);
     let mut client = dap_client.lock().await;
 
     let result = match action {
@@ -198,16 +175,8 @@ pub async fn debug_action(
         super::types::DebugAction::StepOut => client.step_out(),
         super::types::DebugAction::Pause => client.pause(),
         super::types::DebugAction::Terminate => {
-            println!("[DAP] Terminating debug session...");
-            let session_before = client.get_session().map(|s| format!("{:?}", s.state));
-            println!("[DAP] Session state before terminate: {:?}", session_before);
             let result = client.terminate_session();
-            let session_after = client.get_session().map(|s| format!("{:?}", s.state));
-            println!("[DAP] Session state after terminate: {:?}", session_after);
-            println!("[DAP] Terminate result: {:?}", result.is_ok());
-
             let _ = app_handle.emit("debug-session-ended", ());
-
             result
         }
     };

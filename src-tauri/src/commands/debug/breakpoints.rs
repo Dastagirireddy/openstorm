@@ -15,13 +15,9 @@ pub async fn add_breakpoint(
 ) -> Result<BreakpointInfo, String> {
     let mut client = dap_client.lock().await;
 
-    println!("[DAP] add_breakpoint called: {}:{} (session: {:?})", request.source_path, request.line, client.get_session().map(|s| s.id));
-
     let abs_path = request.source_path.strip_prefix("file://").unwrap_or(&request.source_path).to_string();
-    println!("[DAP] Using absolute path: {}", abs_path);
 
     if client.get_session().is_none() {
-        println!("[DAP] No active session, storing as pending breakpoint for path: {}", abs_path);
         push_pending_breakpoint(PendingBreakpoint {
             source_path: abs_path.clone(),
             line: request.line,
@@ -51,27 +47,10 @@ pub async fn add_breakpoint(
 
     let result = client.set_breakpoints(&abs_path, source_bps);
 
-    println!("[DAP] set_breakpoints result: {:?}", result.is_ok());
-
-    if let Ok(ref breakpoints) = &result {
-        println!("[DAP] Set {} breakpoints:", breakpoints.len());
-        for (i, bp) in breakpoints.iter().enumerate() {
-            let id_str = match bp.id {
-                Some(id) => format!("{}", id),
-                None => "None".to_string(),
-            };
-            let line_str = match bp.line {
-                Some(line) => format!("{}", line),
-                None => "None".to_string(),
-            };
-            println!("[DAP]   Breakpoint {}: id={}, line={}, verified={}", i, id_str, line_str, bp.verified);
-        }
-    }
-
     let id = match &result {
         Ok(bps) => bps.first().and_then(|bp| bp.id).map(|i| i as u32).unwrap_or(1),
         Err(e) => {
-            println!("[DAP] set_breakpoints error: {}", e);
+            eprintln!("[DAP] set_breakpoints error: {}", e);
             1
         }
     };

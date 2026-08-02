@@ -29,7 +29,6 @@ impl LldbAdapter {
         // Check Xcode CommandLineTools path (macOS)
         for path in &lldb_config.xcode_paths {
             if Path::new(path).exists() {
-                println!("[DAP] Found lldb-dap at Xcode path: {}", path);
                 return Some(path.to_string());
             }
         }
@@ -58,7 +57,6 @@ impl DebugAdapter for LldbAdapter {
             .ok_or("lldb-dap not found. Please install Xcode or lldb.")?;
 
         let lldb_config = crate::config::get_adapters().lldb.clone();
-        println!("[DAP] Starting lldb-dap at: {} with args: {:?}", adapter_path, lldb_config.args);
         let args: Vec<String> = lldb_config.args.iter().map(|s| s.to_string()).collect();
         self.connection.start_stdio_process(&adapter_path, &args)?;
         Ok(())
@@ -268,26 +266,17 @@ impl DebugAdapter for LldbAdapter {
     }
 
     fn terminate(&mut self) -> Result<(), String> {
-        println!("[DAP lldb] terminate() called");
-
-        // Send terminate and disconnect as fire-and-forget (don't wait for responses)
-        // The adapter process may already be exiting, so waiting would deadlock
         let _ = self.connection.send_request_no_wait("terminate", Some(serde_json::json!({
             "restart": false
         })));
-        println!("[DAP lldb] Sent terminate request (no wait)");
 
         let _ = self.connection.send_request_no_wait("disconnect", Some(serde_json::json!({
             "restart": false,
             "terminateDebuggee": true
         })));
-        println!("[DAP lldb] Sent disconnect request (no wait)");
 
-        // Force kill the connection immediately
-        println!("[DAP lldb] Calling connection.terminate()");
         self.connection.terminate()?;
         self.initialized = false;
-        println!("[DAP lldb] terminate() completed");
         Ok(())
     }
 

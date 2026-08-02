@@ -450,6 +450,20 @@ export class OpenStormApp extends TailwindElement() {
       dispatch("debug-session-started");
     }).catch(console.error);
 
+    listen("debug-session-started", (event: any) => {
+      console.log("[DAP] debug-session-started Tauri event received:", event.payload);
+      if (!this.isDebugging) {
+        this.isDebugging = true;
+        this.debugSessionState = "running";
+        if (this.activeStatusBarPanel !== 'app-console') {
+          this.activeStatusBarPanel = 'app-console';
+          this.showConsoleNotification = false;
+        }
+        this.requestUpdate();
+      }
+      dispatch("debug-session-started", event.payload);
+    }).catch(console.error);
+
     listen("debug-stopped", (event: any) => {
       console.log("[DAP] debug-stopped event received:", event.payload);
       this.debugSessionState = "stopped";

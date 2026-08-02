@@ -1,5 +1,6 @@
 use crate::run_config::RunConfiguration;
 use crate::process::output::OutputEvent;
+use crate::{log_info, log_error};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -36,10 +37,13 @@ impl ProcessInfo {
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use std::sync::Mutex;
+use tokio::sync::Notify;
 
 pub struct ProcessManager {
     processes: Arc<RwLock<HashMap<ProcessId, Child>>>,
     process_info: Arc<RwLock<HashMap<ProcessId, ProcessInfo>>>,
+    process_notifiers: Arc<RwLock<HashMap<ProcessId, Arc<Notify>>>>,
+    reader_handles: Arc<RwLock<HashMap<ProcessId, Vec<tauri::async_runtime::JoinHandle<()>>>>>,
     app_handle: Mutex<Option<AppHandle>>,
     output_tx: broadcast::Sender<OutputEvent>,
     next_id: AtomicU32,
@@ -51,6 +55,8 @@ impl ProcessManager {
         Self {
             processes: Arc::new(RwLock::new(HashMap::new())),
             process_info: Arc::new(RwLock::new(HashMap::new())),
+            process_notifiers: Arc::new(RwLock::new(HashMap::new())),
+            reader_handles: Arc::new(RwLock::new(HashMap::new())),
             app_handle: Mutex::new(None),
             output_tx: tx,
             next_id: AtomicU32::new(1),
@@ -71,6 +77,7 @@ impl ProcessManager {
 
     pub async fn spawn(&self, config: &RunConfiguration) -> Result<ProcessId, String> {
         let process_id = self.get_next_id();
+        log_info!("[ProcessManager] spawn: process_id={}, command={}, args={:?}", process_id, config.command, config.args);
 
         let mut cmd = Command::new(&config.command);
         cmd.args(&config.args);
@@ -89,6 +96,8 @@ impl ProcessManager {
 
         let mut child = cmd.spawn()
             .map_err(|e| format!("Failed to spawn process: {}", e))?;
+
+        log_info!("[ProcessManager] spawn: child spawned, os_pid={:?}", child.id());
 
         let process_id_for_stdout = process_id;
         let process_id_for_stderr = process_id;
@@ -126,37 +135,46 @@ impl ProcessManager {
         }
 
         // Store process
+        let notify = Arc::new(Notify::new());
         {
             let mut processes = self.processes.write().await;
             processes.insert(process_id, child);
+            let mut notifiers = self.process_notifiers.write().await;
+            notifiers.insert(process_id, notify.clone());
+            let mut readers = self.reader_handles.write().await;
+            readers.insert(process_id, reader_handles);
         }
 
         // Wait for process to complete and emit terminated event
         let processes_clone = self.processes.clone();
         let process_info_clone = self.process_info.clone();
+        let notifiers_clone = self.process_notifiers.clone();
+        let reader_handles_clone = self.reader_handles.clone();
         let app_handle = self.app_handle.lock().unwrap().clone();
         let process_id_for_wait = process_id;
         tauri::async_runtime::spawn(async move {
-            // Wait for the process to complete
-            let mut child = {
-                let mut procs = processes_clone.write().await;
-                procs.remove(&process_id_for_wait)
-            };
-
-            if let Some(ref mut child) = child {
-                let _ = child.wait().await;
-            }
+            log_info!("[ProcessManager] background task: started for process_id={}", process_id_for_wait);
+            // Wait for the process to be terminated (by terminate() or natural exit)
+            notify.notified().await;
+            log_info!("[ProcessManager] background task: notified for process_id={}", process_id_for_wait);
 
             // Wait for all reader tasks to finish (ensures all output is captured)
-            for handle in reader_handles {
-                let _ = handle.await;
+            if let Some(handles) = reader_handles_clone.write().await.remove(&process_id_for_wait) {
+                for handle in handles {
+                    let _ = handle.await;
+                }
             }
 
-            // Clean up process info
+            // Clean up
+            {
+                let mut notifiers = notifiers_clone.write().await;
+                notifiers.remove(&process_id_for_wait);
+            }
             {
                 let mut info = process_info_clone.write().await;
                 info.remove(&process_id_for_wait);
             }
+            log_info!("[ProcessManager] background task: cleaned up process_id={}", process_id_for_wait);
 
             // Emit terminated event
             if let Some(app) = app_handle {
@@ -193,30 +211,47 @@ impl ProcessManager {
     }
 
     pub async fn terminate(&self, process_id: ProcessId) -> Result<(), String> {
+        log_info!("[ProcessManager] terminate: called for process_id={}", process_id);
+
         let mut processes = self.processes.write().await;
+        log_info!("[ProcessManager] terminate: processes map has {} entries: {:?}", processes.len(), processes.keys().collect::<Vec<_>>());
 
         if let Some(mut child) = processes.remove(&process_id) {
+            log_info!("[ProcessManager] terminate: found child, os_pid={:?}", child.id());
+
             #[cfg(unix)]
             {
                 use nix::sys::signal::{kill, Signal};
                 use nix::unistd::Pid;
-                let _ = kill(Pid::from_raw(process_id as i32), Signal::SIGTERM);
+                if let Some(os_pid) = child.id() {
+                    log_info!("[ProcessManager] terminate: sending SIGTERM to os_pid={}", os_pid);
+                    let _ = kill(Pid::from_raw(os_pid as i32), Signal::SIGTERM);
+                }
             }
 
+            log_info!("[ProcessManager] terminate: calling child.kill()");
             let _ = child.kill().await;
+            log_info!("[ProcessManager] terminate: calling child.wait()");
             let _ = child.wait().await;
+            log_info!("[ProcessManager] terminate: process terminated");
 
-            let mut process_info = self.process_info.write().await;
-            process_info.remove(&process_id);
+            // Abort reader tasks to stop capturing output immediately
+            if let Some(handles) = self.reader_handles.write().await.remove(&process_id) {
+                for handle in handles {
+                    handle.abort();
+                }
+            }
 
-            if let Some(app) = self.app_handle.lock().unwrap().as_ref() {
-                let _ = app.emit("process-terminated", serde_json::json!({
-                    "process_id": process_id,
-                }));
+            // Notify the background task that the process has been terminated
+            let notifiers = self.process_notifiers.read().await;
+            if let Some(notify) = notifiers.get(&process_id) {
+                log_info!("[ProcessManager] terminate: notifying background task");
+                notify.notify_one();
             }
 
             Ok(())
         } else {
+            log_error!("[ProcessManager] terminate: process {} NOT FOUND in processes map", process_id);
             Err(format!("Process {} not found", process_id))
         }
     }

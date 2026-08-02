@@ -12,7 +12,6 @@ use serde_json::Value;
 use std::io::{BufRead, BufReader, Read};
 use std::net::TcpStream;
 use std::process::{ChildStdin, Command};
-use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, Mutex};
 
 pub struct DapConnection {
@@ -20,8 +19,7 @@ pub struct DapConnection {
     pub(crate) stdin: Option<ChildStdin>,
     pub(crate) tcp_stream: Option<TcpStream>,
     pub(crate) seq: u32,
-    pub(crate) response_tx: Sender<DapMessage>,
-    pub(crate) response_rx: Option<Arc<Mutex<mpsc::Receiver<DapMessage>>>>,
+    pub(crate) message_buffer: Arc<Mutex<Vec<DapMessage>>>,
     pub(crate) event_buffer: Vec<DapEvent>,
 }
 
@@ -33,26 +31,43 @@ pub enum DapMessage {
 
 impl DapConnection {
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
         Self {
             process: None,
             stdin: None,
             tcp_stream: None,
             seq: 0,
-            response_tx: tx,
-            response_rx: Some(Arc::new(Mutex::new(rx))),
+            message_buffer: Arc::new(Mutex::new(Vec::new())),
             event_buffer: Vec::new(),
         }
     }
 
     /// Set the TCP stream and spawn reader thread (for adapters like delve)
     pub fn set_tcp_stream(&mut self, stream: TcpStream) {
-        let tx = self.response_tx.clone();
+        let buffer = self.message_buffer.clone();
         let tcp_stream = stream.try_clone().expect("Failed to clone TCP stream");
         self.tcp_stream = Some(stream);
         std::thread::spawn(move || {
-            Self::reader_loop(tcp_stream, tx, "tcp");
+            Self::reader_loop(tcp_stream, buffer, "tcp");
         });
+    }
+
+    /// Connect to an existing TCP server (for child sessions in js-debug multi-session)
+    pub fn connect_tcp(&mut self, port: u16) -> Result<(), String> {
+        let ipv6_addr = format!("[::1]:{}", port);
+        let ipv4_addr = format!("127.0.0.1:{}", port);
+        let stream = TcpStream::connect(&ipv6_addr)
+            .or_else(|_| TcpStream::connect(&ipv4_addr))
+            .map_err(|e| format!("Failed to connect to debug server for child session: {}", e))?;
+        
+        let tcp_stream = stream.try_clone().map_err(|e| format!("Failed to clone TCP stream: {}", e))?;
+        self.tcp_stream = Some(stream);
+        
+        let buffer = self.message_buffer.clone();
+        std::thread::spawn(move || {
+            Self::reader_loop(tcp_stream, buffer, "tcp-child");
+        });
+        
+        Ok(())
     }
 
     /// Set the process (for adapters that manage their own process)
@@ -61,8 +76,8 @@ impl DapConnection {
     }
 
     /// Get the response sender channel
-    pub fn get_response_tx(&self) -> &Sender<DapMessage> {
-        &self.response_tx
+    pub fn get_response_tx(&self) -> &Arc<Mutex<Vec<DapMessage>>> {
+        &self.message_buffer
     }
 
     pub fn start_process(&mut self, command: &str, args: &[String]) -> Result<(), String> {
@@ -73,7 +88,7 @@ impl DapConnection {
             .map_err(|e| format!("Failed to start debug adapter: {}", e))?;
 
         let stderr = child.stderr.take();
-        let tx_clone = self.response_tx.clone();
+        let buffer = self.message_buffer.clone();
         std::thread::spawn(move || {
             if let Some(stderr) = stderr {
                 let mut reader = BufReader::new(stderr);
@@ -86,13 +101,15 @@ impl DapConnection {
                             if let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) {
                                 if value.get("request_seq").is_some() {
                                     if let Ok(response) = serde_json::from_value::<Response>(value.clone()) {
-                                        println!("[DAP] Received response from stderr: {} (request_seq {})", response.command, response.request_seq);
-                                        let _ = tx_clone.send(DapMessage::Response(response));
+                                        if let Ok(mut buf) = buffer.lock() {
+                                            buf.push(DapMessage::Response(response));
+                                        }
                                     }
                                 } else if value.get("event").is_some() {
                                     if let Ok(event) = serde_json::from_value::<DapEvent>(value.clone()) {
-                                        println!("[DAP] Received event from stderr: {}", event.event);
-                                        let _ = tx_clone.send(DapMessage::Event(event));
+                                        if let Ok(mut buf) = buffer.lock() {
+                                            buf.push(DapMessage::Event(event));
+                                        }
                                     }
                                 }
                             }
@@ -109,17 +126,15 @@ impl DapConnection {
         let port = crate::config::get_ports().js_debug_port;
         let ipv6_addr = format!("[::1]:{}", port);
         let ipv4_addr = format!("127.0.0.1:{}", port);
-        println!("[DAP] Connecting to TCP server at {}...", ipv6_addr);
         let stream = TcpStream::connect(&ipv6_addr)
             .or_else(|_| TcpStream::connect(&ipv4_addr))
             .map_err(|e| format!("Failed to connect to debug server: {}", e))?;
         self.tcp_stream = Some(stream);
-        println!("[DAP] Connected to debug server");
 
-        let tx = self.response_tx.clone();
+        let buffer = self.message_buffer.clone();
         if let Some(tcp_stream) = self.tcp_stream.as_ref().and_then(|s| s.try_clone().ok()) {
             std::thread::spawn(move || {
-                Self::reader_loop(tcp_stream, tx, "tcp");
+                Self::reader_loop(tcp_stream, buffer, "tcp");
             });
         }
 
@@ -152,26 +167,23 @@ impl DapConnection {
             }
         });
 
-        let tx = self.response_tx.clone();
+        let buffer = self.message_buffer.clone();
         std::thread::spawn(move || {
-            Self::reader_loop(stdout, tx, "stdio");
+            Self::reader_loop(stdout, buffer, "stdio");
         });
 
         self.process = Some(child);
         Ok(())
     }
 
-    pub(crate) fn reader_loop<R: Read>(reader: R, tx: Sender<DapMessage>, kind: &str) {
+    pub(crate) fn reader_loop<R: Read>(reader: R, buffer: Arc<Mutex<Vec<DapMessage>>>, kind: &str) {
         let mut reader = BufReader::new(reader);
         let mut header_buf = Vec::new();
 
         loop {
             header_buf.clear();
             match reader.read_until(b'\n', &mut header_buf) {
-                Ok(0) => {
-                    println!("[DAP] EOF from debug adapter ({})", kind);
-                    return;
-                }
+                Ok(0) => return,
                 Ok(_) => {}
                 Err(e) => {
                     eprintln!("[DAP] Read error ({}): {}", kind, e);
@@ -188,8 +200,6 @@ impl DapConnection {
 
             if let Some(len_str) = trimmed.strip_prefix("Content-Length: ") {
                 if let Ok(content_length) = len_str.trim().parse::<usize>() {
-                    println!("[DAP] Found Content-Length: {} ({})", content_length, kind);
-
                     let mut blank = [0u8; 2];
                     if reader.read_exact(&mut blank).is_err() {
                         eprintln!("[DAP] Failed to read blank line");
@@ -203,75 +213,52 @@ impl DapConnection {
                     }
 
                     let body_str = String::from_utf8_lossy(&body);
-                    println!("[DAP] Received: {} ({})", body_str, kind);
 
                     if let Ok(value) = serde_json::from_str::<serde_json::Value>(&body_str) {
-                        Self::handle_message(value, &tx);
-                    } else {
-                        println!("[DAP] Failed to parse JSON: {}", body_str);
+                        Self::handle_message(value, &buffer);
                     }
-                } else {
-                    println!("[DAP] Invalid content length: {}", len_str);
                 }
-            } else {
-                println!("[DAP] Skipping non-DAP output: {} ({})", trimmed, kind);
             }
         }
     }
 
-    fn handle_message(value: serde_json::Value, tx: &Sender<DapMessage>) {
+    fn handle_message(value: serde_json::Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
         if value.get("request_seq").is_some() {
-            Self::handle_response(value, tx);
+            Self::handle_response(value, buffer);
         } else if value.get("event").is_some() {
-            Self::handle_event(value, tx);
+            Self::handle_event(value, buffer);
         } else if value.get("command").is_some() && value.get("type").and_then(|t| t.as_str()) == Some("request") {
-            Self::handle_request(value, tx);
-        } else {
-            println!("[DAP] Unknown message type: {}", value);
+            Self::handle_request(value, buffer);
         }
     }
 
-    fn handle_response(value: serde_json::Value, tx: &Sender<DapMessage>) {
-        match serde_json::from_value::<Response>(value.clone()) {
-            Ok(response) => {
-                println!("[DAP] Sending response to channel: {} (request_seq {})", response.command, response.request_seq);
-                let _ = tx.send(DapMessage::Response(response));
+    fn handle_response(value: serde_json::Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
+        if let Ok(response) = serde_json::from_value::<Response>(value.clone()) {
+            if let Ok(mut buf) = buffer.lock() {
+                buf.push(DapMessage::Response(response));
             }
-            Err(_) => println!("[DAP] Failed to parse response from: {}", value),
         }
     }
 
-    fn handle_event(value: serde_json::Value, tx: &Sender<DapMessage>) {
-        match serde_json::from_value::<DapEvent>(value.clone()) {
-            Ok(event) => {
-                println!("[DAP] Event: {}, sending to channel", event.event);
-                let _ = tx.send(DapMessage::Event(event));
+    fn handle_event(value: serde_json::Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
+        if let Ok(event) = serde_json::from_value::<DapEvent>(value.clone()) {
+            if let Ok(mut buf) = buffer.lock() {
+                buf.push(DapMessage::Event(event));
             }
-            Err(_) => println!("[DAP] Failed to parse event from: {}", value),
         }
     }
 
-    fn handle_request(value: serde_json::Value, tx: &Sender<DapMessage>) {
+    fn handle_request(value: serde_json::Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
         let cmd = value["command"].as_str().unwrap_or("unknown");
-        println!("[DAP] Received request from adapter: {}", cmd);
 
         match cmd {
-            "runInTerminal" => handle_run_in_terminal_request(&value, tx),
-            "startDebugging" => Self::handle_start_debugging_request(&value, tx),
-            _ => println!("[DAP] Unhandled request: {}", cmd),
+            "runInTerminal" => handle_run_in_terminal_request(&value, buffer),
+            "startDebugging" => Self::handle_start_debugging_request(&value, buffer),
+            _ => {}
         }
     }
 
-    fn handle_start_debugging_request(value: &serde_json::Value, tx: &Sender<DapMessage>) {
-        let args = value.get("arguments").and_then(|v| v.as_object());
-        let config = args.and_then(|a| a.get("configuration")).and_then(|v| v.as_object());
-
-        if let Some(cfg) = config {
-            let pending_target_id = cfg.get("__pendingTargetId").and_then(|v| v.as_str());
-            let name = cfg.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-            println!("[DAP] startDebugging: name={}, pendingTargetId={:?}", name, pending_target_id);
-        }
-
+    fn handle_start_debugging_request(value: &serde_json::Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
         let request_seq = value.get("seq").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
         let response = Response {
             seq: 100,
@@ -282,8 +269,17 @@ impl DapConnection {
             message: None,
             body: Some(serde_json::json!({})),
         };
-        let _ = tx.send(DapMessage::Response(response));
-        println!("[DAP] startDebugging acknowledged - child session events will flow through");
+        if let Ok(mut buf) = buffer.lock() {
+            buf.push(DapMessage::Response(response));
+        }
+
+        let start_event = DapEvent {
+            event: "startDebugging".to_string(),
+            body: Some(value.clone()),
+        };
+        if let Ok(mut buf) = buffer.lock() {
+            buf.push(DapMessage::Event(start_event));
+        }
     }
 
     pub fn terminate(&mut self) -> Result<(), String> {
@@ -295,7 +291,7 @@ impl DapConnection {
     }
 }
 
-fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
+fn handle_run_in_terminal_request(value: &Value, buffer: &Arc<Mutex<Vec<DapMessage>>>) {
     let args = match value.get("arguments").and_then(|v| v.as_object()) {
         Some(obj) => obj,
         None => {
@@ -319,10 +315,7 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
         .map(|m| m.clone());
     let request_seq = value.get("seq").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
-    println!("[DAP] runInTerminal: cwd={}, args={:?}", cwd, cmd_args);
-
     let cmd_str = cmd_args.join(" ");
-    println!("[DAP] Running via shell: {}", cmd_str);
 
     let response = Response {
         seq: 100,
@@ -333,9 +326,11 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
         message: None,
         body: Some(serde_json::json!({"processId": 0})),
     };
-    let _ = tx.send(DapMessage::Response(response));
+    if let Ok(mut buf) = buffer.lock() {
+        buf.push(DapMessage::Response(response));
+    }
 
-    let tx_clone = tx.clone();
+    let buffer_clone = buffer.clone();
     std::thread::spawn(move || {
         let mut cmd = std::process::Command::new("sh");
         cmd.arg("-c").arg(&cmd_str).current_dir(cwd);
@@ -362,12 +357,14 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                         "output": format!("Failed to spawn process: {}\n", e)
                     })),
                 };
-                let _ = tx_clone.send(DapMessage::Event(error_event));
+                if let Ok(mut buf) = buffer_clone.lock() {
+                    buf.push(DapMessage::Event(error_event));
+                }
                 return;
             }
         };
 
-        let stdout_tx = tx_clone.clone();
+        let stdout_buffer = buffer_clone.clone();
         let stdout = child.stdout.take();
         std::thread::spawn(move || {
             if let Some(mut stdout) = stdout {
@@ -377,7 +374,6 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                         Ok(0) => break,
                         Ok(n) => {
                             let output = String::from_utf8_lossy(&buf[..n]);
-                            println!("[DAP shell] STDOUT: {}", output);
                             let output_event = DapEvent {
                                 event: "output".to_string(),
                                 body: Some(serde_json::json!({
@@ -385,7 +381,9 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                                     "output": output.to_string()
                                 })),
                             };
-                            let _ = stdout_tx.send(DapMessage::Event(output_event));
+                            if let Ok(mut buffer) = stdout_buffer.lock() {
+                                buffer.push(DapMessage::Event(output_event));
+                            }
                         }
                         Err(_) => break,
                     }
@@ -393,7 +391,7 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
             }
         });
 
-        let stderr_tx = tx_clone.clone();
+        let stderr_buffer = buffer_clone.clone();
         let stderr = child.stderr.take();
         std::thread::spawn(move || {
             if let Some(mut stderr) = stderr {
@@ -403,7 +401,6 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                         Ok(0) => break,
                         Ok(n) => {
                             let output = String::from_utf8_lossy(&buf[..n]);
-                            eprintln!("[DAP shell] STDERR: {}", output);
                             let output_event = DapEvent {
                                 event: "output".to_string(),
                                 body: Some(serde_json::json!({
@@ -411,7 +408,9 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                                     "output": output.to_string()
                                 })),
                             };
-                            let _ = stderr_tx.send(DapMessage::Event(output_event));
+                            if let Ok(mut buffer) = stderr_buffer.lock() {
+                                buffer.push(DapMessage::Event(output_event));
+                            }
                         }
                         Err(_) => break,
                     }
@@ -422,7 +421,6 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
         let status = child.wait();
         match status {
             Ok(status) => {
-                println!("[DAP shell] Process exited with status: {}", status);
                 let exit_event = DapEvent {
                     event: "output".to_string(),
                     body: Some(serde_json::json!({
@@ -430,18 +428,12 @@ fn handle_run_in_terminal_request(value: &Value, tx: &Sender<DapMessage>) {
                         "output": format!("\nProcess exited with code: {}\n", status)
                     })),
                 };
-                let _ = tx_clone.send(DapMessage::Event(exit_event));
+                if let Ok(mut buf) = buffer_clone.lock() {
+                    buf.push(DapMessage::Event(exit_event));
+                }
             }
             Err(e) => {
                 eprintln!("[DAP shell] Failed to wait: {}", e);
-                let error_event = DapEvent {
-                    event: "output".to_string(),
-                    body: Some(serde_json::json!({
-                        "category": "stderr",
-                        "output": format!("Process error: {}\n", e)
-                    })),
-                };
-                let _ = tx_clone.send(DapMessage::Event(error_event));
             }
         }
     });

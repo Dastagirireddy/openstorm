@@ -19,13 +19,11 @@ fn find_free_port() -> Option<u16> {
 pub(super) fn cleanup_debug_binary(output_path: &str) -> Result<(), String> {
     if std::path::Path::new(&output_path).exists() {
         let _ = std::fs::remove_file(&output_path);
-        println!("[DAP] Cleaned up debug binary: {}", output_path);
     }
 
     let exe_path = format!("{}.exe", output_path);
     if std::path::Path::new(&exe_path).exists() {
         let _ = std::fs::remove_file(&exe_path);
-        println!("[DAP] Cleaned up debug binary: {}", exe_path);
     }
 
     Ok(())
@@ -74,10 +72,7 @@ impl GoLifecycle {
         let dlv_path = Self::find_delve()
             .ok_or("dlv (Delve) not found. Please install with: go install github.com/go-delve/delve/cmd/dlv@latest")?;
 
-        println!("[DAP] Starting delve DAP server...");
-
         let port = find_free_port().ok_or("Could not find free port for Delve")?;
-        println!("[DAP] Using port {}", port);
 
         let mut cmd = Command::new(&dlv_path);
         cmd.args(["dap", "--listen", &format!("127.0.0.1:{}", port), "--check-go-version=false"])
@@ -92,13 +87,12 @@ impl GoLifecycle {
             .map_err(|e| format!("Failed to start delve: {}", e))?;
 
         let stdout = child.stdout.take().ok_or("Failed to capture delve stdout")?;
-        let tx = self.connection.get_response_tx().clone();
+        let buffer = self.connection.message_buffer.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
             for line in reader.lines() {
                 match line {
                     Ok(output) => {
-                        println!("[DAP] Delve stdout: {}", output);
                         let output_event = DapEvent {
                             event: "output".to_string(),
                             body: Some(serde_json::json!({
@@ -106,24 +100,22 @@ impl GoLifecycle {
                                 "output": format!("{}\n", output)
                             })),
                         };
-                        let _ = tx.send(DapMessage::Event(output_event));
+                        if let Ok(mut buf) = buffer.lock() {
+                            buf.push(DapMessage::Event(output_event));
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("[DAP] Error reading delve stdout: {}", e);
-                        break;
-                    }
+                    Err(_) => break,
                 }
             }
         });
 
         let stderr = child.stderr.take().ok_or("Failed to capture delve stderr")?;
-        let tx_stderr = self.connection.get_response_tx().clone();
+        let buffer_stderr = self.connection.message_buffer.clone();
         std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
                 match line {
                     Ok(output) => {
-                        println!("[DAP] Delve stderr: {}", output);
                         let output_event = DapEvent {
                             event: "output".to_string(),
                             body: Some(serde_json::json!({
@@ -131,26 +123,23 @@ impl GoLifecycle {
                                 "output": format!("{}\n", output)
                             })),
                         };
-                        let _ = tx_stderr.send(DapMessage::Event(output_event));
+                        if let Ok(mut buf) = buffer_stderr.lock() {
+                            buf.push(DapMessage::Event(output_event));
+                        }
                     }
-                    Err(e) => {
-                        eprintln!("[DAP] Error reading delve stderr: {}", e);
-                        break;
-                    }
+                    Err(_) => break,
                 }
             }
         });
 
         std::thread::sleep(std::time::Duration::from_millis(500));
 
-        println!("[DAP] Connecting to delve at 127.0.0.1:{}...", port);
         let stream = TcpStream::connect(format!("127.0.0.1:{}", port))
             .map_err(|e| format!("Failed to connect to delve: {}", e))?;
 
         self.connection.set_tcp_stream(stream);
         self.connection.set_process(child);
 
-        println!("[DAP] Connected to delve DAP server");
         Ok(())
     }
 

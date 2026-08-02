@@ -14,25 +14,32 @@ pub struct DebugSession {
 
 pub struct DapClient {
     adapter: Option<Box<dyn DebugAdapter>>,
+    child_adapter: Option<Box<dyn DebugAdapter>>,
     session: Option<DebugSession>,
     next_session_id: u32,
     current_thread_id: Option<i64>,
     watch_manager: WatchManager,
+    last_breakpoints: std::collections::HashMap<String, Vec<crate::dap::SourceBreakpoint>>,
+    pending_child_session: bool,
+    child_launch_config: Option<serde_json::Value>,
 }
 
 impl DapClient {
     pub fn new() -> Self {
         Self {
             adapter: None,
+            child_adapter: None,
             session: None,
             next_session_id: 1,
             current_thread_id: None,
             watch_manager: WatchManager::new(),
+            last_breakpoints: std::collections::HashMap::new(),
+            pending_child_session: false,
+            child_launch_config: None,
         }
     }
 
     pub fn create_adapter(&mut self, adapter_type: &str) -> Result<(), String> {
-        // Try to create adapter from registry
         let adapter = super::adapter_registry::create_adapter(adapter_type)
             .or_else(|| super::adapter_registry::create_adapter_for_language(adapter_type));
 
@@ -49,16 +56,8 @@ impl DapClient {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
 
-        println!("[DAP] Starting debug adapter process...");
-        // Start the debug adapter process
         adapter.start(args)?;
-
-        println!("[DAP] Initializing adapter...");
-        // Initialize the adapter
         let _capabilities = adapter.initialize()?;
-
-        println!("[DAP] Launching program...");
-        // Launch the program (but don't send configurationDone yet)
         adapter.launch(args)?;
 
         let session_id = self.next_session_id;
@@ -70,7 +69,6 @@ impl DapClient {
             adapter_name: adapter.name().to_string(),
         });
 
-        println!("[DAP] Session {} created successfully", session_id);
         Ok(session_id)
     }
 
@@ -79,17 +77,11 @@ impl DapClient {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
 
-        println!("[DAP] Finalizing launch...");
         let result = adapter.finalize_launch();
 
-        if let Err(ref e) = result {
-            println!("[DAP] Failed to finalize launch: {}", e);
-        } else {
-            println!("[DAP] Launch finalized successfully");
-
+        if result.is_ok() {
             if let Some(session) = &mut self.session {
                 session.state = DebugSessionState::Running;
-                println!("[DAP] Session state set to Running");
             }
         }
 
@@ -113,10 +105,18 @@ impl DapClient {
         adapter.set_breakpoints(&args)
     }
 
+    /// Get the active adapter: child_adapter if it exists, otherwise root adapter.
+    fn active_adapter(&mut self) -> Result<&mut Box<dyn DebugAdapter>, String> {
+        if self.child_adapter.is_some() {
+            Ok(self.child_adapter.as_mut().unwrap())
+        } else {
+            self.adapter.as_mut().ok_or_else(|| "No adapter initialized".to_string())
+        }
+    }
+
     pub fn continue_execution(&mut self) -> Result<(), String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.continue_execution(thread_id)?;
         if let Some(session) = &mut self.session {
             session.state = DebugSessionState::Running;
@@ -126,87 +126,74 @@ impl DapClient {
 
     pub fn step_over(&mut self) -> Result<(), String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.step_over(thread_id)?;
         Ok(())
     }
 
     pub fn step_into(&mut self) -> Result<(), String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.step_into(thread_id)?;
         Ok(())
     }
 
     pub fn step_out(&mut self) -> Result<(), String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.step_out(thread_id)?;
         Ok(())
     }
 
     pub fn pause(&mut self) -> Result<(), String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.pause(thread_id)?;
         Ok(())
     }
 
     pub fn stack_trace(&mut self) -> Result<Vec<StackFrame>, String> {
         let thread_id = self.get_thread_id()?;
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
-        println!("[DAP] Getting stack trace for thread {}", thread_id);
-        let result = adapter.stack_trace(thread_id);
-        println!("[DAP] Stack trace result: {} frames", result.as_ref().map(|v| v.len()).unwrap_or(0));
-        result
+        let adapter = self.active_adapter()?;
+        adapter.stack_trace(thread_id)
     }
 
     pub fn scopes(&mut self, frame_id: i64) -> Result<Vec<Scope>, String> {
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.scopes(frame_id)
     }
 
     pub fn variables(&mut self, variables_reference: i64) -> Result<Vec<Variable>, String> {
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.variables(variables_reference)
     }
 
     pub fn evaluate(&mut self, expression: &str, frame_id: Option<i64>) -> Result<Variable, String> {
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.evaluate(expression, frame_id)
     }
 
     pub fn get_threads(&mut self) -> Result<Vec<Thread>, String> {
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         adapter.threads()
     }
 
     pub fn poll_events(&mut self) -> Vec<DapEvent> {
+        let mut all_events = Vec::new();
+
         if let Some(adapter) = &mut self.adapter {
-            let events = adapter.poll_events();
-            if !events.is_empty() {
-                println!("[DAP client] poll_events: got {} events from adapter", events.len());
-            }
-            for event in &events {
-                self.update_state_from_event(event);
-            }
-            events
-        } else {
-            // Only log once to avoid spam
-            if !self.session.is_none() {
-                println!("[DAP client] poll_events: no adapter but session exists");
-            }
-            Vec::new()
+            all_events.extend(adapter.poll_events());
         }
+
+        if let Some(child) = &mut self.child_adapter {
+            all_events.extend(child.poll_events());
+        }
+
+        for event in &all_events {
+            self.update_state_from_event(event);
+        }
+
+        all_events
     }
 
     /// Get thread_id, using cached value or falling back to adapter.threads()
@@ -214,8 +201,7 @@ impl DapClient {
         if let Some(thread_id) = self.current_thread_id {
             return Ok(thread_id);
         }
-        let adapter = self.adapter.as_mut()
-            .ok_or_else(|| "No adapter initialized".to_string())?;
+        let adapter = self.active_adapter()?;
         let threads = adapter.threads()?;
         threads.first()
             .map(|t| t.id)
@@ -238,7 +224,6 @@ impl DapClient {
                         "entry" => StoppedReason::Entry,
                         _ => StoppedReason::Breakpoint,
                     });
-                    // Cache thread_id from stopped event (DAP spec: threadId is required)
                     if let Some(body) = &event.body {
                         if let Some(thread_id) = body.get("threadId").and_then(|t| t.as_i64()) {
                             self.current_thread_id = Some(thread_id);
@@ -257,24 +242,14 @@ impl DapClient {
     }
 
     pub fn terminate_session(&mut self) -> Result<(), String> {
-        println!("[DAP client] terminate_session called");
-        println!("[DAP client] Session before terminate: {:?}", self.session.as_ref().map(|s| &s.state));
-
-        // Set state to Terminated FIRST, before trying to terminate adapter
-        // This ensures the poller can detect the state even if adapter.terminate() hangs
         if let Some(session) = &mut self.session {
             session.state = DebugSessionState::Terminated;
-            println!("[DAP client] Session state set to Terminated");
         }
 
-        // Try to terminate adapter, but don't block if it hangs
         if let Some(adapter) = &mut self.adapter {
-            println!("[DAP client] Calling adapter.terminate()");
-            let _ = adapter.terminate(); // Ignore errors, we're terminating anyway
-            println!("[DAP client] adapter.terminate() completed");
+            let _ = adapter.terminate();
         }
 
-        println!("[DAP client] Session after terminate: {:?}", self.session.as_ref().map(|s| &s.state));
         Ok(())
     }
 
@@ -285,6 +260,7 @@ impl DapClient {
     pub fn clear_session(&mut self) {
         self.session = None;
         self.adapter = None;
+        self.child_adapter = None;
         self.current_thread_id = None;
     }
 
@@ -318,6 +294,75 @@ impl DapClient {
         let adapter = self.adapter.as_mut()
             .ok_or_else(|| "No adapter initialized".to_string())?;
         adapter.set_exception_breakpoints(filter_ids)
+    }
+
+    pub fn store_breakpoints(&mut self, breakpoints: std::collections::HashMap<String, Vec<crate::dap::SourceBreakpoint>>) {
+        self.last_breakpoints = breakpoints;
+    }
+
+    pub fn set_pending_child_session(&mut self, pending: bool) {
+        self.pending_child_session = pending;
+    }
+
+    pub fn is_pending_child_session(&self) -> bool {
+        self.pending_child_session
+    }
+
+    pub fn set_child_launch_config(&mut self, config: serde_json::Value) {
+        self.child_launch_config = Some(config);
+    }
+
+    pub fn initialize_child_session(&mut self) -> Result<(), String> {
+        let mut child = super::adapters::js_debug::JsDebugAdapter::new();
+        child.connect_only()?;
+
+        let _capabilities = child.initialize()?;
+
+        if let Some(config) = self.child_launch_config.take() {
+            let launch_config = serde_json::json!({
+                "type": config.get("type").and_then(|v| v.as_str()).unwrap_or("pwa-node"),
+                "request": "launch",
+                "name": config.get("name").and_then(|v| v.as_str()).unwrap_or("child"),
+                "__pendingTargetId": config.get("__pendingTargetId").and_then(|v| v.as_str()),
+            });
+            child.send_request_no_wait("launch", Some(launch_config))?;
+        }
+
+        self.child_adapter = Some(Box::new(child));
+        Ok(())
+    }
+
+    pub fn resend_breakpoints_for_child(&mut self) -> Result<(), String> {
+        let child = self.child_adapter.as_mut()
+            .ok_or_else(|| "No child adapter initialized".to_string())?;
+
+        if self.last_breakpoints.is_empty() {
+            self.pending_child_session = false;
+            return Ok(());
+        }
+
+        let breakpoints = self.last_breakpoints.clone();
+        for (path, bps) in &breakpoints {
+            let args = SetBreakpointsArgs {
+                source: Source {
+                    path: Some(path.clone()),
+                    name: None,
+                    source_reference: None,
+                },
+                breakpoints: bps.clone(),
+                source_modified: None,
+            };
+            if let Err(e) = child.set_breakpoints(&args) {
+                eprintln!("[DAP] Failed to resend breakpoints for {}: {}", path, e);
+            }
+        }
+
+        if let Err(e) = child.finalize_launch() {
+            eprintln!("[DAP] Failed to send configurationDone for child session: {}", e);
+        }
+
+        self.pending_child_session = false;
+        Ok(())
     }
 }
 

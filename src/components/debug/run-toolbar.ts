@@ -298,11 +298,14 @@ export class RunToolbar extends TailwindElement() {
   private async setupEventListeners() {
     // Listen for process events
     listen("process-started", (e: any) => {
+      console.log("[run-toolbar] process-started event received, payload:", e.payload);
       this.runningProcessId = e.payload.process_id;
       this.isRunning = true;
+      console.log("[run-toolbar] process-started: runningProcessId set to", this.runningProcessId);
     });
 
     listen("process-terminated", (e: any) => {
+      console.log("[run-toolbar] process-terminated event received, payload:", e.payload);
       this.isRunning = false;
       this.runningProcessId = null;
     });
@@ -490,12 +493,15 @@ export class RunToolbar extends TailwindElement() {
   }
 
   private handleStop = async () => {
+    console.log("[run-toolbar] handleStop: runningProcessId =", this.runningProcessId);
     if (this.runningProcessId === null) return;
 
     try {
+      console.log("[run-toolbar] handleStop: calling terminate_process with processId =", this.runningProcessId);
       await invoke("terminate_process", { processId: this.runningProcessId });
+      console.log("[run-toolbar] handleStop: terminate_process succeeded");
     } catch (error) {
-      console.error("Failed to terminate process:", error);
+      console.error("[run-toolbar] handleStop: Failed to terminate process:", error);
     }
   };
 

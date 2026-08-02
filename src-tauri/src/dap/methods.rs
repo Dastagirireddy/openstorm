@@ -23,15 +23,11 @@ impl DapConnection {
         let content = format!("Content-Length: {}\r\n\r\n{}", json.len(), json);
 
         if let Some(tcp_stream) = &mut self.tcp_stream {
-            println!("[DAP] Writing to TCP: {} bytes", content.len());
             tcp_stream.write_all(content.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
             tcp_stream.flush().map_err(|e| format!("Failed to flush: {}", e))?;
-            println!("[DAP] Flushed TCP");
         } else if let Some(stdin) = &mut self.stdin {
-            println!("[DAP] Writing to stdin: {} bytes", content.len());
             stdin.write_all(content.as_bytes()).map_err(|e| format!("Failed to write: {}", e))?;
             stdin.flush().map_err(|e| format!("Failed to flush: {}", e))?;
-            println!("[DAP] Flushed stdin");
         } else {
             return Err("No output stream available".to_string());
         }
@@ -47,7 +43,6 @@ impl DapConnection {
             arguments: arguments.clone(),
         };
 
-        println!("[DAP] Sending request (no wait): {} (seq {})", command, seq);
         self.send_message(&request)?;
         Ok(seq)
     }
@@ -61,117 +56,85 @@ impl DapConnection {
             arguments: arguments.clone(),
         };
 
-        println!("[DAP] Sending request: {} (seq {})", command, seq);
         self.send_message(&request)?;
 
-        if let Some(rx) = &self.response_rx {
-            let timeout = if command == "launch" {
-                std::time::Duration::from_secs(120)
-            } else {
-                std::time::Duration::from_secs(60)
-            };
-            let rx = rx.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let timeout = if command == "launch" {
+            std::time::Duration::from_secs(120)
+        } else {
+            std::time::Duration::from_secs(60)
+        };
 
-            let mut wait_count = 0;
-            loop {
-                wait_count += 1;
-                if wait_count % 10 == 0 {
-                    println!("[DAP] Still waiting for response to '{}' (seq {})...", command, seq);
-                }
+        let start = std::time::Instant::now();
+        loop {
+            if start.elapsed() > timeout {
+                return Err(format!("Timeout waiting for response to '{}'", command));
+            }
 
-                match rx.recv_timeout(timeout) {
-                    Ok(DapMessage::Response(response)) => {
-                        if response.request_seq == seq {
-                            println!("[DAP] Received response for {} (seq {}): success={}", command, seq, response.success);
-                            return Ok(response);
-                        } else {
-                            println!("[DAP] Received response for different request (seq {}), storing...", response.request_seq);
-                            self.event_buffer.push(DapEvent {
-                                event: "response".to_string(),
-                                body: Some(serde_json::json!({
-                                    "seq": response.seq,
-                                    "request_seq": response.request_seq,
-                                    "command": response.command,
-                                    "success": response.success,
-                                    "body": response.body
-                                })),
-                            });
+            if let Ok(mut buffer) = self.message_buffer.lock() {
+                if let Some(pos) = buffer.iter().position(|msg| {
+                    matches!(msg, DapMessage::Response(r) if r.request_seq == seq)
+                }) {
+                    if let DapMessage::Response(response) = buffer.remove(pos) {
+                        let remaining: Vec<DapMessage> = buffer.drain(..).collect();
+                        for msg in remaining {
+                            match msg {
+                                DapMessage::Event(e) => self.event_buffer.push(e),
+                                DapMessage::Response(r) => {
+                                    self.event_buffer.push(DapEvent {
+                                        event: "response".to_string(),
+                                        body: Some(serde_json::json!({
+                                            "seq": r.seq,
+                                            "request_seq": r.request_seq,
+                                            "command": r.command,
+                                            "success": r.success,
+                                            "body": r.body
+                                        })),
+                                    });
+                                }
+                            }
                         }
-                    }
-                    Ok(DapMessage::Event(event)) => {
-                        println!("[DAP] Buffering event: {}", event.event);
-                        self.event_buffer.push(event);
-                    }
-                    Err(e) => {
-                        println!("[DAP] Timeout waiting for response to '{}' (seq {}): {}", command, seq, e);
-                        return Err(format!("Timeout waiting for response to '{}': {}", command, e));
+                        return Ok(response);
                     }
                 }
             }
-        } else {
-            Err("No response channel available".to_string())
+
+            std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
 
     pub fn poll_events(&mut self) -> Vec<DapEvent> {
-        let buffer_len = self.event_buffer.len();
         let mut events = std::mem::take(&mut self.event_buffer);
-        if buffer_len > 0 {
-            println!("[DAP] poll_events: took {} events from buffer", buffer_len);
-        }
 
-        if let Some(rx) = &self.response_rx {
-            match rx.lock() {
-                Ok(rx_guard) => {
-                    let mut collected = 0;
-                    while let Ok(msg) = rx_guard.try_recv() {
-                        collected += 1;
-                        match msg {
-                            DapMessage::Event(e) => {
-                                println!("[DAP] poll_events: collected event: {}", e.event);
-                                events.push(e);
-                            },
-                            DapMessage::Response(r) => {
-                                println!("[DAP] Buffered unexpected response: {}", r.command);
-                            }
-                        }
+        if let Ok(mut buffer) = self.message_buffer.lock() {
+            for msg in buffer.drain(..) {
+                match msg {
+                    DapMessage::Event(e) => events.push(e),
+                    DapMessage::Response(r) => {
+                        events.push(DapEvent {
+                            event: "response".to_string(),
+                            body: Some(serde_json::json!({
+                                "seq": r.seq,
+                                "request_seq": r.request_seq,
+                                "command": r.command,
+                                "success": r.success,
+                                "body": r.body
+                            })),
+                        });
                     }
-                    if collected > 0 {
-                        println!("[DAP] poll_events: collected {} events from channel", collected);
-                    }
-                },
-                Err(e) => {
-                    println!("[DAP] poll_events: failed to lock rx: {}", e);
                 }
             }
-        } else {
-            println!("[DAP] poll_events: no response_rx available");
         }
 
-        if !events.is_empty() {
-            println!("[DAP] poll_events: returning {} events", events.len());
-        }
         events
     }
 
     pub fn set_breakpoints(&mut self, args: &SetBreakpointsArgs) -> Result<Vec<Breakpoint>, String> {
         let json_args = serde_json::to_value(args).map_err(|e| e.to_string())?;
-        println!("[DAP] Sending setBreakpoints request:");
-        println!("[DAP]   Source path: {:?}", args.source.path);
-        println!("[DAP]   Breakpoints: {:?}", json_args.get("breakpoints"));
         let response = self.send_request("setBreakpoints", Some(json_args))?;
-        println!("[DAP] setBreakpoints response:");
-        println!("[DAP]   success={}", response.success);
-        println!("[DAP]   message={:?}", response.message);
-        println!("[DAP]   body={}", response.body.as_ref().unwrap_or(&serde_json::Value::Null));
         let body = response.body.ok_or("No body in response")?;
         let breakpoints: Vec<Breakpoint> = serde_json::from_value(
             body.get("breakpoints").ok_or("No breakpoints in body")?.clone()
         ).map_err(|e| format!("Failed to parse breakpoints: {}", e))?;
-        println!("[DAP] Parsed {} breakpoints:", breakpoints.len());
-        for (i, bp) in breakpoints.iter().enumerate() {
-            println!("[DAP]   [{}] verified={}, line={:?}, source={:?}", i, bp.verified, bp.line, bp.source.as_ref().map(|s| &s.path));
-        }
         Ok(breakpoints)
     }
 
@@ -211,16 +174,13 @@ impl DapConnection {
     }
 
     pub fn stack_trace(&mut self, thread_id: i64) -> Result<Vec<StackFrame>, String> {
-        println!("[DAP] Sending stackTrace request for thread {}", thread_id);
         let response = self.send_request("stackTrace", Some(serde_json::json!({
             "threadId": thread_id
         })))?;
-        println!("[DAP] stackTrace response: success={}", response.success);
         let body = response.body.ok_or("No body in response")?;
         let stack_frames: Vec<StackFrame> = serde_json::from_value(
             body.get("stackFrames").ok_or("No stackFrames in body")?.clone()
         ).map_err(|e| format!("Failed to parse stack frames: {}", e))?;
-        println!("[DAP] Parsed {} stack frames", stack_frames.len());
         Ok(stack_frames)
     }
 
@@ -247,14 +207,11 @@ impl DapConnection {
     }
 
     pub fn threads(&mut self) -> Result<Vec<Thread>, String> {
-        println!("[DAP] Sending threads request");
         let response = self.send_request("threads", None)?;
-        println!("[DAP] threads response: success={}", response.success);
         let body = response.body.ok_or("No body in response")?;
         let threads: Vec<Thread> = serde_json::from_value(
             body.get("threads").ok_or("No threads in body")?.clone()
         ).map_err(|e| format!("Failed to parse threads: {}", e))?;
-        println!("[DAP] Parsed {} threads", threads.len());
         Ok(threads)
     }
 
