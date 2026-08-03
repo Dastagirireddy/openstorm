@@ -10,6 +10,7 @@ import type {
 import { createDefaultState, aiStore } from '../core/ai-state.js';
 import { aiState } from '../../../lib/ai/ai-state.js';
 import { dispatchAIEvent, listenAIEvent } from '../core/ai-events.js';
+import { dispatch } from '../../../lib/types/events.js';
 import './ai-header.js';
 import '../chat/ai-message-list.js';
 import '../chat/ai-composer.js';
@@ -708,6 +709,12 @@ export class AIPanel extends LitElement {
             ? { ...tc, status: (event.result?.startsWith?.('Error') ? 'failed' : 'completed') as any }
             : tc,
         ));
+
+        // Refresh file explorer after file-writing tools complete
+        const fileWriteTools = ['write_file', 'edit_file', 'create_file'];
+        if (fileWriteTools.includes(event.tool_name) && !event.result?.startsWith?.('Error')) {
+          dispatch('refresh-explorer');
+        }
         break;
       }
       case 'tool_approval_required': {
