@@ -511,6 +511,7 @@ export class AIPanel extends LitElement {
     this._loadConfig();
     this._listenToBackend();
     this._listenForPermissionEvents();
+    this._listenForProviderChange();
     this._resetSession();
   }
 
@@ -571,6 +572,37 @@ export class AIPanel extends LitElement {
       console.error('[AI Panel] Failed to load models:', e);
       this.models = [];
     }
+  }
+
+  private _listenForProviderChange() {
+    listenAIEvent(document, 'ai:select-provider', async (detail) => {
+      const providerId = (detail as { provider: string }).provider;
+      if (!providerId || providerId === this.provider) return;
+
+      this.provider = providerId;
+      this.model = '';
+      this.modelName = '';
+      this.models = [];
+
+      // Reload config for new provider to get api key and base url
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const c = await invoke<{
+          provider_keys: Record<string, string>;
+          provider_base_urls: Record<string, string>;
+          provider_models: Record<string, string>;
+        }>('ai_get_settings');
+
+        this.apiKey = c.provider_keys[providerId] || '';
+        this.baseUrl = c.provider_base_urls[providerId] || '';
+        this.model = c.provider_models[providerId] || '';
+      } catch (e) {
+        console.debug('Failed to load provider config:', e);
+      }
+
+      // Reload models for the new provider
+      await this._loadModels();
+    });
   }
 
   private async _resetSession() {

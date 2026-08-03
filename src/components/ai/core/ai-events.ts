@@ -23,6 +23,10 @@ export interface SelectModelDetail {
   model: string;
 }
 
+export interface SelectProviderDetail {
+  provider: string;
+}
+
 export interface SpawnAgentDetail {
   task: string;
   role: string;
@@ -88,6 +92,7 @@ export type AIEventType =
   | 'ai:approve-tool'
   | 'ai:answer-question'
   | 'ai:select-model'
+  | 'ai:select-provider'
   | 'ai:spawn-agent'
   | 'ai:text-delta'
   | 'ai:message-complete'
@@ -108,6 +113,7 @@ export type AIEventDetailMap = {
   'ai:approve-tool': ApproveToolDetail;
   'ai:answer-question': AnswerQuestionDetail;
   'ai:select-model': SelectModelDetail;
+  'ai:select-provider': SelectProviderDetail;
   'ai:spawn-agent': SpawnAgentDetail;
   'ai:text-delta': TextDeltaDetail;
   'ai:message-complete': MessageCompleteDetail;

@@ -3,6 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { TailwindElement } from '../../../tailwind-element.js';
+import { dispatch } from '../../../lib/types/events.js';
 import type { ProviderInfo } from '../../../lib/types/ai-types.js';
 import type { AiProviderConfig } from '../../../lib/types/ai-types.js';
 import '../../../components/settings/provider-card.js';
@@ -253,6 +254,9 @@ export class ModelsPanel extends TailwindElement(componentStyles) {
       baseUrl: config.base_url || undefined,
       model: config.model || undefined,
     }).catch(() => {});
+
+    // Notify AI header to refresh enabled providers list
+    dispatch('settings-closed');
   }
 
   private async handleSaveProvider(event: CustomEvent) {
@@ -283,6 +287,9 @@ export class ModelsPanel extends TailwindElement(componentStyles) {
     } catch (e) {
       console.error('Failed to save provider config:', e);
     }
+
+    // Notify AI header to refresh enabled providers list
+    dispatch('settings-closed');
   }
 
   private renderLoading() {
